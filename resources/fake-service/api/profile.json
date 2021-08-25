@@ -1,0 +1,20 @@
+{
+    "userid": "Obsidian User",
+    "authority": "partner.org",
+    "groups": [
+      {
+        "name": "Public",
+        "id": "__world__",
+        "public": true
+      }
+    ],
+    "features": {
+      "notebook_launch": false,
+      "embed_cachebuster": false,
+      "client_display_names": false
+    },
+    "preferences": {},
+    "user_info": {
+        "display_name": null
+    }
+  }

@@ -1,0 +1,11 @@
+{
+    "account.settings": "http://localhost:8001/account/settings",
+    "forgot-password": "http://localhost:8001/forgot-password",
+    "groups.new": "http://localhost:8001/groups/new",
+    "help": "http://localhost:8001/docs/help",
+    "oauth.authorize": "http://localhost:8001/oauth/authorize",
+    "oauth.revoke": "http://localhost:8001/oauth/revoke",
+    "search.tag": "http://localhost:8001/search?q=tag%3A%22:tag%22",
+    "signup": "http://localhost:8001/signup",
+    "user": "http://localhost:8001/u/:user"
+  }

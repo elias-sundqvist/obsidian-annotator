@@ -1,57 +1,70 @@
-## Obsidian Sample Plugin
+[![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/elias-sundqvist/obsidian-annotator?style=for-the-badge&sort=semver)](https://github.com/elias-sundqvist/obsidian-annotator/releases/latest)
+![GitHub All Releases](https://img.shields.io/github/downloads/elias-sundqvist/obsidian-annotator/total?style=for-the-badge)
+# Obsidian Annotator
 
-This is a sample plugin for Obsidian (https://obsidian.md).
+This is a plugin for Obsidian (https://obsidian.md). It allows you to open and annotate PDF and EPUB files. 
 
-This project uses Typescript to provide type checking and documentation.
-The repo depends on the latest plugin API (obsidian.d.ts) in Typescript Definition format, which contains TSDoc comments describing what it does.
+The plugin is based on https://web.hypothes.is/, but modified to store the annotations in a local markdown file instead of on the internet. 
 
-**Note:** The Obsidian API is still in early alpha and is subject to change at any time!
+## Demonstration
+![](images/annotator%20demo.gif)
 
-This sample plugin demonstrates some of the basic functionality the plugin API can do.
-- Changes the default font color to red using `styles.css`.
-- Adds a ribbon icon, which shows a Notice when clicked.
-- Adds a command "Open Sample Modal" which opens a Modal.
-- Adds a plugin setting tab to the settings page.
-- Registers a global click event and output 'click' to the console.
-- Registers a global interval which logs 'setInterval' to the console.
+## Getting Started 
 
-### First time developing plugins?
+Add the property `annotation-target` to the frontmatter of your obsidian note, with a value corresponding to the location of the EPUB/PDF file.
+The location can either be a file in the vault (such as `Pdfs/mypdf.pdf`)), or online (such as `https://arxiv.org/pdf/2104.13478.pdf`)
 
-Quick starting guide for new plugin devs:
+Then you can, in the open note pane, select "more options" (the three dots in the top right), and a new option "annotate" should be available. 
 
-- Make a copy of this repo as a template with the "Use this template" button (login to GitHub if you don't see it).
-- Clone your repo to a local development folder. For convenience, you can place this folder in your `.obsidian/plugins/your-plugin-name` folder.
-- Install NodeJS, then run `npm i` in the command line under your repo folder.
-- Run `npm run dev` to compile your plugin from `main.ts` to `main.js`.
-- Make changes to `main.ts` (or create new `.ts` files). Those changes should be automatically compiled into `main.js`.
-- Reload Obsidian to load the new version of your plugin.
-- Enable plugin in settings window.
-- For updates to the Obsidian API run `npm update` in the command line under your repo folder.
+The plugin automatically tries to determine whether the file is an `epub` or `pdf` based on the file path, but in case this doesn't work, 
+you can also add the property `annotation-target-type` and specify whether it is `epub` or `pdf` manually.
 
-### Releasing new releases
+If you have [dataview](https://github.com/blacksmithgu/obsidian-dataview) installed, then you can also specify the annotation target with a dataview attribute. In this case, obsidian-style links can be used instead of a plain-text path. 
 
-- Update your `manifest.json` with your new version number, such as `1.0.1`, and the minimum Obsidian version required for your latest release.
-- Update your `versions.json` file with `"new-plugin-version": "minimum-obsidian-version"` so older versions of Obsidian can download an older version of your plugin that's compatible.
-- Create new GitHub release using your new version number as the "Tag version". Use the exact version number, don't include a prefix `v`. See here for an example: https://github.com/obsidianmd/obsidian-sample-plugin/releases
-- Upload the files `manifest.json`, `main.js`, `styles.css` as binary attachments.
-- Publish the release.
+### Annotating
 
-### Adding your plugin to the community plugin list
+Annotation is self-explanatory. Select text with your mouse to get started. 
 
-- Publish an initial version.
-- Make sure you have a `README.md` file in the root of your repo.
-- Make a pull request at https://github.com/obsidianmd/obsidian-releases to add your plugin.
+In the future, it would be nice to add colored highlights and image/region highlights. These features will have to be added to hypothes.is first, however.
+See these relevant issues: https://github.com/hypothesis/product-backlog/issues/198,  https://github.com/hypothesis/product-backlog/issues/669
 
-### How to use
+### The annotations in markdown
 
-- Clone this repo.
-- `npm i` or `yarn` to install dependencies
-- `npm run dev` to start compilation in watch mode.
+To return to the regular obsidian markdown editing mode, you can select `more options` → `Open as MD`.
+Each annotation has an associated quote block with a block reference. Be careful with modifying these blocks. 
+Minor edits to PREFIX, HIGHLIGHT, and POSTFIX are typically ok. But if the edits are too major, hypothesis may no longer be able to identify the corresponding text. 
 
-### Manually installing the plugin
+The COMMENT region can be freely edited. (but ensure that it is still part of the quote block.)
 
-- Copy over `main.js`, `styles.css`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/your-plugin-id/`.
+The TAGS region should consist of a comma-separated list of hypothesis tags. 
 
-### API Documentation
+### Dark Mode
 
-See https://github.com/obsidianmd/obsidian-api
+The plugin has built-in dark mode support. To toggle dark mode, select `more options` → `Toggle Dark Mode` while annotating.
+You can also tweak the dark mode behavior in the settings tab for the plugin. 
+
+### Linking to annotations
+
+An obsidian link to an annotation block-reference will, when clicked, open the corresponding file and scroll to the associated highlight. 
+If the file is already open in a pane, then the link will cause the existing pane to scroll instead.  
+
+## Contributing
+
+Feel free to contribute.
+
+You can create an [issue](https://github.com/elias-sundqvist/obsidian-annotator/issues) to report a bug, suggest an improvement for this plugin, ask a question, etc.
+
+You can make a [pull request](https://github.com/elias-sundqvist/obsidian-annotator/pulls) to contribute to this plugin development.
+
+
+## Changelog
+
+### 0.0.1 (2021-05-04) *First Release*
+* Basic functionality of the plugin implemented
+
+## License
+
+> Note: The files under the `resources` folder are scraped from the web. Each website has its licence file attached in the associated folder.
+
+[Obsidian Annotator](https://github.com/elias-sundqvist/obsidian-annotator) is licensed under the GNU AGPLv3 license. Refer to [LICENSE](https://github.com/elias-sundqvist/obsidian-annotator/blob/master/LICENSE.TXT) for more information.
+

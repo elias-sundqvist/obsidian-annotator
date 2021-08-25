@@ -1,0 +1,3 @@
+[submodule "memex"]
+	path = memex
+	url = https://github.com/WorldBrain/Memex.git

@@ -6,17 +6,21 @@
     "module": "ESNext",
     "target": "es6",
     "allowJs": true,
-    "noImplicitAny": true,
+    "noImplicitAny": false,
     "moduleResolution": "node",
     "importHelpers": true,
+    "allowSyntheticDefaultImports": true,
     "lib": [
       "dom",
       "es5",
       "scripthost",
-      "es2015"
-    ]
+      "es2015",
+      "DOM.Iterable",
+      "ESNext"
+    ],
+    "jsx": "react",
   },
   "include": [
-    "**/*.ts"
-  ]
+    "**/*.ts",
+    "**/*.tsx"]
 }

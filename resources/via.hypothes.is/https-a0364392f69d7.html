@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>via.hypothes.is</title>
+  <link rel="icon" href="favicon.ico" type="image/x-icon" />
+
+  <link rel="sidebar" type="application/annotator+html">
+
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+    }
+
+    .proxied-content-iframe {
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      right: 0;
+      width: 100%;
+      height: 100%;
+      border: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --color-brand: #bd1c2b;
+    }
+
+    .loading-bar {
+      position: fixed;
+      left: 0;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      height: 5px;
+      background-color: var(--color-brand);
+
+      /* Loading bar is initially at 0% progress. */
+      width: 0px;
+    }
+
+    /* Increase loading "progress" once we decide to show the loading indicator.
+       Not an accurate representation, but it looks good.
+    */
+    .loading-bar.is-loading {
+      animation: loading-bar-begin;
+      animation-duration: .3s;
+      animation-fill-mode: forwards;
+    }
+
+    @keyframes loading-bar-begin {
+      from {
+        width: 0%;
+        opacity: 0.0;
+      }
+
+      /* Same as start state of `loading-bar-finish` animation */
+      to {
+        width: 20%;
+        opacity: 1.0;
+      }
+    }
+
+    /* Once the content has loaded, set progress to 100% and then fade out the
+       progress bar.
+    */
+    .loading-bar.is-done {
+      animation: loading-bar-finish;
+      animation-duration: 1s;
+      animation-fill-mode: forwards;
+    }
+
+    @keyframes loading-bar-finish {
+      /* Same as end state of `loading-bar-begin` animation */
+      0% {
+        width: 20%;
+        opacity: 1.0;
+      }
+
+      20% {
+        width: 100%;
+        opacity: 1.0;
+      }
+
+      70% {
+        width: 100%;
+        opacity: 0.0;
+      }
+
+      100% {
+        width: 100%;
+        opacity: 0.0;
+      }
+    }
+  </style>
+
+  <script>
+  /**
+   * Perform basic validation of the structure of a notification from the content
+   * frame.
+   *
+   * Returns the input if valid or `null` otherwise.
+   */
+  function validateContentFrameMessage(data) {
+    if (!data || typeof data.type !== 'string') {
+      return null;
+    }
+    if (data.type === 'metadatachange' && data.metadata) {
+      return data;
+    } else {
+      return null;
+    }
+  }
+
+  // Listen for events from the proxied content in order to reflect document
+  // metadata etc. in the current frame.
+  window.addEventListener('message', event => {
+    const contentFrame = document.querySelector('.js-content-frame');
+    const loadingIndicator = document.querySelector('.js-loading-indicator');
+
+    if (event.source !== contentFrame.contentWindow) {
+      return;
+    }
+
+    const message = validateContentFrameMessage(event.data);
+    if (!message) {
+      return;
+    }
+
+    if (message.type === 'metadatachange') {
+      // Treat the first `metadatachange` message as a hint that the iframe is
+      // done loading. This event is sent in response to `DOMContentLoaded` within the
+      // ViaHTML iframe, so sub-resources on the page may still be loading.
+      loadingIndicator.classList.add('is-done');
+
+      const metadata = message.metadata;
+      document.title = `Via: ${metadata.title}`;
+
+      // Sync top frame URL with the URL being proxied inside the iframe.
+      // This may be different than the originally requested URL if it redirected.
+      //
+      // We currently use `replaceState` rather than `pushState` on the assumption
+      // that if the URL changed it did so because of a redirect and so the previous
+      // URL shouldn't be retained in the tab's history. If we update the URL
+      // in response to client-side URL changes in the iframe in future, we'll
+      // probably want to change this.
+      const viaURL = `/${metadata.location}`;
+      history.replaceState(null, document.title, viaURL);
+    }
+  });
+  </script>
+</head>
+  <body>
+    <iframe class="js-content-frame proxied-content-iframe" src=https://viahtml.hypothes.is/proxy/https://arxiv.org/pdf/favicon.ico?via.client.ignoreOtherConfiguration=1&amp;via.client.openSidebar=1&amp;via.external_link_mode=new-tab></iframe>
+
+    
+    <div class="js-loading-indicator loading-bar">
+    <script>
+      /**
+       * Show the loading indicator after a short delay. The delay avoids showing
+       * the "loading started" state if the content loads very quickly, although
+       * the loading bar will still briefly fade in and out.
+       */
+      function showLoadingIndicator() {
+        const loadingIndicator = document.querySelector('.js-loading-indicator');
+        setTimeout(() => loadingIndicator.classList.add('is-loading'), 500);
+      }
+
+      /**
+       * Copy the fragment from the top frame's URL to the iframe's URL.
+       *
+       * This is needed so that direct links to annotations, which use a
+       * `#annotations:` fragment, are respected by the client in the iframe.
+       */
+      function copyFragmentToFrame() {
+        const fragment = location.hash;
+        if (fragment) {
+          const iframe = document.querySelector('.js-content-frame');
+          iframe.src += fragment;
+        }
+      }
+
+      showLoadingIndicator();
+      copyFragmentToFrame();
+    </script>
+  </body>
+</html>
