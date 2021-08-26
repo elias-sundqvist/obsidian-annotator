@@ -5,6 +5,7 @@ import copy from 'rollup-plugin-copy'
 import fs from 'fs';
 import folderBase64 from './rollup-folder-zip-base64';
 import nodePolyfills from 'rollup-plugin-polyfill-node';
+import analyze from 'rollup-plugin-analyzer';
 
 const isProd = (process.env.BUILD === 'production');
 
@@ -40,6 +41,7 @@ export default {
       targets: [
         { src: 'manifest.json', dest: vault_plugin_dir }
       ]
-    })] : [])
+    })] : []),
+    analyze({summaryOnly: true})
   ]
 };
