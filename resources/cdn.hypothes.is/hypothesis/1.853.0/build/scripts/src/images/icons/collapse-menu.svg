@@ -1,1 +1,0 @@
-module.exports='<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">\n  <path fill="currentColor" fill-rule="nonzero" d="M7.456 4.212a.804.804 0 0 1 1.088 0l6.23 5.867c.301.283.301.742 0 1.025l-.726.684a.804.804 0 0 1-1.087.001L8 7.139l-4.961 4.65a.804.804 0 0 1-1.087-.001l-.727-.684a.695.695 0 0 1 0-1.025l6.23-5.867z"/>\n</svg>';
