@@ -9,7 +9,8 @@ import {
     MarkdownPostProcessorContext,
     PluginSettingTab,
     App,
-    Setting
+    Setting,
+    parseLinktext
 } from 'obsidian';
 import React from 'react';
 import ReactDOM from 'react-dom';
@@ -231,12 +232,9 @@ export default class AnnotatorPlugin extends Plugin {
         const markdownPostProcessor = async (el: HTMLElement, ctx: MarkdownPostProcessorContext) => {
             for (const link of el.getElementsByClassName('internal-link') as HTMLCollectionOf<HTMLAnchorElement>) {
                 const href = link.getAttribute('href');
-                const [path, annotationid] = href.split('#^');
-                const file =
-                    path == ''
-                        ? (this.app.vault.getAbstractFileByPath(ctx.sourcePath) as TFile)
-                        : this.app.metadataCache.getFirstLinkpathDest(path, ctx.sourcePath);
-
+                const parsedLink = parseLinktext(href);
+                const annotationid = parsedLink.subpath.startsWith('#^') ? parsedLink.subpath.substr(2) : null;
+                const file = this.app.metadataCache.getFirstLinkpathDest(parsedLink.path, ctx.sourcePath);
                 if (this.isAnnotationFile(file)) {
                     link.onClickEvent(ev => {
                         ev.preventDefault();
