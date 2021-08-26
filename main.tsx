@@ -342,6 +342,7 @@ class PdfAnnotatorView extends FileView {
         this.contentEl.empty();
         const annotationTarget = this.plugin.getPropertyValue(ANNOTATION_TARGET_PROPERTY, file);
         this.contentEl.removeClass('view-content');
+        this.contentEl.style.height = "100%";
         this.annotationTarget = annotationTarget;
         if (annotationTarget) {
             const annotationTargetType = this.plugin.getPropertyValue(ANNOTATION_TARGET_TYPE_PROPERTY, file) || get_url_extension(annotationTarget);
