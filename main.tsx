@@ -489,7 +489,7 @@ class PdfAnnotatorView extends FileView {
         let yoffset = -10000;
         let newYOffset;
         const selectors = new Set(annotation.target[0].selector.map(x => JSON.stringify(x)));
-        console.log('scrolling...');
+
         const g = () => {
             try {
                 if (this.activeG != g) return;

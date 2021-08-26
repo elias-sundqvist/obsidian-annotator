@@ -10,11 +10,6 @@ const f = async () => {
         const file = hypothesisFolder.file(filePath);
         if (!file || file.dir) continue;
         const buf = await file.async('arraybuffer');
-        console.log({
-            filePath,
-            ext: get_url_extension(filePath),
-            type: extensionToMimetype(get_url_extension(filePath))
-        });
         const blob = new Blob([buf], { type: extensionToMimetype(get_url_extension(filePath)) });
         urls.set(filePath, URL.createObjectURL(blob));
     }
