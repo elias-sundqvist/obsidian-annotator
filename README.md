@@ -59,6 +59,14 @@ You can make a [pull request](https://github.com/elias-sundqvist/obsidian-annota
 
 ## Changelog
 
+### 0.0.3 (2021-05-04) *Plugin Size Reduction*
+* Removed some unnecessary files to reduce plugin size.
+
+### 0.0.2 (2021-05-04) *Minor fixes*
+* Removed logging, 
+* Simplified link handling
+* viewer height is now 100% instead of fixed to 1000px. 
+
 ### 0.0.1 (2021-05-04) *First Release*
 * Basic functionality of the plugin implemented
 

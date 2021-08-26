@@ -1,6 +1,6 @@
 {
   "name": "obsidian-annotator",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "This is a sample plugin for Obsidian (https://obsidian.md)",
   "main": "main.js",
   "scripts": {
@@ -27,6 +27,7 @@
     "obsidian": "^0.12.0",
     "prettier": "^2.3.2",
     "rollup": "^2.32.1",
+    "rollup-plugin-analyzer": "^4.0.0",
     "rollup-plugin-base64": "^1.0.1",
     "rollup-plugin-copy": "^3.4.0",
     "rollup-plugin-polyfill-node": "^0.7.0",
