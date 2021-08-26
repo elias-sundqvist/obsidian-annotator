@@ -190,7 +190,11 @@ export default ({ vault, resourceUrls }: { vault: Vault; resourceUrls: Map<strin
                 try {
                     const folder = await hypothesisFolder;
                     const pathName = normalizePath(url.pathname);
-                    const file = folder.file(pathName) || folder.file(`${pathName}.html`);
+                    const file =
+                        folder.file(pathName) ||
+                        folder.file(`${pathName}.html`) ||
+                        folder.file(`${decodeURI(pathName)}`) ||
+                        folder.file(`${decodeURI(pathName)}.html`);
                     buf = await file.async('arraybuffer');
                     return new Response(buf, {
                         status: 200,
@@ -203,7 +207,11 @@ export default ({ vault, resourceUrls }: { vault: Vault; resourceUrls: Map<strin
             }
             if (url.protocol == 'vault:') {
                 try {
-                    buf = await readFromVaultPath(normalizePath(url.pathname));
+                    try {
+                        buf = await readFromVaultPath(normalizePath(url.pathname));
+                    } catch (e) {
+                        buf = await readFromVaultPath(normalizePath(decodeURI(url.pathname)));
+                    }
                     return new Response(buf, {
                         status: 200,
                         statusText: 'ok'
