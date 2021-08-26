@@ -18,7 +18,12 @@ import loadResourceUrls from 'loadResourceUrls';
 import definePdfAnnotation from 'definePdfAnnotation';
 import { around } from 'monkey-around';
 
-import { VIEW_TYPE_PDF_ANNOTATOR, ICON_NAME, ANNOTATION_TARGET_PROPERTY, ANNOTATION_TARGET_TYPE_PROPERTY } from './constants';
+import {
+    VIEW_TYPE_PDF_ANNOTATOR,
+    ICON_NAME,
+    ANNOTATION_TARGET_PROPERTY,
+    ANNOTATION_TARGET_TYPE_PROPERTY
+} from './constants';
 import { Annotation } from 'types';
 import defineEpubAnnotation from 'defineEpubAnnotation';
 import { PdfAnnotationProps, EpubAnnotationProps } from './types';
@@ -340,10 +345,12 @@ class PdfAnnotatorView extends FileView {
         this.contentEl.empty();
         const annotationTarget = this.plugin.getPropertyValue(ANNOTATION_TARGET_PROPERTY, file);
         this.contentEl.removeClass('view-content');
-        this.contentEl.style.height = "100%";
+        this.contentEl.style.height = '100%';
         this.annotationTarget = annotationTarget;
         if (annotationTarget) {
-            const annotationTargetType = this.plugin.getPropertyValue(ANNOTATION_TARGET_TYPE_PROPERTY, file) || get_url_extension(annotationTarget);
+            const annotationTargetType =
+                this.plugin.getPropertyValue(ANNOTATION_TARGET_TYPE_PROPERTY, file) ||
+                get_url_extension(annotationTarget);
             let component;
             switch (annotationTargetType) {
                 case 'pdf':
@@ -496,7 +503,9 @@ class PdfAnnotatorView extends FileView {
                         ?.querySelector('body > hypothesis-sidebar')
                         ?.shadowRoot?.querySelector('div > iframe');
 
-                const annotationTargetType = this.plugin.getPropertyValue(ANNOTATION_TARGET_TYPE_PROPERTY, this.file) || get_url_extension(this.annotationTarget);
+                const annotationTargetType =
+                    this.plugin.getPropertyValue(ANNOTATION_TARGET_TYPE_PROPERTY, this.file) ||
+                    get_url_extension(this.annotationTarget);
                 switch (annotationTargetType) {
                     case 'pdf':
                         break;
