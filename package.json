@@ -4,8 +4,8 @@
   "description": "This is a sample plugin for Obsidian (https://obsidian.md)",
   "main": "main.js",
   "scripts": {
-    "prettier-format": "prettier --config .prettierrc.js *.tsx --write",
-    "lint": "eslint . --ext .ts,.tsx",
+    "prettier-format": "prettier --config .prettierrc.js src/**/*.tsx --write",
+    "lint": "eslint src --ext .ts,.tsx",
     "dev": "rollup --config rollup.config.js -w",
     "build": "rollup --config rollup.config.js --environment BUILD:production"
   },

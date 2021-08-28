@@ -21,7 +21,7 @@ const vault_plugin_dir = fs.existsSync('./.vault_plugin_dir') ?
                          '.';
 
 export default {
-  input: 'main.tsx',
+  input: 'src/main.tsx',
   output: {
     dir: vault_plugin_dir,
     sourcemap: 'inline',

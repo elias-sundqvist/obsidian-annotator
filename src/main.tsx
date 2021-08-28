@@ -14,8 +14,8 @@ import {
 } from 'obsidian';
 import React from 'react';
 import ReactDOM from 'react-dom';
-import loadResourceUrls from 'loadResourceUrls';
-import definePdfAnnotation from 'definePdfAnnotation';
+import loadResourceUrls from './loadResourceUrls';
+import definePdfAnnotation from './definePdfAnnotation';
 import { around } from 'monkey-around';
 
 import {
@@ -24,11 +24,11 @@ import {
     ANNOTATION_TARGET_PROPERTY,
     ANNOTATION_TARGET_TYPE_PROPERTY
 } from './constants';
-import { Annotation } from 'types';
-import defineEpubAnnotation from 'defineEpubAnnotation';
+import { Annotation } from './types';
+import defineEpubAnnotation from './defineEpubAnnotation';
 import { PdfAnnotationProps, EpubAnnotationProps } from './types';
-import { get_url_extension } from 'utils';
-import { DarkReaderType } from 'darkreader';
+import { get_url_extension } from './utils';
+import { DarkReaderType } from './darkreader';
 
 interface AnnotatorSettings {
     deafultDarkMode: boolean;
