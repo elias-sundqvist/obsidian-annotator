@@ -59,6 +59,10 @@ You can make a [pull request](https://github.com/elias-sundqvist/obsidian-annota
 
 ## Changelog
 
+### 0.0.5 (2021-08-26) *Fixed EPUB bug, minor file restructuring*
+* The files necessary for the epub reader were `.gitignore`d, which prevented it from working in the previous releases.  (See issue #6)
+* The code files has been moved to the `src` directiory so that the repo looks a bit less messy. 
+
 ### 0.0.4 (2021-08-26) *Chinese File name support*
 * Added support for chinese file names. (See issue #4)
 
