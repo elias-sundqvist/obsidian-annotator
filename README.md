@@ -83,3 +83,8 @@ You can make a [pull request](https://github.com/elias-sundqvist/obsidian-annota
 
 [Obsidian Annotator](https://github.com/elias-sundqvist/obsidian-annotator) is licensed under the GNU AGPLv3 license. Refer to [LICENSE](https://github.com/elias-sundqvist/obsidian-annotator/blob/master/LICENSE.TXT) for more information.
 
+
+## Support
+
+If you want to support me and my work, you can [sponsor me on Github](https://github.com/sponsors/elias-sundqvist) (preferred method) or donate something on [**Paypal**](https://www.paypal.com/donate/?hosted_button_id=C5MBC9YBWTYEC).
+
