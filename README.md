@@ -12,7 +12,7 @@ The plugin is based on https://web.hypothes.is/, but modified to store the annot
 ## Getting Started 
 
 Add the property `annotation-target` to the frontmatter of your obsidian note, with a value corresponding to the location of the EPUB/PDF file.
-The location can either be a file in the vault (such as `Pdfs/mypdf.pdf`)), or online (such as `https://arxiv.org/pdf/2104.13478.pdf`)
+The location can either be a file in the vault (such as `Pdfs/mypdf.pdf`), or online (such as `https://arxiv.org/pdf/2104.13478.pdf`)
 
 Then you can, in the open note pane, select "more options" (the three dots in the top right), and a new option "annotate" should be available. 
 
@@ -36,7 +36,7 @@ Minor edits to PREFIX, HIGHLIGHT, and POSTFIX are typically ok. But if the edits
 
 The COMMENT region can be freely edited. (but ensure that it is still part of the quote block.)
 
-The TAGS region should consist of a comma-separated list of hypothesis tags. 
+The TAGS region should consist of a comma-separated list of obsidian tags. (like `#tag1, #tag2, #tag3`) 
 
 ### Dark Mode
 
@@ -58,6 +58,14 @@ You can make a [pull request](https://github.com/elias-sundqvist/obsidian-annota
 
 
 ## Changelog
+
+### 0.0.6 (2021-08-30) *`file:` protocol support, various url fixes, privacy improvements, minor fixes*
+* Fixed so that no initial http request is made to the hypothes.is servers. 
+* Hypothes.is performance trackers removed. 
+* No more error messages from the websocket api. 
+* The stored annotations no longer reference the sample pdf url, since that confused some users. (See issue #7)
+* Initial support for `file:` protocol links added. (Has not been tested much yet.)
+* The placeholder staus bar text has been removed (See issue #17)
 
 ### 0.0.5 (2021-08-26) *Fixed EPUB bug, minor file restructuring*
 * The files necessary for the epub reader were `.gitignore`d, which prevented it from working in the previous releases.  (See issue #6)
