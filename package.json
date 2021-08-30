@@ -40,6 +40,7 @@
     "@types/styled-components": "^5.1.9",
     "canvas": "^2.7.0",
     "jszip": "^3.7.1",
+    "mock-websocket": "^0.0.7",
     "monkey-around": "^2.2.0",
     "pdfjs-dist": "^2.6.347",
     "react": "^17.0.2",

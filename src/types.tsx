@@ -124,4 +124,5 @@ export type LocalIFrameProps = {
         contextUrl: string;
         base: (href: string) => Promise<Response>;
     }) => Promise<Response>;
+    htmlPostProcessFunction?: (html: string) => string;
 };

@@ -1,3 +1,4 @@
+import { SAMPLE_PDF_URL, SAMPLE_EPUB_URL } from './constants';
 import defineLocalIframe from 'defineLocalIframe';
 import React from 'react';
 import { AnnotationList, SpecificAnnotationProps } from 'types';
@@ -44,7 +45,13 @@ export default ({ vault, resourceUrls }) => {
                         .split(',')
                         .map(x => x.trim().substr(1))
                         .filter(x => x);
-                    if ([annotation.document?.documentFingerprint, annotation.uri].includes(params.uri)) {
+                    const annotationDocumentIdentifiers = [annotation.document?.documentFingerprint, annotation.uri];
+
+                    //The check against SAMPLE_PDF_URL is for backwards compability.
+                    if (
+                        annotationDocumentIdentifiers.includes(params.uri) ||
+                        annotationDocumentIdentifiers.includes(SAMPLE_PDF_URL)
+                    ) {
                         rows.push(annotation);
                     }
                 }
@@ -134,71 +141,87 @@ export default ({ vault, resourceUrls }) => {
             return res;
         }
 
+        function proxy(url: URL | string): URL {
+            const href = typeof url == 'string' ? url : url.href;
+            if (
+                href == SAMPLE_PDF_URL ||
+                ('pdf' in props && props.pdf == href) ||
+                (href.startsWith(`https://via.hypothes.is/proxy/static/xP1ZVAo-CVhW7kwNneW_oQ/1628964000/`) &&
+                    !href.endsWith('.html'))
+            ) {
+                let path;
+                if (!('pdf' in props)) {
+                    console.warn('Missing prop "pdf"');
+                    return;
+                }
+                try {
+                    path = new URL(props.pdf).href;
+                } catch {
+                    path = `vault:/${props.pdf}`;
+                }
+                return new URL(path);
+            }
+            if (href == SAMPLE_EPUB_URL || ('epub' in props && props.epub == href)) {
+                let path;
+                if (!('epub' in props)) {
+                    console.warn('Missing prop "epub"');
+                    return;
+                }
+                try {
+                    path = new URL(props.epub).href;
+                } catch {
+                    path = `vault:/${props.epub}`;
+                }
+                return new URL(path);
+            }
+            if (href == `https://hypothes.is/api/`) {
+                return new URL(`zip:/fake-service/api.json`);
+            }
+            if (href == `http://localhost:8001/api/links`) {
+                return new URL(`zip:/fake-service/api/links.json`);
+            }
+            if (href == `http://localhost:8001/api/profile`) {
+                return new URL(`zip:/fake-service/api/profile.json`);
+            }
+            if (href.startsWith(`http://localhost:8001/api/profile/groups`)) {
+                return new URL(`zip:/fake-service/api/profile/groups.json`);
+            }
+            if (href.startsWith(`http://localhost:8001/api/groups`)) {
+                return new URL(`zip:/fake-service/api/groups.json`);
+            }
+            if (typeof url == 'string') {
+                return new URL(url);
+            }
+            switch (url.hostname) {
+                case 'via.hypothes.is':
+                    return new URL(`zip:/via.hypothes.is${url.pathname}`);
+                case 'hypothes.is':
+                    return new URL(`zip:/hypothes.is${url.pathname}`);
+                case 'cdn.hypothes.is':
+                    return new URL(`zip:/cdn.hypothes.is${url.pathname}`);
+                // Remove hypothes.is trackers
+                case 'js-agent.newrelic.com':
+                case 'bam-cell.nr-data.net':
+                    return new URL('zip:/ignore');
+                default:
+                    return url;
+            }
+        }
+
         return (
             <LocalIframe
                 src={props.baseSrc}
-                proxy={url => {
-                    switch (url.hostname) {
-                        case 'www.desmos.com':
-                            return new URL(`zip:/www.desmos2.com${url.pathname}`);
-                        case 'via.hypothes.is':
-                            return new URL(`zip:/via.hypothes.is${url.pathname}`);
-                        case 'hypothes.is':
-                            return new URL(`zip:/hypothes.is${url.pathname}`);
-                        case 'cdn.hypothes.is':
-                            return new URL(`zip:/cdn.hypothes.is${url.pathname}`);
-                        case 'proxy.pdfs.vault':
-                            return new URL(`vault:/Pdfs${url.pathname}`);
-                        default:
-                            return url;
-                    }
-                }}
+                proxy={proxy}
                 fetchProxy={async ({ href, init, base }) => {
-                    if (
-                        href ==
-                        `https://via.hypothes.is/proxy/static/xP1ZVAo-CVhW7kwNneW_oQ/1628964000/https://arxiv.org/pdf/1702.08734.pdf`
-                    ) {
-                        let path;
-                        if (!('pdf' in props)) {
-                            console.warn('Missing prop "pdf"');
-                            return;
-                        }
-                        try {
-                            path = new URL(props.pdf).href;
-                        } catch {
-                            path = `vault:/${props.pdf}`;
-                        }
-                        return await base(path);
-                    }
-                    if (href == `https://cdn.hypothes.is/demos/epub/content/moby-dick/book.epub`) {
-                        let path;
-                        if (!('epub' in props)) {
-                            console.warn('Missing prop "epub"');
-                            return;
-                        }
-                        try {
-                            path = new URL(props.epub).href;
-                        } catch {
-                            path = `vault:/${props.epub}`;
-                        }
-                        return await base(path);
-                    }
-                    if (href == `https://hypothes.is/api/`) {
-                        return await base(`zip:/fake-service/api.json`);
-                    }
-                    if (href == `http://localhost:8001/api/links`) {
-                        return await base(`zip:/fake-service/api/links.json`);
-                    }
-                    if (href == `http://localhost:8001/api/profile`) {
-                        return await base(`zip:/fake-service/api/profile.json`);
-                    }
-                    if (href.startsWith(`http://localhost:8001/api/profile/groups`)) {
-                        return await base(`zip:/fake-service/api/profile/groups.json`);
-                    }
-                    if (href.startsWith(`http://localhost:8001/api/groups`)) {
-                        return await base(`zip:/fake-service/api/groups.json`);
-                    }
+                    href = proxy(new URL(href)).href;
+
                     let res = null;
+                    if (href == `junk:/ignore`) {
+                        return new Response(JSON.stringify({}, null, 2), {
+                            status: 200,
+                            statusText: 'ok'
+                        });
+                    }
                     if (href.startsWith(`http://localhost:8001/api/search`)) {
                         res = await loadAnnotations(new URL(href));
                     }
@@ -218,6 +241,15 @@ export default ({ vault, resourceUrls }) => {
                     return await base(href);
                 }}
                 onDarkReadersUpdated={props.onDarkReadersUpdated}
+                htmlPostProcessFunction={(html: string) => {
+                    if ('pdf' in props) {
+                        html = html.replaceAll(SAMPLE_PDF_URL, proxy(props.pdf).href);
+                    }
+                    if ('epub' in props) {
+                        html = html.replaceAll(SAMPLE_EPUB_URL, proxy(props.epub).href);
+                    }
+                    return html;
+                }}
                 onload={async iframe => {
                     let sidebarFrame;
                     do {

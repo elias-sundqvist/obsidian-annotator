@@ -7,10 +7,18 @@ import hypothesisResources from './resources!zipBase64';
 import { Vault } from 'obsidian';
 import { DarkReaderType } from 'darkreader';
 import { LocalIFrameProps } from 'types';
+import { WebSocket, Server } from 'mock-websocket';
 
 const hypothesisFolder = jszip.loadAsync(hypothesisResources, { base64: true });
 
 export default ({ vault, resourceUrls }: { vault: Vault; resourceUrls: Map<string, string> }) => {
+    const mockServer = new Server('wss://hypothes.is/ws');
+    mockServer.on('connection', () => '');
+
+    mockServer.on('message', () => {
+        mockServer.send(JSON.stringify({ type: 'whoyouare', userid: null, ok: true, reply_to: 1 }));
+    });
+
     const LocalIframe = (props: LocalIFrameProps) => {
         const frame = useRef<HTMLIFrameElement>(null);
         const darkReaderReferences: Set<WeakRef<DarkReaderType>> = new Set();
@@ -52,6 +60,7 @@ export default ({ vault, resourceUrls }: { vault: Vault; resourceUrls: Map<strin
             patchXmlStyleTags(xmlDoc, contextUrl);
             await patchXmlLinkTags(xmlDoc, contextUrl);
             patchXmlScriptTags(xmlDoc, contextUrl);
+            patchXmlIframeTags(xmlDoc);
             return { html: `<!DOCTYPE html>${xmlDoc.documentElement.outerHTML}`, context: contextUrl.href };
         }
 
@@ -122,6 +131,16 @@ export default ({ vault, resourceUrls }: { vault: Vault; resourceUrls: Map<strin
                 const src = tag.getAttribute('src');
                 if (src) {
                     tag.setAttribute('src', getResourceUrl(src, contextUrl));
+                    tag.setAttribute('patched-src', src);
+                }
+            }
+        }
+
+        function patchXmlIframeTags(xmlDoc: XMLDocument) {
+            for (const tag of xmlDoc.getElementsByTagName('iframe')) {
+                const src = tag.getAttribute('src');
+                if (src) {
+                    tag.removeAttribute('src');
                     tag.setAttribute('patched-src', src);
                 }
             }
@@ -236,11 +255,14 @@ export default ({ vault, resourceUrls }: { vault: Vault; resourceUrls: Map<strin
             }
             if (url.protocol == 'file:') {
                 try {
-                    buf = await new Promise((res, _)=>{
+                    buf = await new Promise(res => {
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         (window as any).app.vault.adapter.fs.readFile(
-                            (x=>x.contains(":/")?x.substr(1):x)(decodeURI(url.pathname).replaceAll("\\","/")), 
-                            (_, buf)=>{res(buf);})
+                            (x => (x.contains(':/') ? x.substr(1) : x))(decodeURI(url.pathname).replaceAll('\\', '/')),
+                            (_, buf) => {
+                                res(buf);
+                            }
+                        );
                     });
 
                     return new Response(buf, {
@@ -328,6 +350,10 @@ export default ({ vault, resourceUrls }: { vault: Vault; resourceUrls: Map<strin
             };
         }
 
+        function patchIframeWebSocket(iframe) {
+            iframe.contentWindow.WebSocket = WebSocket;
+        }
+
         function patchIframeXMLHttpRequest(iframe, contextUrl) {
             const base = href => {
                 return fetchUrlContent(mkUrl(contextUrl, href));
@@ -369,7 +395,7 @@ export default ({ vault, resourceUrls }: { vault: Vault; resourceUrls: Map<strin
                 (iframe.getAttribute('srcDoc') && iframe.getAttribute('srcDoc') != patchedElementSrcDocs.get(iframe))
             ) {
                 patchedElements.add(iframe);
-                let src = iframe.getAttribute('src');
+                let src = iframe.getAttribute('src') || iframe.getAttribute('patched-src');
                 let newSrc;
                 let content;
                 if (src) {
@@ -389,6 +415,7 @@ export default ({ vault, resourceUrls }: { vault: Vault; resourceUrls: Map<strin
                 patchIframePostMessage(iframe);
                 patchIframeFetch(iframe, context);
                 patchIframeXMLHttpRequest(iframe, context);
+                patchIframeWebSocket(iframe);
                 setIframeContent(iframe, html);
                 addIframeMutationObserverWhenReady(iframe);
                 iframe.setAttribute('patched', 'true');
@@ -478,6 +505,9 @@ export default ({ vault, resourceUrls }: { vault: Vault; resourceUrls: Map<strin
         function setIframeContent(iframe, content) {
             const window = iframe.contentWindow;
             const doc = window.document;
+            if (props.htmlPostProcessFunction) {
+                content = props.htmlPostProcessFunction(content);
+            }
             doc.open('text/html', 'replace');
             doc.write(content);
             doc.close();
@@ -493,7 +523,7 @@ export default ({ vault, resourceUrls }: { vault: Vault; resourceUrls: Map<strin
             if (!frame.current) return;
             setIframeContentAndPatch(
                 iframe,
-                `<iframe src="${props.src}" width="100%" height="100%" allowfullscreen="allowfullscreen" frameborder="0">`
+                `<iframe patched-src="${props.src}" width="100%" height="100%" allowfullscreen="allowfullscreen" frameborder="0">`
             );
             if (props.onload) {
                 props.onload(iframe.contentDocument.body.firstChild as HTMLIFrameElement);
