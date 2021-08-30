@@ -234,6 +234,24 @@ export default ({ vault, resourceUrls }: { vault: Vault; resourceUrls: Map<strin
                     return new Response(null, { status: 404, statusText: 'file not found' });
                 }
             }
+            if (url.protocol == 'file:') {
+                try {
+                    buf = await new Promise((res, _)=>{
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        (window as any).app.vault.adapter.fs.readFile(
+                            (x=>x.contains(":/")?x.substr(1):x)(decodeURI(url.pathname).replaceAll("\\","/")), 
+                            (_, buf)=>{res(buf);})
+                    });
+
+                    return new Response(buf, {
+                        status: 200,
+                        statusText: 'ok'
+                    });
+                } catch (e) {
+                    console.warn('mockFetch Failed, Error', { e });
+                    return new Response(null, { status: 404, statusText: 'file not found' });
+                }
+            }
             return fetch(url.toString());
         }
 
