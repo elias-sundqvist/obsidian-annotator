@@ -62,7 +62,6 @@ export default class AnnotatorPlugin extends Plugin {
         this.resourceUrls = await loadResourceUrls;
         this.PdfAnnotation = definePdfAnnotation({ vault: this.app.vault, resourceUrls: this.resourceUrls });
         this.EpubAnnotation = defineEpubAnnotation({ vault: this.app.vault, resourceUrls: this.resourceUrls });
-        this.addStatusBarItem().setText('Status Bar Text');
         this.registerView(VIEW_TYPE_PDF_ANNOTATOR, leaf => new PdfAnnotatorView(leaf, this));
         this.addMarkdownPostProcessor();
         this.registerMonkeyPatches();
