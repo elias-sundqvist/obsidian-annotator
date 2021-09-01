@@ -16,7 +16,7 @@ export default ({ vault, resourceUrls }: { vault: Vault; resourceUrls: Map<strin
     mockServer.on('connection', () => '');
 
     mockServer.on('message', () => {
-        mockServer.send(JSON.stringify({ type: 'whoyouare', userid: null, ok: true, reply_to: 1 }));
+        mockServer.send(JSON.stringify({ type: 'whoyouare', userid: 'Obsidian User', ok: true, reply_to: 1 }));
     });
 
     const LocalIframe = (props: LocalIFrameProps) => {
