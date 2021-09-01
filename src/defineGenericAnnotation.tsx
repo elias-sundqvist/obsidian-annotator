@@ -6,6 +6,32 @@ import { wait } from 'utils';
 
 export default ({ vault, resourceUrls }) => {
     const LocalIframe = defineLocalIframe({ vault, resourceUrls });
+
+    const makeDefaultAnnotationObject = (annotationId: string, tags: string[]) => ({
+        group: '__world__',
+        permissions: { read: ['Obsidian User'], update: ['Obsidian User'], delete: ['Obsidian User'] },
+        tags,
+        text: '',
+        user: 'Obsidian User',
+        user_info: { display_name: 'Obsidian User' },
+        hidden: false,
+        target: [],
+        links: {},
+        flagged: false,
+        id: annotationId
+    });
+
+    const stripDefaultValues = (obj: Record<string, unknown>, defaultObj: Record<string, unknown>) => {
+        const strippedObject: Record<string, unknown> = {};
+        const toIgnore = ['group', 'permissions', 'user', 'user_info'];
+        for (const key of Object.keys(obj)) {
+            if (JSON.stringify(obj[key]) !== JSON.stringify(defaultObj[key]) && !toIgnore.contains(key)) {
+                strippedObject[key] = obj[key];
+            }
+        }
+        return strippedObject;
+    };
+
     const GenericAnnotation = (props: SpecificAnnotationProps & { baseSrc: string }) => {
         async function loadAnnotations(url): Promise<AnnotationList> {
             const params = Object.fromEntries(url.searchParams.entries());
@@ -45,14 +71,21 @@ export default ({ vault, resourceUrls }) => {
                         .split(',')
                         .map(x => x.trim().substr(1))
                         .filter(x => x);
-                    const annotationDocumentIdentifiers = [annotation.document?.documentFingerprint, annotation.uri];
+                    if ('group' in annotation) {
+                        delete annotation.group;
+                    }
+                    const completeAnnotation = { ...makeDefaultAnnotationObject(m[4], annotation.tags), ...annotation };
+                    const annotationDocumentIdentifiers = [
+                        completeAnnotation.document?.documentFingerprint,
+                        completeAnnotation.uri
+                    ];
 
                     //The check against SAMPLE_PDF_URL is for backwards compability.
                     if (
                         annotationDocumentIdentifiers.includes(params.uri) ||
                         annotationDocumentIdentifiers.includes(SAMPLE_PDF_URL)
                     ) {
-                        rows.push(annotation);
+                        rows.push(completeAnnotation);
                     }
                 }
             }
@@ -104,7 +137,9 @@ export default ({ vault, resourceUrls }) => {
             });
             let annotationString =
                 '%%\n```annotation-json' +
-                `\n${JSON.stringify(res)}` +
+                `\n${JSON.stringify(
+                    stripDefaultValues(res, makeDefaultAnnotationObject(annotationId, annotation.tags))
+                )}` +
                 '\n```\n%%\n' +
                 `*%%PREFIX%%${prefix.trim()}%%HIGHLIGHT%% ==${exact.trim()}== %%POSTFIX%%${suffix.trim()}*\n%%LINK%%[[#^${annotationId}|show annotation]]\n%%COMMENT%%\n${
                     annotation.text || ''
@@ -223,7 +258,7 @@ export default ({ vault, resourceUrls }) => {
                         });
                     }
                     if (href.startsWith(`http://localhost:8001/api/search`)) {
-                        res = await loadAnnotations(new URL(href));
+                            res = await loadAnnotations(new URL(href));
                     }
                     if (href.startsWith(`http://localhost:8001/api/annotations`)) {
                         if (init.method == 'DELETE') {
