@@ -7,7 +7,8 @@ This is a plugin for Obsidian (https://obsidian.md). It allows you to open and a
 The plugin is based on https://web.hypothes.is/, but modified to store the annotations in a local markdown file instead of on the internet. 
 
 ## Demonstration
-![](images/annotator%20demo.gif)
+![annotator demo](https://user-images.githubusercontent.com/9102856/131702952-1aa76baa-a279-474c-978d-cec95a683485.gif)
+
 
 ## Getting Started 
 
@@ -58,6 +59,19 @@ You can make a [pull request](https://github.com/elias-sundqvist/obsidian-annota
 
 
 ## Changelog
+
+### 0.0.7 (2021-09-01) *Added Custom Default Path setting, Page notes fix, Slight JSON size reduction, etc.*
+* Added a new setting called `Custom Default Path`. See [this comment on #19](https://github.com/elias-sundqvist/obsidian-annotator/issues/19#issuecomment-909549603) for more info. 
+* Top-level values in the annotation JSON will now be ommited if their values are "unsurprising". See #24
+* Fixed page notes breaking the loading of annotations.
+* Made the `Post to...` button always say `Post to Only Me` to reduce privacy confusion. 
+* Further reduced plugin size
+  * Switched from base64 to full unicode encoding
+  * Added minimization of resources before zip generation
+  * Added minimization of final rollup output
+* Minor fixes
+  * Removed warning about websocket userid mismatch
+  * Added possible fix to #13
 
 ### 0.0.6 (2021-08-30) *`file:` protocol support, various url fixes, privacy improvements, minor fixes*
 * Fixed so that no initial http request is made to the hypothes.is servers. 
