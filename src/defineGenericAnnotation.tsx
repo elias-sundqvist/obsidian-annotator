@@ -35,7 +35,7 @@ export default ({ vault, resourceUrls }) => {
                     const m2 = contentRegex.exec(content);
                     const annotation = JSON.parse(m2[2]);
                     const annotationTarget = annotation.target?.[0];
-                    if (annotationTarget.selector) {
+                    if (annotationTarget && 'selector' in annotationTarget) {
                         annotationTarget.selector = annotationTarget.selector.map(x =>
                             x.type == 'TextQuoteSelector' ? { ...x, prefix: m2[5], exact: m2[7], suffix: m2[9] } : x
                         );
