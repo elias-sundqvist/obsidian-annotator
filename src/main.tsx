@@ -27,7 +27,7 @@ import {
 import { Annotation } from './types';
 import defineEpubAnnotation from './defineEpubAnnotation';
 import { PdfAnnotationProps, EpubAnnotationProps } from './types';
-import { get_url_extension } from './utils';
+import { get_url_extension, isUrl } from './utils';
 import { DarkReaderType } from './darkreader';
 
 interface AnnotatorSettings {
@@ -37,6 +37,7 @@ interface AnnotatorSettings {
         contrast: number;
         sepia: number;
     };
+    customDefaultPath: string;
 }
 
 const DEFAULT_SETTINGS: AnnotatorSettings = {
@@ -45,7 +46,8 @@ const DEFAULT_SETTINGS: AnnotatorSettings = {
         brightness: 150,
         contrast: 85,
         sepia: 0
-    }
+    },
+    customDefaultPath: ''
 };
 
 export default class AnnotatorPlugin extends Plugin {
@@ -273,6 +275,25 @@ class AnnotatorSettingsTab extends PluginSettingTab {
 
         containerEl.createEl('h2', { text: 'Annotator Settings' });
 
+        containerEl.createEl('h3', { text: 'Annotation Target Settings' });
+
+        new Setting(containerEl)
+            .setName('Custom Default Path')
+            .setDesc(
+                [
+                    'If the provided annotation target is not found, ',
+                    'Annotator will try prepending this string to the path. ',
+                    'This can be useful if, for example, all your notes are ',
+                    'located at a specific remote location.'
+                ].join('')
+            )
+            .addText(text =>
+                text.setValue(this.plugin.settings.customDefaultPath).onChange(async value => {
+                    this.plugin.settings.customDefaultPath = value;
+                    await this.plugin.saveSettings();
+                })
+            );
+
         containerEl.createEl('h3', { text: 'Dark Mode Settings' });
 
         new Setting(containerEl)
@@ -343,10 +364,33 @@ class PdfAnnotatorView extends FileView {
         this.plugin.views.add(this);
     }
 
+    getAnnotationTarget(file: TFile): string {
+        const annotationTargetPropertyValue = this.plugin.getPropertyValue(ANNOTATION_TARGET_PROPERTY, file);
+        for (const target of [
+            annotationTargetPropertyValue,
+            `${this.plugin.settings.customDefaultPath}${annotationTargetPropertyValue}`
+        ]) {
+            if (isUrl(target)) {
+                return target;
+            }
+            let destFile: TFile;
+            try {
+                destFile = this.app.metadataCache.getFirstLinkpathDest(target, file?.path || '');
+            } finally {
+                if (destFile) {
+                    return destFile.path;
+                }
+            }
+        }
+
+        return annotationTargetPropertyValue;
+    }
+
     async onLoadFile(file: TFile) {
         ReactDOM.unmountComponentAtNode(this.contentEl);
         this.contentEl.empty();
-        const annotationTarget = this.plugin.getPropertyValue(ANNOTATION_TARGET_PROPERTY, file);
+        const annotationTarget = this.getAnnotationTarget(file);
+
         this.contentEl.removeClass('view-content');
         this.contentEl.style.height = '100%';
         this.annotationTarget = annotationTarget;
