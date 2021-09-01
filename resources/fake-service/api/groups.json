@@ -2,22 +2,17 @@
     {
         "id": "__world__",
         "groupid": null,
-        "name": "Public",
-        "organization": {
-            "id": "__default__",
-            "default": true,
-            "logo": "https://hypothes.is/organizations/__default__/logo",
-            "name": "Hypothesis"
-        },
-        "public": true,
+        "name": "Only Me",
+        "organization": null,
+        "public": false,
         "scoped": false,
-        "type": "open",
+        "type": "private",
         "scopes": {
             "enforced": false,
             "uri_patterns": []
         },
         "links": {
-            "html": "https://hypothes.is/groups/__world__/public"
+            "html": "app://obsidian.md/"
         }
     }
 ]

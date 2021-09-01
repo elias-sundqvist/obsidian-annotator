@@ -3,9 +3,9 @@
     "authority": "partner.org",
     "groups": [
       {
-        "name": "Public",
+        "name": "Only Me",
         "id": "__world__",
-        "public": true
+        "public": false
       }
     ],
     "features": {
@@ -15,6 +15,6 @@
     },
     "preferences": {},
     "user_info": {
-        "display_name": null
+        "display_name": "Obsidian User"
     }
   }

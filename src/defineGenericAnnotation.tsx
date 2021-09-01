@@ -271,6 +271,15 @@ export default ({ vault, resourceUrls }) => {
 
                     const style = sidebarFrame.contentDocument.createElement('style');
                     style.textContent = `
+        .PublishControlButton--primary {
+            border-top-right-radius: 2px;
+            border-bottom-right-radius: 2px;
+        }
+
+        .annotation-publish-button__menu-wrapper {
+            display: none;
+        }
+
         .AnnotationHeader__highlight {
             display: none!important;
         }
