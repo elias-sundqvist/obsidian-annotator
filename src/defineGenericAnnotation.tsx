@@ -258,7 +258,11 @@ export default ({ vault, resourceUrls }) => {
                         });
                     }
                     if (href.startsWith(`http://localhost:8001/api/search`)) {
+                        try {
                             res = await loadAnnotations(new URL(href));
+                        } catch (e) {
+                            console.error('failed to load annotations', { error: e });
+                        }
                     }
                     if (href.startsWith(`http://localhost:8001/api/annotations`)) {
                         if (init.method == 'DELETE') {
