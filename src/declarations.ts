@@ -1,4 +1,4 @@
-declare module '*!zipBase64' {
+declare module '*!zipStringEncoded' {
     const value: string;
     export default value;
 }

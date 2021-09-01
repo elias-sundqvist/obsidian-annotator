@@ -3,13 +3,13 @@ import * as jszip from 'jszip';
 import { normalizePath, TFile } from 'obsidian';
 import React, { useEffect } from 'react';
 import { useRef } from 'react';
-import hypothesisResources from './resources!zipBase64';
+import hypothesisResources from './resources!zipStringEncoded';
 import { Vault } from 'obsidian';
 import { DarkReaderType } from 'darkreader';
 import { LocalIFrameProps } from 'types';
 import { WebSocket, Server } from 'mock-websocket';
 
-const hypothesisFolder = jszip.loadAsync(hypothesisResources, { base64: true });
+const hypothesisFolder = jszip.loadAsync(hypothesisResources);
 
 export default ({ vault, resourceUrls }: { vault: Vault; resourceUrls: Map<string, string> }) => {
     const mockServer = new Server('wss://hypothes.is/ws');

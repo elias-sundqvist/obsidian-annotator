@@ -1,12 +1,16 @@
 import JSZip from 'jszip';
 import fs from 'fs';
 import path from 'path';
+import minify from 'minify';
+import MagicString from 'magic-string';
 
-const importSuffix = "!zipBase64"; 
+const importSuffix = "!zipStringEncoded"; 
+const stringMap = new Map();
+let counter = 0;
 
-export default function zipBase64() {
+export default function zipStringEncoded() {
   return {
-    name: 'zip-base-64', // this name will show up in warnings and errors
+    name: 'zip-string-encoded', // this name will show up in warnings and errors
     resolveId ( source ) {
       if (source.endsWith(importSuffix)) {
         return source; // this signals that rollup should not ask other plugins or check the file system to find this id
@@ -16,11 +20,32 @@ export default function zipBase64() {
     async load ( id ) {
       if (id.endsWith(importSuffix)) {
         const folder = id.substr(0, id.length - importSuffix.length);
-        const zip = getZipOfFolder(folder);
-        const base64 = await zip.generateAsync({type: "base64"});
-        return `export default "${base64}"`; // the source code for "virtual-module"
+        const zip = await getZipOfFolder(folder);
+        const theString = await zip.generateAsync({type: "string"});
+        const placeholder = `rollupZipStringEncodedNo${counter}`;
+        const replacementCode = theString.replaceAll("*", "* ");
+        stringMap.set(placeholder, replacementCode);
+        return `const a = function(){/*@preserve${placeholder}*/};const s=a.toString();const s2 = s.substring(22,s.length-3); const res= s2.replaceAll("* ", "*"); export default res;`; // the source code for "virtual-module"
       }
       return null; // other ids should be handled as usually
+    },
+    renderChunk(code) {
+      const magicString = new MagicString(code);
+      for (const [placeholder, replacementCode] of stringMap.entries()) {
+        const pattern = new RegExp(placeholder, 'gm');
+        let match;
+        let i = 0;
+        while ((match = pattern.exec(code)) !== null) {
+          const pattern = new RegExp(placeholder);
+          if (match.index === pattern.lastIndex) {
+            pattern.lastIndex++;
+          }
+          const start = match.index;
+          const end = start + match[0].length;
+          magicString.overwrite(start, end, replacementCode);
+        }
+      }
+      return {code: magicString.toString(), map: magicString.generateMap({ hires: true })};
     }
   };
 }
@@ -52,7 +77,9 @@ const getFilePathsRecursively = (dir) => {
   return results;
 };
 
-const getZipOfFolder = (dir) => {
+const compressibleFormats = new Set(["html", "css", "js", "img"]);
+
+const getZipOfFolder = async (dir) => {
 
   // returns a JSZip instance filled with contents of dir.
 
@@ -61,7 +88,22 @@ const getZipOfFolder = (dir) => {
   let zip = new JSZip();
   for (let filePath of allPaths) {
     let addPath = slash(path.relative(dir, filePath)); // use this instead if you don't want the source folder itself in the zip
-    let data = fs.readFileSync(filePath);
+    let ext = filePath.split('.').pop().trim();
+    
+    let data;
+    if(compressibleFormats.has(ext)) {
+      try {
+          console.log("minifying ", filePath)
+          data = await minify(filePath)
+      } catch(e) {
+          
+        console.log("Minification Failed for ", filePath)
+      }
+    }
+    if(!data) {
+      data = fs.readFileSync(filePath);
+    }
+
     let stat = fs.lstatSync(filePath);
     let permissions = stat.mode;
 
