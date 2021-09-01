@@ -121,11 +121,15 @@ export default class AnnotatorPlugin extends Plugin {
     }
 
     getPropertyValue(propertyName: string, file: TFile) {
+        if (!file) {
+            return null;
+        }
+
         const dataViewPropertyValue = (this.app as any)?.plugins?.plugins?.dataview?.api // eslint-disable-line
             ?.page(file.path)?.[propertyName];
         if (dataViewPropertyValue) {
             if (dataViewPropertyValue.path) {
-                return this.app.metadataCache.getFirstLinkpathDest(dataViewPropertyValue.path, file.path).path;
+                return this.app.metadataCache.getFirstLinkpathDest(dataViewPropertyValue.path, file.path)?.path;
             }
             const externalLinkMatch = /^\[.*\]\((.*)\)$/gm.exec(dataViewPropertyValue)?.[1];
             if (externalLinkMatch) {
