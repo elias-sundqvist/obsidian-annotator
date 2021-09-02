@@ -12,14 +12,12 @@ import { WebSocket, Server } from 'mock-websocket';
 const hypothesisFolder = jszip.loadAsync(hypothesisResources);
 
 export default ({ vault, resourceUrls }: { vault: Vault; resourceUrls: Map<string, string> }) => {
-    const mockServer = new Server('wss://hypothes.is/ws');
-    mockServer.on('connection', () => '');
-
-    mockServer.on('message', () => {
-        mockServer.send(JSON.stringify({ type: 'whoyouare', userid: 'Obsidian User', ok: true, reply_to: 1 }));
-    });
-
     const LocalIframe = (props: LocalIFrameProps) => {
+        let mockServer = new Server('wss://hypothes.is/ws');
+        mockServer.on('connection', () => '');
+        mockServer.on('message', () => {
+            mockServer.send(JSON.stringify({ type: 'whoyouare', userid: 'Obsidian User', ok: true, reply_to: 1 }));
+        });
         const frame = useRef<HTMLIFrameElement>(null);
         const darkReaderReferences: Set<WeakRef<DarkReaderType>> = new Set();
         const patchedElements = new WeakSet();
@@ -282,6 +280,17 @@ export default ({ vault, resourceUrls }: { vault: Vault; resourceUrls: Map<strin
             return props.proxy(url);
         }
 
+        function patchIframeConsole(iframe) {
+            // The console may keep references to objects, preventing them from getting destroyed.
+            // Solution - disable the console inside iframes. 
+            const contentWindow = iframe.contentWindow;
+            contentWindow.console = new Proxy({}, {
+                get(target,name) {
+                    return ()=>null;
+                }
+            })
+        }
+
         function patchIframeClasses(iframe) {
             iframe.contentWindow.ArrayBuffer = ArrayBuffer;
         }
@@ -414,6 +423,7 @@ export default ({ vault, resourceUrls }: { vault: Vault; resourceUrls: Map<strin
                 patchIframeClasses(iframe);
                 patchIframePostMessage(iframe);
                 patchIframeFetch(iframe, context);
+                patchIframeConsole(iframe);
                 patchIframeXMLHttpRequest(iframe, context);
                 patchIframeWebSocket(iframe);
                 setIframeContent(iframe, html);
@@ -535,6 +545,10 @@ export default ({ vault, resourceUrls }: { vault: Vault; resourceUrls: Map<strin
 
         useEffect(() => {
             return () => {
+                mockServer.stop();
+                mockServer.close();
+                mockServer = null;
+                frame.current?.contentWindow.location.reload();
                 frame.current?.remove();
             };
         }, []);
