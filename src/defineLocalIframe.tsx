@@ -282,13 +282,16 @@ export default ({ vault, resourceUrls }: { vault: Vault; resourceUrls: Map<strin
 
         function patchIframeConsole(iframe) {
             // The console may keep references to objects, preventing them from getting destroyed.
-            // Solution - disable the console inside iframes. 
+            // Solution - disable the console inside iframes.
             const contentWindow = iframe.contentWindow;
-            contentWindow.console = new Proxy({}, {
-                get(target,name) {
-                    return ()=>null;
+            contentWindow.console = new Proxy(
+                {},
+                {
+                    get() {
+                        return () => null;
+                    }
                 }
-            })
+            );
         }
 
         function patchIframeClasses(iframe) {

@@ -20,6 +20,7 @@ export type Annotation = {
     id: string;
     document: {
         title: string[];
+        documentFingerprint?: string;
     };
     created: string;
     updated: string;

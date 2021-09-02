@@ -24,13 +24,13 @@ import {
     ANNOTATION_TARGET_PROPERTY,
     ANNOTATION_TARGET_TYPE_PROPERTY
 } from './constants';
-import { Annotation } from './types';
 import defineEpubAnnotation from './defineEpubAnnotation';
 import { PdfAnnotationProps, EpubAnnotationProps } from './types';
 import { get_url_extension, isUrl } from './utils';
 import { DarkReaderType } from './darkreader';
+import { getAnnotation } from 'annotationUtils';
 
-interface AnnotatorSettings {
+export interface AnnotatorSettings {
     deafultDarkMode: boolean;
     darkReaderSettings: {
         brightness: number;
@@ -38,6 +38,11 @@ interface AnnotatorSettings {
         sepia: number;
     };
     customDefaultPath: string;
+    annotationMarkdownSettings: {
+        includePrefix: boolean;
+        highlightHighlightedText: boolean;
+        includePostfix: boolean;
+    };
 }
 
 const DEFAULT_SETTINGS: AnnotatorSettings = {
@@ -47,7 +52,12 @@ const DEFAULT_SETTINGS: AnnotatorSettings = {
         contrast: 85,
         sepia: 0
     },
-    customDefaultPath: ''
+    customDefaultPath: '',
+    annotationMarkdownSettings: {
+        includePrefix: true,
+        highlightHighlightedText: true,
+        includePostfix: true
+    }
 };
 
 export default class AnnotatorPlugin extends Plugin {
@@ -62,8 +72,16 @@ export default class AnnotatorPlugin extends Plugin {
     async onload() {
         await this.loadSettings();
         this.resourceUrls = await loadResourceUrls;
-        this.PdfAnnotation = definePdfAnnotation({ vault: this.app.vault, resourceUrls: this.resourceUrls });
-        this.EpubAnnotation = defineEpubAnnotation({ vault: this.app.vault, resourceUrls: this.resourceUrls });
+        this.PdfAnnotation = definePdfAnnotation({
+            vault: this.app.vault,
+            resourceUrls: this.resourceUrls,
+            plugin: this
+        });
+        this.EpubAnnotation = defineEpubAnnotation({
+            vault: this.app.vault,
+            resourceUrls: this.resourceUrls,
+            plugin: this
+        });
         this.registerView(VIEW_TYPE_PDF_ANNOTATOR, leaf => new PdfAnnotatorView(leaf, this));
         this.addMarkdownPostProcessor();
         this.registerMonkeyPatches();
@@ -294,6 +312,48 @@ class AnnotatorSettingsTab extends PluginSettingTab {
                 })
             );
 
+        containerEl.createEl('h3', { text: 'Annotation Markdown Settings' });
+
+        new Setting(containerEl)
+            .setName('Include Prefix')
+            .setDesc(
+                'Whether to include the %%PREFIX%% region of the annotation markdown. Allows you to see some text before the highlighted region.'
+            )
+            .addToggle(toggle =>
+                toggle.setValue(this.plugin.settings.annotationMarkdownSettings.includePrefix).onChange(async value => {
+                    this.plugin.settings.annotationMarkdownSettings.includePrefix = value;
+                    await this.plugin.saveSettings();
+                })
+            );
+
+        new Setting(containerEl)
+            .setName('Include Postfix')
+            .setDesc(
+                'Whether to include the %%POSTFIX%% region of the annotation markdown. Allows you to see some text after the highlighted region.'
+            )
+            .addToggle(toggle =>
+                toggle
+                    .setValue(this.plugin.settings.annotationMarkdownSettings.includePostfix)
+                    .onChange(async value => {
+                        this.plugin.settings.annotationMarkdownSettings.includePostfix = value;
+                        await this.plugin.saveSettings();
+                    })
+            );
+
+        new Setting(containerEl)
+            .setName('Highlight highlighted text')
+            .setDesc(
+                'Whether to wrap the %%HIGHLIGHT%% region text in == ==, so that the text becomes highlighted. Useful for distinguishing the highlight from the pre- and postfix.'
+            )
+            .addToggle(toggle =>
+                toggle
+                    .setValue(this.plugin.settings.annotationMarkdownSettings.highlightHighlightedText)
+                    .onChange(async value => {
+                        this.plugin.settings.annotationMarkdownSettings.highlightHighlightedText = value;
+                        await this.plugin.saveSettings();
+                    })
+            );
+
         containerEl.createEl('h3', { text: 'Dark Mode Settings' });
 
         new Setting(containerEl)
@@ -492,50 +552,13 @@ class PdfAnnotatorView extends FileView {
         super.onMoreOptionsMenu(menu);
     }
 
-    async getAnnotation(annotationId): Promise<Annotation> {
-        const annotationRegex = new RegExp(
-            '(^\n(>.*?\n)*?>```annotation-json(\n>.*?)*?)\n\\^' + annotationId + '\n',
-            'gm'
-        );
-        const text = await this.app.vault.read(this.file);
-        let m: RegExpExecArray;
-
-        if ((m = annotationRegex.exec(text)) !== null) {
-            if (m.index === annotationRegex.lastIndex) {
-                annotationRegex.lastIndex++;
-            }
-            const contentRegex =
-                /(.|\n)*?%%\n```annotation-json\n((.|\n)*?)\n```\n%%(.|\n)*?\*%%PREFIX%%((.|\n)*?)%%HIGHLIGHT%% ==((.|\n)*?)== %%POSTFIX%%((.|\n)*?)\*\n%%LINK%%((.|\n)*?)\n%%COMMENT%%\n((.|\n)*?)\n%%TAGS%%\n((.|\n)*)/gm;
-
-            const content = m[1]
-                .split('\n')
-                .map(x => x.substr(1))
-                .join('\n');
-            const m2 = contentRegex.exec(content);
-            const annotation = JSON.parse(m2[2]);
-            const annotationTarget = annotation.target?.[0];
-            if (annotationTarget.selector) {
-                annotationTarget.selector = annotationTarget.selector.map(x =>
-                    x.type == 'TextQuoteSelector' ? { ...x, prefix: m2[5], exact: m2[7], suffix: m2[9] } : x
-                );
-            }
-            annotation.text = m2[13];
-            annotation.tags = m2[15]
-                .split(',')
-                .map(x => x.trim().substr(1))
-                .filter(x => x);
-            return annotation;
-        } else {
-            return null;
-        }
-    }
-
     async scrollToAnnotation(annotationId) {
-        const annotation = await this.getAnnotation(annotationId);
+        const annotation = await getAnnotation(annotationId, this.file, this.app.vault);
         if (!annotation) return;
         let yoffset = -10000;
         let newYOffset;
-        const selectors = new Set(annotation.target[0].selector.map(x => JSON.stringify(x)));
+        const isPageNote = !annotation.target?.length;
+        const selectors = new Set(isPageNote ? [] : annotation.target[0].selector.map(x => JSON.stringify(x)));
 
         const g = () => {
             try {
@@ -550,6 +573,24 @@ class PdfAnnotatorView extends FileView {
                         ?.querySelector('body > hypothesis-sidebar')
                         ?.shadowRoot?.querySelector('div > iframe');
 
+                const guests: any[] = // eslint-disable-line
+                    (this.iframe.contentWindow as any).guests || // eslint-disable-line
+                    (this.iframe.contentDocument.getElementsByTagName('iframe')[0].contentWindow as any).guests; // eslint-disable-line
+
+                if (isPageNote) {
+                    //Open Page Notes
+                    const showAllButton: HTMLElement = sidebarIframe.contentDocument.querySelector(
+                        'body > hypothesis-app > div > div.HypothesisApp__content > main > div > div.FilterStatus > div > div:nth-child(2) > button'
+                    );
+                    showAllButton?.click?.();
+                    const pageNotesButton: HTMLElement = sidebarIframe.contentDocument.querySelector(
+                        'body > hypothesis-app > div > div.HypothesisApp__content > main > div > div.SelectionTabs-container > div > div:nth-child(2) > button'
+                    );
+                    pageNotesButton?.click?.();
+                    guests[0].crossframe._bridge.channelListeners.openSidebar();
+                    return;
+                }
+
                 const annotationTargetType =
                     this.plugin.getPropertyValue(ANNOTATION_TARGET_TYPE_PROPERTY, this.file) ||
                     get_url_extension(this.annotationTarget);
@@ -561,10 +602,6 @@ class PdfAnnotatorView extends FileView {
                         (this.iframe.contentWindow as any).rendition.display(loc); // eslint-disable-line
                         break;
                 }
-
-                const guests: any[] = // eslint-disable-line
-                    (this.iframe.contentWindow as any).guests || // eslint-disable-line
-                    (this.iframe.contentDocument.getElementsByTagName('iframe')[0].contentWindow as any).guests; // eslint-disable-line
 
                 for (const guest of guests) {
                     if (!guest) continue;
@@ -578,7 +615,27 @@ class PdfAnnotatorView extends FileView {
                         'showAnnotations',
                         matchingAnchors.map(x => x.annotation.$tag)
                     );
-                    (sidebarIframe.contentDocument.getElementById(annotationId).firstChild as HTMLElement).click();
+                    switch (annotationTargetType) {
+                        case 'pdf':
+                            let done = false;
+                            for (const anchor of matchingAnchors) {
+                                if (done) break;
+                                for (const highlight of anchor.highlights) {
+                                    if (done) break;
+                                    if (highlight.scrollIntoViewIfNeeded) {
+                                        highlight.scrollIntoViewIfNeeded();
+                                        done = true;
+                                    }
+                                }
+                            }
+                            break;
+                        case 'epub':
+                            // Use the "real" hypothes.is code.
+                            (
+                                sidebarIframe.contentDocument.getElementById(annotationId).firstChild as HTMLElement
+                            ).click();
+                            break;
+                    }
                     guest.crossframe._bridge.channelListeners.focusAnnotations(
                         matchingAnchors.map(x => x.annotation.$tag)
                     );
@@ -590,10 +647,10 @@ class PdfAnnotatorView extends FileView {
                 newYOffset = document.getElementsByTagName('hypothesis-highlight')[0].getBoundingClientRect().y;
                 if (newYOffset != yoffset) {
                     yoffset = newYOffset;
-                    setTimeout(g, 500);
+                    setTimeout(g, 100);
                 }
             } catch (e) {
-                setTimeout(g, 500);
+                setTimeout(g, 100);
             }
         };
         this.activeG = g;
