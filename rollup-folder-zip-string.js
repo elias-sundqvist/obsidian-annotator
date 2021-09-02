@@ -21,7 +21,7 @@ export default function zipStringEncoded() {
       if (id.endsWith(importSuffix)) {
         const folder = id.substr(0, id.length - importSuffix.length);
         const zip = await getZipOfFolder(folder);
-        const theString = await zip.generateAsync({type: "string"});
+        const theString = await zip.generateAsync({type: "string", compression: "DEFLATE", compressionOptions: {level: 9}});
         const placeholder = `rollupZipStringEncodedNo${counter}`;
         const replacementCode = theString.replaceAll("*", "* ");
         stringMap.set(placeholder, replacementCode);
