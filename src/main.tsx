@@ -1,3 +1,4 @@
+import 'core-js';
 import {
     FileView,
     MarkdownView,
