@@ -60,6 +60,17 @@ You can make a [pull request](https://github.com/elias-sundqvist/obsidian-annota
 
 ## Changelog
 
+### 0.0.8 (2021-09-02) *Added Pre/Postfix setting toggles, Fixed scrolling issue, More size reductions.*
+* The plugin is now available in the community plugins list! 
+* The Pre- and Postfix parts of the annotation markdown can now be disabled in the settings. (See #30)
+* Clicking a PDF annotation link now causes an immediate jump to the annotation. No more glitchy scrolling. (See #21)
+* Potential fix to the memory leak mentioned in #28 added.
+* Added core-js. Will hopefully mean that the plugin works with older versions of node (see #34)
+* Disabled global WebSocket override. Should resolve issues with Obsidian Sync (see #36)
+* Further size reductions of the plugin
+  * React is now built in 'production' mode.
+  * All the embedded resources now use the highest zip compression ratio.
+
 ### 0.0.7 (2021-09-01) *Added Custom Default Path setting, Page notes fix, Slight JSON size reduction, etc.*
 * Added a new setting called `Custom Default Path`. See [this comment on #19](https://github.com/elias-sundqvist/obsidian-annotator/issues/19#issuecomment-909549603) for more info. 
 * Top-level values in the annotation JSON will now be ommited if their values are "unsurprising". See #24
