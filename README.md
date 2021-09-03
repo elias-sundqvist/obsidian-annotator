@@ -60,7 +60,10 @@ You can make a [pull request](https://github.com/elias-sundqvist/obsidian-annota
 
 ## Changelog
 
-### 0.0.8 (2021-09-02) *Added Pre/Postfix setting toggles, Fixed scrolling issue, More size reductions.*
+### 0.0.9 (2021-09-03) *Quick fix for annotation id bug*
+* See #37
+
+### 0.0.8 (2021-09-03) *Added Pre/Postfix setting toggles, Fixed scrolling issue, More size reductions.*
 * The plugin is now available in the community plugins list! 
 * The Pre- and Postfix parts of the annotation markdown can now be disabled in the settings. (See #30)
 * Clicking a PDF annotation link now causes an immediate jump to the annotation. No more glitchy scrolling. (See #21)

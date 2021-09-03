@@ -148,7 +148,7 @@ export async function writeAnnotation(annotation, plugin: AnnotatorPlugin, annot
     const res = JSON.parse(JSON.stringify(annotation));
     res.flagged = false;
     res.id = annotationId;
-    const annotationString = makeAnnotationString(annotation, plugin);
+    const annotationString = makeAnnotationString(res, plugin);
 
     const tfile = vault.getAbstractFileByPath(annotationFilePath);
     if (tfile instanceof TFile) {
