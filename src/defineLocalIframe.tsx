@@ -13,7 +13,7 @@ const hypothesisFolder = jszip.loadAsync(hypothesisResources);
 
 export default ({ vault, resourceUrls }: { vault: Vault; resourceUrls: Map<string, string> }) => {
     const LocalIframe = (props: LocalIFrameProps) => {
-        let mockServer = new Server('wss://hypothes.is/ws');
+        let mockServer = new Server('wss://hypothes.is/ws', {mockGlobal: false});
         mockServer.on('connection', () => '');
         mockServer.on('message', () => {
             mockServer.send(JSON.stringify({ type: 'whoyouare', userid: 'Obsidian User', ok: true, reply_to: 1 }));
