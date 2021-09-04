@@ -60,6 +60,10 @@ You can make a [pull request](https://github.com/elias-sundqvist/obsidian-annota
 
 ## Changelog
 
+### 0.1.0 (2021-09-03) *Added annotation highlight drag and drop*
+* By holding the <kbd>shift</kbd> key you can now drag highlights from the epub/pdf into a separate Obsidian note, and a link to the highlight will be inserted. 
+  ![highlight drag and drop](https://user-images.githubusercontent.com/9102856/132098957-e6850c9f-77a0-4fd5-91ac-e7095cfbea9d.gif)
+
 ### 0.0.9 (2021-09-03) *Quick fix for annotation id bug*
 * See #37
 
