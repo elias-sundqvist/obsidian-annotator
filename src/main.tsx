@@ -11,7 +11,8 @@ import {
     PluginSettingTab,
     App,
     Setting,
-    parseLinktext
+    parseLinktext,
+    MarkdownPreviewView
 } from 'obsidian';
 import React from 'react';
 import ReactDOM from 'react-dom';
@@ -69,6 +70,7 @@ export default class AnnotatorPlugin extends Plugin {
     PdfAnnotation: (props: PdfAnnotationProps) => JSX.Element;
     EpubAnnotation: (props: EpubAnnotationProps) => JSX.Element;
     views: Set<PdfAnnotatorView> = new Set();
+    dragData: { annotationFilePath: string; annotationId: string; annotationText: string };
 
     async onload() {
         await this.loadSettings();
@@ -87,6 +89,36 @@ export default class AnnotatorPlugin extends Plugin {
         this.addMarkdownPostProcessor();
         this.registerMonkeyPatches();
         this.registerSettingsTab();
+        this.registerCodeMirror(cm => {
+            cm.on('drop', (editor, ev) => {
+                if (this.dragData !== null) {
+                    ev.preventDefault();
+                    const el = cm.getWrapperElement();
+                    const targetFilePath = this.app.workspace
+                        .getLeavesOfType('markdown')
+                        .filter(x =>
+                            (x as WorkspaceLeaf & (MarkdownPreviewView | null))?.containerEl?.contains(el)
+                        )?.[0]
+                        ?.getViewState().state.file;
+                    const annotationFile = this.app.vault.getAbstractFileByPath(this.dragData.annotationFilePath);
+                    const targetFile = this.app.vault.getAbstractFileByPath(targetFilePath);
+                    const doc = editor.getDoc();
+                    editor.focus();
+                    editor.setCursor(editor.coordsChar({ left: ev.pageX, top: ev.pageY }));
+                    const newpos = editor.getCursor();
+                    if (annotationFile instanceof TFile && targetFile instanceof TFile) {
+                        const linkString = this.app.fileManager.generateMarkdownLink(
+                            annotationFile,
+                            targetFile.path,
+                            `#^${this.dragData.annotationId}`,
+                            this.dragData.annotationText
+                        );
+                        doc.replaceRange(linkString, newpos);
+                    }
+                    this.dragData = null;
+                }
+            });
+        });
     }
 
     registerSettingsTab() {

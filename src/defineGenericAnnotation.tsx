@@ -3,7 +3,15 @@ import defineLocalIframe from 'defineLocalIframe';
 import React from 'react';
 import { SpecificAnnotationProps } from 'types';
 import { wait } from 'utils';
-import { deleteAnnotation, loadAnnotations, writeAnnotation } from 'annotationUtils';
+import {
+    checkPseudoAnnotationEquality,
+    deleteAnnotation,
+    getAnnotationHighlightTextData,
+    loadAnnotations,
+    writeAnnotation
+} from 'annotationUtils';
+import { Annotation } from './types';
+import AnnotatorPlugin from 'main';
 
 export default ({ vault, plugin, resourceUrls }) => {
     const LocalIframe = defineLocalIframe({ vault, resourceUrls });
@@ -125,6 +133,61 @@ export default ({ vault, plugin, resourceUrls }) => {
                         html = html.replaceAll(SAMPLE_EPUB_URL, proxy(props.epub).href);
                     }
                     return html;
+                }}
+                onIframePatch={async iframe => {
+                    iframe.contentDocument.documentElement.addEventListener('keydown', function (ev) {
+                        if (ev.key == 'Shift') {
+                            for (const highlightElem of iframe.contentDocument.documentElement.getElementsByTagName(
+                                'HYPOTHESIS-HIGHLIGHT'
+                            ) as HTMLCollectionOf<HTMLElement>) {
+                                highlightElem.draggable = true;
+                            }
+                        }
+                    });
+                    iframe.contentDocument.documentElement.addEventListener('keyup', function (ev) {
+                        if (ev.key == 'Shift') {
+                            for (const highlightElem of iframe.contentDocument.documentElement.getElementsByTagName(
+                                'HYPOTHESIS-HIGHLIGHT'
+                            ) as HTMLCollectionOf<HTMLElement>) {
+                                highlightElem.draggable = false;
+                            }
+                        }
+                    });
+                    iframe.contentDocument.documentElement.addEventListener('mousemove', function (ev) {
+                        const elem = ev.target as HTMLElement;
+                        if (elem.tagName != 'HYPOTHESIS-HIGHLIGHT') {
+                            return;
+                        }
+                        elem.draggable = false;
+                        if (ev.shiftKey) {
+                            elem.draggable = true;
+                        }
+
+                        elem.onkeydown = ev => {
+                            elem.draggable = ev.key == 'Shift' || ev.shiftKey;
+                        };
+                        elem.onkeyup = ev => {
+                            elem.draggable &&= ev.key != 'Shift';
+                        };
+
+                        elem.ondragstart = async event => {
+                            event.dataTransfer.setData('text/plain', 'drag-event::hypothesis-highlight');
+                            const pseudoAnnotation = (elem as HTMLElement & { _annotation: Annotation })._annotation;
+                            const annotations = await loadAnnotations(null, vault, props.annotationFile);
+                            const matchingAnnotations = annotations.rows.filter(annotation =>
+                                checkPseudoAnnotationEquality(annotation, pseudoAnnotation)
+                            );
+                            if (matchingAnnotations.length > 0) {
+                                const annotation = matchingAnnotations[0];
+                                const { exact } = getAnnotationHighlightTextData(annotation);
+                                (plugin as AnnotatorPlugin).dragData = {
+                                    annotationFilePath: props.annotationFile,
+                                    annotationId: annotation.id,
+                                    annotationText: exact
+                                };
+                            }
+                        };
+                    });
                 }}
                 onload={async iframe => {
                     let sidebarFrame;

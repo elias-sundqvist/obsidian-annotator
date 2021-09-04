@@ -61,8 +61,7 @@ const makeAnnotationContentRegex = () =>
         'gm'
     );
 
-const makeAnnotationString = (annotation: Annotation, plugin: AnnotatorPlugin) => {
-    const { highlightHighlightedText, includePostfix, includePrefix } = plugin.settings.annotationMarkdownSettings;
+export const getAnnotationHighlightTextData = (annotation: Annotation) => {
     let prefix = '';
     let exact = '';
     let suffix = '';
@@ -73,6 +72,13 @@ const makeAnnotationString = (annotation: Annotation, plugin: AnnotatorPlugin) =
             suffix = x.suffix || '';
         }
     });
+    return { prefix, exact, suffix };
+};
+
+const makeAnnotationString = (annotation: Annotation, plugin: AnnotatorPlugin) => {
+    const { highlightHighlightedText, includePostfix, includePrefix } = plugin.settings.annotationMarkdownSettings;
+    const { prefix, exact, suffix } = getAnnotationHighlightTextData(annotation);
+
     const annotationString =
         '%%\n```annotation-json' +
         `\n${JSON.stringify(
@@ -169,9 +175,13 @@ export async function writeAnnotation(annotation, plugin: AnnotatorPlugin, annot
     return res;
 }
 
-export async function loadAnnotations(url: URL, vault: Vault, annotationFilePath: string): Promise<AnnotationList> {
-    const params = Object.fromEntries(url.searchParams.entries());
-    if (params.uri == 'app://obsidian.md/index.html') {
+export async function loadAnnotations(
+    url: URL | null,
+    vault: Vault,
+    annotationFilePath: string
+): Promise<AnnotationList> {
+    const params = url ? Object.fromEntries(url.searchParams.entries()) : null;
+    if (params?.uri == 'app://obsidian.md/index.html') {
         return { rows: [], total: 0 };
     }
 
@@ -197,6 +207,7 @@ export async function loadAnnotations(url: URL, vault: Vault, annotationFilePath
 
             //The check against SAMPLE_PDF_URL is for backwards compability.
             if (
+                url === null ||
                 annotationDocumentIdentifiers.includes(params.uri) ||
                 annotationDocumentIdentifiers.includes(SAMPLE_PDF_URL)
             ) {
@@ -230,4 +241,13 @@ export async function deleteAnnotation(annotationId, vault: Vault, annotationFil
         deleted: false,
         id: annotationId
     };
+}
+
+export function checkPseudoAnnotationEquality(annotation: Annotation, pseudoAnnotation: Annotation): boolean {
+    const isPageNote = !annotation.target?.length;
+    if (isPageNote) {
+        return false;
+    }
+    const selectors = new Set(annotation.target[0].selector.map(x => JSON.stringify(x)));
+    return pseudoAnnotation?.target?.[0]?.selector?.map(x => selectors.has(JSON.stringify(x))).reduce((a, b) => a || b);
 }

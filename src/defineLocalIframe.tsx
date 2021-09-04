@@ -13,7 +13,7 @@ const hypothesisFolder = jszip.loadAsync(hypothesisResources);
 
 export default ({ vault, resourceUrls }: { vault: Vault; resourceUrls: Map<string, string> }) => {
     const LocalIframe = (props: LocalIFrameProps) => {
-        let mockServer = new Server('wss://hypothes.is/ws', {mockGlobal: false});
+        let mockServer = new Server('wss://hypothes.is/ws', { mockGlobal: false });
         mockServer.on('connection', () => '');
         mockServer.on('message', () => {
             mockServer.send(JSON.stringify({ type: 'whoyouare', userid: 'Obsidian User', ok: true, reply_to: 1 }));
@@ -333,8 +333,7 @@ export default ({ vault, resourceUrls }: { vault: Vault; resourceUrls: Map<strin
             const createFrameElem = frameDoc.createElement.bind(frameDoc);
             const createFrameElemNS = frameDoc.createElementNS.bind(frameDoc);
 
-            frameDoc.createElement = tagName => {
-                const elem = createFrameElem(tagName);
+            const patchElem = (tagName: string, elem: HTMLElement) => {
                 switch (tagName) {
                     case 'img':
                     case 'script':
@@ -347,18 +346,14 @@ export default ({ vault, resourceUrls }: { vault: Vault; resourceUrls: Map<strin
                 return elem;
             };
 
+            frameDoc.createElement = tagName => {
+                const elem = createFrameElem(tagName);
+                return patchElem(tagName, elem);
+            };
+
             frameDoc.createElementNS = (nameSpace, tagName) => {
                 const elem = createFrameElemNS(nameSpace, tagName);
-                switch (tagName) {
-                    case 'img':
-                    case 'script':
-                        addLocalUrlSetter('src', elem, context);
-                        break;
-                    case 'link':
-                        addLocalUrlSetter('href', elem, context);
-                        break;
-                }
-                return elem;
+                return patchElem(tagName, elem);
             };
         }
 
@@ -443,6 +438,7 @@ export default ({ vault, resourceUrls }: { vault: Vault; resourceUrls: Map<strin
                 garbageCollectedDarkReaders.forEach(r => darkReaderReferences.delete(r));
                 (iframe.contentWindow as any).DarkReader.setFetchMethod(iframe.contentWindow.fetch);
                 await props.onDarkReadersUpdated(darkReaderReferences);
+                await props.onIframePatch(iframe);
                 /* eslint-enable @typescript-eslint/no-explicit-any */
             }
         }

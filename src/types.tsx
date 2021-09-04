@@ -115,6 +115,7 @@ export type EpubAnnotationProps = GenericAnnotationProps & {
 export type SpecificAnnotationProps = PdfAnnotationProps | EpubAnnotationProps;
 
 export type LocalIFrameProps = {
+    onIframePatch: (iframe: HTMLIFrameElement) => Promise<void>;
     onload: (iframe: HTMLIFrameElement) => Promise<void>;
     onDarkReadersUpdated: (darkReaderReferences: Set<WeakRef<DarkReaderType>>) => Promise<void>;
     src: string;
