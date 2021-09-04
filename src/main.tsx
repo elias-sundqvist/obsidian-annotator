@@ -539,10 +539,14 @@ class PdfAnnotatorView extends FileView {
             if (!darkReader) return;
             const darkReaderSettings = this.plugin.settings.darkReaderSettings;
             const f = () => {
+                try {
                 if (this.useDarkMode) {
                     darkReader.enable(darkReaderSettings, { invert: ['.canvasWrapper'] });
                 } else {
                     darkReader.disable();
+                }
+                } catch (e) {
+                    console.log('DarkReader', { r }, 'failed with error', { e });
                 }
             };
             f();
