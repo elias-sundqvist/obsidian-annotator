@@ -71,9 +71,12 @@ export default class AnnotatorPlugin extends Plugin {
     EpubAnnotation: (props: EpubAnnotationProps) => JSX.Element;
     views: Set<PdfAnnotatorView> = new Set();
     dragData: { annotationFilePath: string; annotationId: string; annotationText: string };
+    codeMirrorInstances: Set<WeakRef<CodeMirror.Editor>>;
+    codeMirrorDropHandler: (editor: CodeMirror.Editor, ev: DragEvent) => void;
 
     async onload() {
         await this.loadSettings();
+        this.codeMirrorInstances = new Set();
         this.resourceUrls = await loadResourceUrls;
         this.PdfAnnotation = definePdfAnnotation({
             vault: this.app.vault,
@@ -89,35 +92,35 @@ export default class AnnotatorPlugin extends Plugin {
         this.addMarkdownPostProcessor();
         this.registerMonkeyPatches();
         this.registerSettingsTab();
-        this.registerCodeMirror(cm => {
-            cm.on('drop', (editor, ev) => {
-                if (this.dragData !== null) {
-                    ev.preventDefault();
-                    const el = cm.getWrapperElement();
-                    const targetFilePath = this.app.workspace
-                        .getLeavesOfType('markdown')
-                        .filter(x =>
-                            (x as WorkspaceLeaf & (MarkdownPreviewView | null))?.containerEl?.contains(el)
-                        )?.[0]
-                        ?.getViewState().state.file;
-                    const annotationFile = this.app.vault.getAbstractFileByPath(this.dragData.annotationFilePath);
-                    const targetFile = this.app.vault.getAbstractFileByPath(targetFilePath);
-                    const doc = editor.getDoc();
-                    editor.focus();
-                    editor.setCursor(editor.coordsChar({ left: ev.pageX, top: ev.pageY }));
-                    const newpos = editor.getCursor();
-                    if (annotationFile instanceof TFile && targetFile instanceof TFile) {
-                        const linkString = this.app.fileManager.generateMarkdownLink(
-                            annotationFile,
-                            targetFile.path,
-                            `#^${this.dragData.annotationId}`,
-                            this.dragData.annotationText
-                        );
-                        doc.replaceRange(linkString, newpos);
-                    }
-                    this.dragData = null;
+        this.codeMirrorDropHandler = (editor: CodeMirror.Editor, ev: DragEvent) => {
+            if (this.dragData !== null && ev.dataTransfer.getData('text/plain') == 'drag-event::hypothesis-highlight') {
+                ev.preventDefault();
+                const el = editor.getWrapperElement();
+                const targetFilePath = this.app.workspace
+                    .getLeavesOfType('markdown')
+                    .filter(x => (x as WorkspaceLeaf & (MarkdownPreviewView | null))?.containerEl?.contains(el))?.[0]
+                    ?.getViewState().state.file;
+                const annotationFile = this.app.vault.getAbstractFileByPath(this.dragData.annotationFilePath);
+                const targetFile = this.app.vault.getAbstractFileByPath(targetFilePath);
+                const doc = editor.getDoc();
+                editor.focus();
+                editor.setCursor(editor.coordsChar({ left: ev.pageX, top: ev.pageY }));
+                const newpos = editor.getCursor();
+                if (annotationFile instanceof TFile && targetFile instanceof TFile) {
+                    const linkString = this.app.fileManager.generateMarkdownLink(
+                        annotationFile,
+                        targetFile.path,
+                        `#^${this.dragData.annotationId}`,
+                        this.dragData.annotationText
+                    );
+                    doc.replaceRange(linkString, newpos);
                 }
-            });
+                this.dragData = null;
+            }
+        };
+        this.registerCodeMirror(cm => {
+            this.codeMirrorInstances.add(new WeakRef(cm));
+            cm.on('drop', this.codeMirrorDropHandler);
         });
     }
 
@@ -129,6 +132,10 @@ export default class AnnotatorPlugin extends Plugin {
         for (const url of this.resourceUrls.values()) {
             URL.revokeObjectURL(url);
         }
+        for (const instanceRef of this.codeMirrorInstances) {
+            instanceRef.deref()?.off('drop', this.codeMirrorDropHandler);
+        }
+        this.codeMirrorInstances = new Set();
     }
 
     async loadSettings() {
@@ -540,11 +547,11 @@ class PdfAnnotatorView extends FileView {
             const darkReaderSettings = this.plugin.settings.darkReaderSettings;
             const f = () => {
                 try {
-                if (this.useDarkMode) {
-                    darkReader.enable(darkReaderSettings, { invert: ['.canvasWrapper'] });
-                } else {
-                    darkReader.disable();
-                }
+                    if (this.useDarkMode) {
+                        darkReader.enable(darkReaderSettings, { invert: ['.canvasWrapper'] });
+                    } else {
+                        darkReader.disable();
+                    }
                 } catch (e) {
                     console.log('DarkReader', { r }, 'failed with error', { e });
                 }
@@ -652,15 +659,18 @@ class PdfAnnotatorView extends FileView {
                         'showAnnotations',
                         matchingAnchors.map(x => x.annotation.$tag)
                     );
+                    let done = false;
                     switch (annotationTargetType) {
                         case 'pdf':
-                            let done = false;
                             for (const anchor of matchingAnchors) {
                                 if (done) break;
                                 for (const highlight of anchor.highlights) {
                                     if (done) break;
                                     if (highlight.scrollIntoViewIfNeeded) {
                                         highlight.scrollIntoViewIfNeeded();
+                                        done = true;
+                                    } else if (highlight.scrollIntoView) {
+                                        highlight.scrollIntoView();
                                         done = true;
                                     }
                                 }
