@@ -466,10 +466,15 @@ class PdfAnnotatorView extends FileView {
 
     getAnnotationTarget(file: TFile): string {
         const annotationTargetPropertyValue = this.plugin.getPropertyValue(ANNOTATION_TARGET_PROPERTY, file);
-        for (const target of [
+        for (let target of [
             annotationTargetPropertyValue,
             `${this.plugin.settings.customDefaultPath}${annotationTargetPropertyValue}`
         ]) {
+            //unpack target if it is is an array (For Metaedit compatability)
+            if (Array.isArray(target)) {
+                target = target[0];
+            }
+
             if (isUrl(target)) {
                 return target;
             }
@@ -481,6 +486,11 @@ class PdfAnnotatorView extends FileView {
                     return destFile.path;
                 }
             }
+        }
+
+        //unpack target if it is is an array (For Metaedit compatability)
+        if (Array.isArray(annotationTargetPropertyValue)) {
+            return annotationTargetPropertyValue[0];
         }
 
         return annotationTargetPropertyValue;
