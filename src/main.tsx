@@ -126,6 +126,25 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
             this.codeMirrorInstances.add(new WeakRef(cm));
             cm.on('drop', this.codeMirrorDropHandler);
         });
+
+        this.addCommand({
+            id: 'toggle-annotation-mode',
+            name: 'Toggle Annotation/Markdown Mode',
+            mobileOnly: false,
+            callback: () => {
+                const annotatorView = this.app.workspace.getActiveViewOfType(PdfAnnotatorView);
+                const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
+
+                if (annotatorView != null) {
+                    this.pdfAnnotatorFileModes[(annotatorView.leaf as any).id || annotatorView.file.path] = 'markdown'; // eslint-disable-line
+                    this.setMarkdownView(annotatorView.leaf);
+                } else if (markdownView != null) {
+                    this.pdfAnnotatorFileModes[(markdownView.leaf as any).id || markdownView.file.path] = // eslint-disable-line
+                        VIEW_TYPE_PDF_ANNOTATOR;
+                    this.setAnnotatorView(markdownView.leaf);
+                }
+            }
+        });
     }
 
     registerSettingsTab() {
