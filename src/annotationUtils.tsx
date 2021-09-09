@@ -1,7 +1,6 @@
 import { SAMPLE_PDF_URL } from './constants';
-import { TFile, Vault } from 'obsidian';
+import { IHasAnnotatorSettings } from 'main';
 import { Annotation, AnnotationList } from 'types';
-import AnnotatorPlugin from './main';
 
 const makeAnnotationBlockRegex = (annotationId?: string) =>
     new RegExp(
@@ -58,7 +57,7 @@ const makeAnnotationContentRegex = () =>
             '(%%TAGS%%\\n(?<tags>(.|\\n)*))?',
             '$'
         ].join(''),
-        'gm'
+        'g'
     );
 
 export const getAnnotationHighlightTextData = (annotation: Annotation) => {
@@ -75,7 +74,7 @@ export const getAnnotationHighlightTextData = (annotation: Annotation) => {
     return { prefix, exact, suffix };
 };
 
-const makeAnnotationString = (annotation: Annotation, plugin: AnnotatorPlugin) => {
+const makeAnnotationString = (annotation: Annotation, plugin: IHasAnnotatorSettings) => {
     const { highlightHighlightedText, includePostfix, includePrefix } = plugin.settings.annotationMarkdownSettings;
     const { prefix, exact, suffix } = getAnnotationHighlightTextData(annotation);
 
@@ -105,12 +104,11 @@ const makeAnnotationString = (annotation: Annotation, plugin: AnnotatorPlugin) =
     );
 };
 
-export async function getAnnotation(annotationId: string, file: TFile, vault: Vault): Promise<Annotation> {
+export function getAnnotationFromFileContent(annotationId: string, fileContent: string): Annotation {
     const annotationRegex = makeAnnotationBlockRegex(annotationId);
-    const text = await vault.read(file);
     let m: RegExpExecArray;
 
-    if ((m = annotationRegex.exec(text)) !== null) {
+    if ((m = annotationRegex.exec(fileContent)) !== null) {
         if (m.index === annotationRegex.lastIndex) {
             annotationRegex.lastIndex++;
         }
@@ -148,51 +146,44 @@ export const stripDefaultValues = (obj: Record<string, unknown>, defaultObj: Rec
     return strippedObject;
 };
 
-export async function writeAnnotation(annotation, plugin: AnnotatorPlugin, annotationFilePath: string) {
-    const vault = plugin.app.vault;
+export function writeAnnotationToAnnotationFileString(
+    annotation: Annotation,
+    annotationFileString: string | null,
+    annotatorSettingsObject: IHasAnnotatorSettings
+): { newAnnotationFileString: string; newAnnotation: Annotation } {
     const annotationId = annotation.id ? annotation.id : Math.random().toString(36).substr(2);
     const res = JSON.parse(JSON.stringify(annotation));
     res.flagged = false;
     res.id = annotationId;
-    const annotationString = makeAnnotationString(res, plugin);
-
-    const tfile = vault.getAbstractFileByPath(annotationFilePath);
-    if (tfile instanceof TFile) {
-        let text = await vault.read(tfile);
+    const annotationString = makeAnnotationString(res, annotatorSettingsObject);
+    if (annotationFileString !== null) {
         let didReplace = false;
         const regex = makeAnnotationBlockRegex(annotationId);
-        text = text.replace(regex, () => {
+        annotationFileString = annotationFileString.replace(regex, () => {
             didReplace = true;
             return annotationString;
         });
         if (!didReplace) {
-            text = `${text}\n${annotationString}`;
+            annotationFileString = `${annotationFileString}\n${annotationString}`;
         }
-        vault.modify(tfile, text);
+        return { newAnnotationFileString: annotationString, newAnnotation: res };
     } else {
-        vault.create(annotationFilePath, annotationString);
+        return { newAnnotationFileString: annotationString, newAnnotation: res };
     }
-    return res;
 }
 
-export async function loadAnnotations(
-    url: URL | null,
-    vault: Vault,
-    annotationFilePath: string
-): Promise<AnnotationList> {
+export function loadAnnotationsAtUriFromFileText(url: URL | null, fileText: string | null): AnnotationList {
     const params = url ? Object.fromEntries(url.searchParams.entries()) : null;
     if (params?.uri == 'app://obsidian.md/index.html') {
         return { rows: [], total: 0 };
     }
 
-    const tfile = vault.getAbstractFileByPath(annotationFilePath);
     const rows = [];
 
     const annotationRegex = makeAnnotationBlockRegex();
-    if (tfile instanceof TFile) {
-        const text = await vault.read(tfile);
+    if (fileText !== null) {
         let m: RegExpExecArray;
-        while ((m = annotationRegex.exec(text)) !== null) {
+        while ((m = annotationRegex.exec(fileText)) !== null) {
             if (m.index === annotationRegex.lastIndex) {
                 annotationRegex.lastIndex++;
             }
@@ -218,29 +209,23 @@ export async function loadAnnotations(
     return { rows, total: rows.length };
 }
 
-export async function deleteAnnotation(annotationId, vault: Vault, annotationFilePath: string) {
-    const tfile = vault.getAbstractFileByPath(annotationFilePath);
-    if (tfile instanceof TFile) {
-        let text = await vault.read(tfile);
+export function deleteAnnotationFromAnnotationFileString(
+    annotationId: string,
+    annotationFileString: string | null
+): string {
+    if (annotationFileString !== null) {
         let didReplace = false;
         const regex = makeAnnotationBlockRegex(annotationId);
-        text = text.replace(regex, () => {
+        annotationFileString = annotationFileString.replace(regex, () => {
             didReplace = true;
             return '';
         });
         if (didReplace) {
-            vault.modify(tfile, text);
-            return {
-                deleted: true,
-                id: annotationId
-            };
+            return annotationFileString;
         }
     }
 
-    return {
-        deleted: false,
-        id: annotationId
-    };
+    return annotationFileString;
 }
 
 export function checkPseudoAnnotationEquality(annotation: Annotation, pseudoAnnotation: Annotation): boolean {

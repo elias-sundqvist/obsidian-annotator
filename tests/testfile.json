@@ -1,0 +1,515 @@
+{
+  "rows": [
+    {
+      "group": "__world__",
+      "permissions": {
+        "read": [
+          "Obsidian User"
+        ],
+        "update": [
+          "Obsidian User"
+        ],
+        "delete": [
+          "Obsidian User"
+        ]
+      },
+      "tags": [
+        "lol"
+      ],
+      "text": "smörigare ju",
+      "user": "Obsidian User",
+      "user_info": {
+        "display_name": "Obsidian User"
+      },
+      "hidden": false,
+      "target": [
+        {
+          "source": "urn:x-pdf:3bde018012f1e897b5f9517fefabb61a",
+          "selector": [
+            {
+              "type": "TextPositionSelector",
+              "start": 10735,
+              "end": 10766
+            },
+            {
+              "type": "TextQuoteSelector",
+              "exact": "ottlenecks and neural algorithm",
+              "prefix": "is setting as well.Algorithmic b",
+              "suffix": "executionDirectly pre-dicting t"
+            }
+          ]
+        }
+      ],
+      "links": {},
+      "flagged": false,
+      "id": "n14t58uscki",
+      "created": "2021-08-31T15:39:46.572Z",
+      "updated": "2021-08-31T15:39:46.572Z",
+      "uri": "urn:x-pdf:3bde018012f1e897b5f9517fefabb61a",
+      "document": {
+        "title": "",
+        "link": [
+          {
+            "href": "urn:x-pdf:3bde018012f1e897b5f9517fefabb61a"
+          }
+        ],
+        "documentFingerprint": "3bde018012f1e897b5f9517fefabb61a"
+      }
+    },
+    {
+      "group": "__world__",
+      "permissions": {
+        "read": [
+          "Obsidian User"
+        ],
+        "update": [
+          "Obsidian User"
+        ],
+        "delete": [
+          "Obsidian User"
+        ]
+      },
+      "tags": [],
+      "text": "",
+      "user": "Obsidian User",
+      "user_info": {
+        "display_name": "Obsidian User"
+      },
+      "hidden": false,
+      "target": [
+        {
+          "source": "urn:x-pdf:3bde018012f1e897b5f9517fefabb61a",
+          "selector": [
+            {
+              "type": "TextPositionSelector",
+              "start": 13739,
+              "end": 13757
+            },
+            {
+              "type": "TextQuoteSelector",
+              "exact": "if trained correct",
+              "prefix": "dimensionallatent space, which,",
+              "suffix": "ly, will be able to imitate the"
+            }
+          ]
+        }
+      ],
+      "links": {},
+      "flagged": false,
+      "id": "8c1ntojaesh",
+      "created": "2021-08-31T15:39:50.566Z",
+      "updated": "2021-08-31T15:39:50.566Z",
+      "uri": "urn:x-pdf:3bde018012f1e897b5f9517fefabb61a",
+      "document": {
+        "title": "",
+        "link": [
+          {
+            "href": "urn:x-pdf:3bde018012f1e897b5f9517fefabb61a"
+          }
+        ],
+        "documentFingerprint": "3bde018012f1e897b5f9517fefabb61a"
+      }
+    },
+    {
+      "group": "__world__",
+      "permissions": {
+        "read": [
+          "Obsidian User"
+        ],
+        "update": [
+          "Obsidian User"
+        ],
+        "delete": [
+          "Obsidian User"
+        ]
+      },
+      "tags": [],
+      "text": "testie",
+      "user": "Obsidian User",
+      "user_info": {
+        "display_name": "Obsidian User"
+      },
+      "hidden": false,
+      "target": [],
+      "links": {},
+      "flagged": false,
+      "id": "9ebb3dpdaj",
+      "created": "2021-08-31T15:39:52.953Z",
+      "updated": "2021-08-31T15:39:52.953Z",
+      "uri": "urn:x-pdf:3bde018012f1e897b5f9517fefabb61a",
+      "document": {
+        "title": "",
+        "link": [
+          {
+            "href": "urn:x-pdf:3bde018012f1e897b5f9517fefabb61a"
+          }
+        ],
+        "documentFingerprint": "3bde018012f1e897b5f9517fefabb61a"
+      }
+    },
+    {
+      "group": "__world__",
+      "permissions": {
+        "read": [
+          "Obsidian User"
+        ],
+        "update": [
+          "Obsidian User"
+        ],
+        "delete": [
+          "Obsidian User"
+        ]
+      },
+      "tags": [],
+      "text": "testie",
+      "user": "Obsidian User",
+      "user_info": {
+        "display_name": "Obsidian User"
+      },
+      "hidden": false,
+      "target": [
+        {
+          "source": "urn:x-pdf:3bde018012f1e897b5f9517fefabb61a",
+          "selector": [
+            {
+              "type": "TextPositionSelector",
+              "start": 11614,
+              "end": 11622
+            },
+            {
+              "type": "TextQuoteSelector",
+              "exact": "lgorithm",
+              "prefix": "s that the computations of our a",
+              "suffix": "also must be made to operateove"
+            }
+          ]
+        }
+      ],
+      "links": {},
+      "flagged": false,
+      "id": "iv1ykwale3g",
+      "created": "2021-09-01T14:44:45.568Z",
+      "updated": "2021-09-01T14:44:45.568Z",
+      "uri": "urn:x-pdf:3bde018012f1e897b5f9517fefabb61a",
+      "document": {
+        "title": "",
+        "link": [
+          {
+            "href": "urn:x-pdf:3bde018012f1e897b5f9517fefabb61a"
+          }
+        ],
+        "documentFingerprint": "3bde018012f1e897b5f9517fefabb61a"
+      }
+    },
+    {
+      "group": "__world__",
+      "permissions": {
+        "read": [
+          "Obsidian User"
+        ],
+        "update": [
+          "Obsidian User"
+        ],
+        "delete": [
+          "Obsidian User"
+        ]
+      },
+      "tags": [],
+      "text": "two",
+      "user": "Obsidian User",
+      "user_info": {
+        "display_name": "Obsidian User"
+      },
+      "hidden": false,
+      "target": [],
+      "links": {},
+      "flagged": false,
+      "id": "oszzbgz399q",
+      "created": "2021-09-02T15:24:37.428Z",
+      "updated": "2021-09-02T15:24:37.428Z",
+      "uri": "urn:x-pdf:3bde018012f1e897b5f9517fefabb61a",
+      "document": {
+        "title": "",
+        "link": [
+          {
+            "href": "urn:x-pdf:3bde018012f1e897b5f9517fefabb61a"
+          }
+        ],
+        "documentFingerprint": "3bde018012f1e897b5f9517fefabb61a"
+      }
+    },
+    {
+      "group": "__world__",
+      "permissions": {
+        "read": [
+          "Obsidian User"
+        ],
+        "update": [
+          "Obsidian User"
+        ],
+        "delete": [
+          "Obsidian User"
+        ]
+      },
+      "tags": [],
+      "text": "",
+      "user": "Obsidian User",
+      "user_info": {
+        "display_name": "Obsidian User"
+      },
+      "hidden": false,
+      "target": [
+        {
+          "source": "urn:x-pdf:3bde018012f1e897b5f9517fefabb61a",
+          "selector": [
+            {
+              "type": "TextPositionSelector",
+              "start": 15633,
+              "end": 15646
+            },
+            {
+              "type": "TextQuoteSelector",
+              "exact": "his pipeline,",
+              "prefix": "fPshould be keptfrozen.Through t",
+              "suffix": " neural algorithmic reasoning of"
+            }
+          ]
+        }
+      ],
+      "links": {},
+      "flagged": false,
+      "id": "undefined",
+      "created": "2021-09-03T13:25:24.642Z",
+      "updated": "2021-09-03T13:25:24.642Z",
+      "uri": "urn:x-pdf:3bde018012f1e897b5f9517fefabb61a",
+      "document": {
+        "title": "",
+        "link": [
+          {
+            "href": "urn:x-pdf:3bde018012f1e897b5f9517fefabb61a"
+          }
+        ],
+        "documentFingerprint": "3bde018012f1e897b5f9517fefabb61a"
+      }
+    },
+    {
+      "group": "__world__",
+      "permissions": {
+        "read": [
+          "Obsidian User"
+        ],
+        "update": [
+          "Obsidian User"
+        ],
+        "delete": [
+          "Obsidian User"
+        ]
+      },
+      "tags": [],
+      "text": "",
+      "user": "Obsidian User",
+      "user_info": {
+        "display_name": "Obsidian User"
+      },
+      "hidden": false,
+      "target": [
+        {
+          "source": "urn:x-pdf:3bde018012f1e897b5f9517fefabb61a",
+          "selector": [
+            {
+              "type": "TextPositionSelector",
+              "start": 76,
+              "end": 84
+            },
+            {
+              "type": "TextQuoteSelector",
+              "exact": "Abstract",
+              "prefix": " ́c and Charles BlundellDeepMind",
+              "suffix": "Algorithms have been fundamental"
+            }
+          ]
+        }
+      ],
+      "links": {},
+      "flagged": false,
+      "id": "gelrnfqz1rb",
+      "created": "2021-09-04T14:58:23.467Z",
+      "updated": "2021-09-04T14:58:23.467Z",
+      "uri": "urn:x-pdf:3bde018012f1e897b5f9517fefabb61a",
+      "document": {
+        "title": "",
+        "link": [
+          {
+            "href": "urn:x-pdf:3bde018012f1e897b5f9517fefabb61a"
+          }
+        ],
+        "documentFingerprint": "3bde018012f1e897b5f9517fefabb61a"
+      }
+    },
+    {
+      "group": "__world__",
+      "permissions": {
+        "read": [
+          "Obsidian User"
+        ],
+        "update": [
+          "Obsidian User"
+        ],
+        "delete": [
+          "Obsidian User"
+        ]
+      },
+      "tags": [],
+      "text": "",
+      "user": "Obsidian User",
+      "user_info": {
+        "display_name": "Obsidian User"
+      },
+      "hidden": false,
+      "target": [
+        {
+          "source": "urn:x-pdf:3bde018012f1e897b5f9517fefabb61a",
+          "selector": [
+            {
+              "type": "TextPositionSelector",
+              "start": 1204,
+              "end": 1232
+            },
+            {
+              "type": "TextQuoteSelector",
+              "exact": "Algorithms and Deep Learning",
+              "prefix": "considered inaccessible to them.",
+              "suffix": "Algorithms are pervasive in mode"
+            }
+          ]
+        }
+      ],
+      "links": {},
+      "flagged": false,
+      "id": "r8s1rpo4tx",
+      "created": "2021-09-04T14:58:30.556Z",
+      "updated": "2021-09-04T14:58:30.556Z",
+      "uri": "urn:x-pdf:3bde018012f1e897b5f9517fefabb61a",
+      "document": {
+        "title": "",
+        "link": [
+          {
+            "href": "urn:x-pdf:3bde018012f1e897b5f9517fefabb61a"
+          }
+        ],
+        "documentFingerprint": "3bde018012f1e897b5f9517fefabb61a"
+      }
+    },
+    {
+      "group": "__world__",
+      "permissions": {
+        "read": [
+          "Obsidian User"
+        ],
+        "update": [
+          "Obsidian User"
+        ],
+        "delete": [
+          "Obsidian User"
+        ]
+      },
+      "tags": [],
+      "text": "",
+      "user": "Obsidian User",
+      "user_info": {
+        "display_name": "Obsidian User"
+      },
+      "hidden": false,
+      "target": [
+        {
+          "source": "urn:x-pdf:3bde018012f1e897b5f9517fefabb61a",
+          "selector": [
+            {
+              "type": "TextPositionSelector",
+              "start": 6866,
+              "end": 6898
+            },
+            {
+              "type": "TextQuoteSelector",
+              "exact": "Algorithms  in  the  real  world",
+              "prefix": " the intermediate proxy problem.",
+              "suffix": "To  elaborate  on  how  neural  "
+            }
+          ]
+        }
+      ],
+      "links": {},
+      "flagged": false,
+      "id": "iueyhyu90m",
+      "created": "2021-09-04T14:58:38.977Z",
+      "updated": "2021-09-04T14:58:38.977Z",
+      "uri": "urn:x-pdf:3bde018012f1e897b5f9517fefabb61a",
+      "document": {
+        "title": "",
+        "link": [
+          {
+            "href": "urn:x-pdf:3bde018012f1e897b5f9517fefabb61a"
+          }
+        ],
+        "documentFingerprint": "3bde018012f1e897b5f9517fefabb61a"
+      }
+    },
+    {
+      "group": "__world__",
+      "permissions": {
+        "read": [
+          "Obsidian User"
+        ],
+        "update": [
+          "Obsidian User"
+        ],
+        "delete": [
+          "Obsidian User"
+        ]
+      },
+      "tags": [
+        "test"
+      ],
+      "text": "This\n\n\nis \n\n\n\na \n\n\ncomment with many newlines",
+      "user": "Obsidian User",
+      "user_info": {
+        "display_name": "Obsidian User"
+      },
+      "hidden": false,
+      "target": [
+        {
+          "source": "urn:x-pdf:3bde018012f1e897b5f9517fefabb61a",
+          "selector": [
+            {
+              "type": "TextPositionSelector",
+              "start": 16811,
+              "end": 16821
+            },
+            {
+              "type": "TextQuoteSelector",
+              "exact": "Conclusion",
+              "prefix": "eck problem in low-data regimes.",
+              "suffix": "We demonstrated how neural algor"
+            }
+          ]
+        }
+      ],
+      "links": {},
+      "flagged": false,
+      "id": "igt0dg7ip9f",
+      "created": "2021-09-09T19:19:38.754Z",
+      "updated": "2021-09-09T19:19:38.754Z",
+      "uri": "urn:x-pdf:3bde018012f1e897b5f9517fefabb61a",
+      "document": {
+        "title": "",
+        "link": [
+          {
+            "href": "urn:x-pdf:3bde018012f1e897b5f9517fefabb61a"
+          }
+        ],
+        "documentFingerprint": "3bde018012f1e897b5f9517fefabb61a"
+      }
+    }
+  ],
+  "total": 10
+}

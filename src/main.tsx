@@ -30,7 +30,7 @@ import defineEpubAnnotation from './defineEpubAnnotation';
 import { PdfAnnotationProps, EpubAnnotationProps } from './types';
 import { get_url_extension, isUrl } from './utils';
 import { DarkReaderType } from './darkreader';
-import { getAnnotation } from 'annotationUtils';
+import { getAnnotation } from 'annotationFileUtils';
 
 export interface AnnotatorSettings {
     deafultDarkMode: boolean;
@@ -62,7 +62,11 @@ const DEFAULT_SETTINGS: AnnotatorSettings = {
     }
 };
 
-export default class AnnotatorPlugin extends Plugin {
+export interface IHasAnnotatorSettings {
+    settings: AnnotatorSettings;
+}
+
+export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSettings {
     settings: AnnotatorSettings;
     resourceUrls: Map<string, string>;
     public pdfAnnotatorFileModes: { [file: string]: string } = {};

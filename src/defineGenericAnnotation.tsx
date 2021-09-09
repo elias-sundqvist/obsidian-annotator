@@ -3,15 +3,10 @@ import defineLocalIframe from 'defineLocalIframe';
 import React from 'react';
 import { SpecificAnnotationProps } from 'types';
 import { wait } from 'utils';
-import {
-    checkPseudoAnnotationEquality,
-    deleteAnnotation,
-    getAnnotationHighlightTextData,
-    loadAnnotations,
-    writeAnnotation
-} from 'annotationUtils';
+import { deleteAnnotation, loadAnnotations, writeAnnotation } from 'annotationFileUtils';
 import { Annotation } from './types';
 import AnnotatorPlugin from 'main';
+import { checkPseudoAnnotationEquality, getAnnotationHighlightTextData } from 'annotationUtils';
 
 export default ({ vault, plugin, resourceUrls }) => {
     const LocalIframe = defineLocalIframe({ vault, resourceUrls });

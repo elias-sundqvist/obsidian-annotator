@@ -8,6 +8,7 @@
     "allowJs": true,
     "noImplicitAny": false,
     "moduleResolution": "node",
+    "esModuleInterop":true,
     "importHelpers": true,
     "allowSyntheticDefaultImports": true,
     "lib": [
