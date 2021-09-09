@@ -308,7 +308,8 @@ export default class AnnotatorPlugin extends Plugin {
                         ev.preventDefault();
                         ev.stopPropagation();
                         ev.stopImmediatePropagation();
-                        this.openAnnotationTarget(file, false, annotationid);
+                        const inNewPane = ev.metaKey || ev.ctrlKey || ev.button == 1;
+                        this.openAnnotationTarget(file, inNewPane, annotationid);
                     });
                 }
             }
