@@ -60,6 +60,15 @@ You can make a [pull request](https://github.com/elias-sundqvist/obsidian-annota
 
 ## Changelog
 
+### 0.1.1 (2021-09-10) *Drag & Drop Fixes, Open links in new pane, Multi-Line Comments Fix*
+* Drag and drop has been improved. The drop handlers are now unloaded when the plugin is unloaded. The issues regarding interferrence with other Drag and Drop functionality are hopefully also resolved.  (See Issue #50)
+* Using an array format for the annotation target should now work. This improves compatibility with MetaEdit (See Issue #51)
+* Holding <kbd>ctrl</kbd> and clicking links (or clicking with the mouse-wheel) now opens annotations in a new pane. (See Issue #54)
+* Issue with multi-line comments should be resolved. (See Issue #47)
+* A new command (`Toggle Annotation/Markdown mode) has been added. This can be bound to a hotkey in obsidian, enabling more efficient switching between the two modes. (See issue #39)
+* Other things
+  * A basic unit-test for annotation loading has also been added. More tests will be added as issues arise. This will guarantee that the plugin becomes increasingly stable over time.
+
 ### 0.1.0 (2021-09-03) *Added annotation highlight drag and drop*
 * By holding the <kbd>shift</kbd> key you can now drag highlights from the epub/pdf into a separate Obsidian note, and a link to the highlight will be inserted. 
   ![highlight drag and drop](https://user-images.githubusercontent.com/9102856/132098957-e6850c9f-77a0-4fd5-91ac-e7095cfbea9d.gif)
