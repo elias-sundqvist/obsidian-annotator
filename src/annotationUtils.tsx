@@ -139,7 +139,7 @@ export const stripDefaultValues = (obj: Record<string, unknown>, defaultObj: Rec
     const strippedObject: Record<string, unknown> = {};
     const toIgnore = ['group', 'permissions', 'user', 'user_info'];
     for (const key of Object.keys(obj)) {
-        if (JSON.stringify(obj[key]) !== JSON.stringify(defaultObj[key]) && !toIgnore.contains(key)) {
+        if (JSON.stringify(obj[key]) !== JSON.stringify(defaultObj[key]) && !toIgnore.includes(key)) {
             strippedObject[key] = obj[key];
         }
     }
@@ -166,7 +166,7 @@ export function writeAnnotationToAnnotationFileString(
         if (!didReplace) {
             annotationFileString = `${annotationFileString}\n${annotationString}`;
         }
-        return { newAnnotationFileString: annotationString, newAnnotation: res };
+        return { newAnnotationFileString: annotationFileString, newAnnotation: res };
     } else {
         return { newAnnotationFileString: annotationString, newAnnotation: res };
     }

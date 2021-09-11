@@ -17,12 +17,16 @@ export async function writeAnnotation(annotation: Annotation, plugin: AnnotatorP
     const vault = plugin.app.vault;
     const tfile = vault.getAbstractFileByPath(annotationFilePath);
 
+    let res: ReturnType<typeof writeAnnotationToAnnotationFileString>;
     if (tfile instanceof TFile) {
         const text = await vault.read(tfile);
-        return writeAnnotationToAnnotationFileString(annotation, text, plugin).newAnnotation;
+        res = writeAnnotationToAnnotationFileString(annotation, text, plugin);
+        vault.modify(tfile, res.newAnnotationFileString);
     } else {
-        return writeAnnotationToAnnotationFileString(annotation, null, plugin).newAnnotation;
+        res = writeAnnotationToAnnotationFileString(annotation, null, plugin);
+        vault.create(annotationFilePath, res.newAnnotationFileString);
     }
+    return res.newAnnotation;
 }
 
 export async function loadAnnotations(
@@ -52,6 +56,7 @@ export async function deleteAnnotation(
         const text = await vault.read(tfile);
         const updatedText = deleteAnnotationFromAnnotationFileString(annotationId, text);
         if (text !== updatedText) {
+            vault.modify(tfile, updatedText);
             return {
                 deleted: true,
                 id: annotationId

@@ -60,6 +60,9 @@ You can make a [pull request](https://github.com/elias-sundqvist/obsidian-annota
 
 ## Changelog
 
+### 0.1.2 (2021-09-11) *Quick Fix*
+* Fixed critical bug that prevented any annotations from being saved. (See issue #61)
+
 ### 0.1.1 (2021-09-10) *Drag & Drop Fixes, Open links in new pane, Multi-Line Comments Fix*
 * Drag and drop has been improved. The drop handlers are now unloaded when the plugin is unloaded. The issues regarding interferrence with other Drag and Drop functionality are hopefully also resolved.  (See Issue #50)
 * Using an array format for the annotation target should now work. This improves compatibility with MetaEdit (See Issue #51)
