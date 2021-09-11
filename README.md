@@ -60,6 +60,10 @@ You can make a [pull request](https://github.com/elias-sundqvist/obsidian-annota
 
 ## Changelog
 
+### 0.1.3 (2021-09-12) *Basic CORS support for desktop*
+* Added a basic workaround for CORS issues. This should make more links possible to view. (See issue #15)
+  * Note that this workaround only works on the desktop version of obsidian.
+ 
 ### 0.1.2 (2021-09-11) *Quick Fix*
 * Fixed critical bug that prevented any annotations from being saved. (See issue #61)
 
