@@ -9,6 +9,13 @@ The plugin is based on https://web.hypothes.is/, but modified to store the annot
 ## Demonstration
 ![annotator demo](https://user-images.githubusercontent.com/9102856/131702952-1aa76baa-a279-474c-978d-cec95a683485.gif)
 
+**Warning!** In the above gif I use **Dataview** syntax to specify the annotation-target.
+If you do not have the dataview plugin installed, you must instead write the annotation-target in the **frontmatter**, like this:
+```md
+---
+annotation-target: https://arxiv.org/pdf/2104.13478.pdf
+---
+```
 
 ## Getting Started 
 
