@@ -29,6 +29,8 @@ you can also add the property `annotation-target-type` and specify whether it is
 
 If you have [dataview](https://github.com/blacksmithgu/obsidian-dataview) installed, then you can also specify the annotation target with a dataview attribute. In this case, obsidian-style links can be used instead of a plain-text path. 
 
+> WARNING! Don't rename an original pdf or epub file! The plugin is going to lose the connection between annotations and file in that case.
+
 ### Annotating
 
 Annotation is self-explanatory. Select text with your mouse to get started. 
