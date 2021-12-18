@@ -69,6 +69,9 @@ You can make a [pull request](https://github.com/elias-sundqvist/obsidian-annota
 
 ## Changelog
 
+### 0.1.4 (2021-12-18) *Fix Issue With Ipad + Windows/Android compatibility.*
+* See issue #70, Thanks to @jonasmerlin for the fix! 
+ 
 ### 0.1.3 (2021-09-12) *Basic CORS support for desktop*
 * Added a basic workaround for CORS issues. This should make more links possible to view. (See issue #15)
   * Note that this workaround only works on the desktop version of obsidian.
