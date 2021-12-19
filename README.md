@@ -69,6 +69,9 @@ You can make a [pull request](https://github.com/elias-sundqvist/obsidian-annota
 
 ## Changelog
 
+### 0.1.5 (2021-12-19) *Quick fix*
+* Apparently the previous update broke some of the old annotations for some people (See issue #95). This version hopefully fixes that.   
+
 ### 0.1.4 (2021-12-18) *Fix Issue With Ipad + Windows/Android compatibility.*
 * See issue #70, Thanks to @jonasmerlin for the fix! 
  

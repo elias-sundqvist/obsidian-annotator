@@ -199,6 +199,7 @@ export function loadAnnotationsAtUriFromFileText(url: URL | null, fileText: stri
             //The check against SAMPLE_PDF_URL is for backwards compability.
             if (
                 url === null ||
+                annotationDocumentIdentifiers.includes(params.uri) ||
                 annotationDocumentIdentifiers.includes(encodeURI(params.uri)) ||
                 annotationDocumentIdentifiers.includes(decodeURI(params.uri)) ||
                 annotationDocumentIdentifiers.includes(SAMPLE_PDF_URL)
