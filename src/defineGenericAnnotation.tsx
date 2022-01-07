@@ -1,5 +1,5 @@
 import { SAMPLE_PDF_URL, SAMPLE_EPUB_URL } from './constants';
-import defineLocalIframe from 'defineLocalIframe';
+import { OfflineIframe } from 'react-offline-iframe';
 import React from 'react';
 import { SpecificAnnotationProps } from 'types';
 import { wait } from 'utils';
@@ -7,10 +7,12 @@ import { deleteAnnotation, loadAnnotations, writeAnnotation } from 'annotationFi
 import { Annotation } from './types';
 import AnnotatorPlugin from 'main';
 import { checkPseudoAnnotationEquality, getAnnotationHighlightTextData } from 'annotationUtils';
+import { normalizePath, TFile } from 'obsidian';
+import hypothesisFolder from 'hypothesisFolder';
 
+const proxiedHosts = new Set(['cdn.hypothes.is', 'via.hypothes.is', 'hypothes.is']);
 export default ({ vault, plugin, resourceUrls }) => {
-    const LocalIframe = defineLocalIframe({ vault, resourceUrls });
-
+    const urlToPathMap = new Map();
     const GenericAnnotation = (props: SpecificAnnotationProps & { baseSrc: string }) => {
         function proxy(url: URL | string): URL {
             const href = typeof url == 'string' ? url : url.href;
@@ -79,13 +81,58 @@ export default ({ vault, plugin, resourceUrls }) => {
             }
         }
 
-        return (
-            <LocalIframe
-                src={props.baseSrc}
-                proxy={proxy}
-                fetchProxy={async ({ href, init, base }) => {
-                    href = proxy(new URL(href)).href;
+        async function readFromVaultPath(path) {
+            const abstractFile = getAbstractFileByPath(path);
+            return await readAbstractFile(abstractFile);
+        }
 
+        async function readAbstractFile(abstractFile) {
+            return await vault.readBinary(abstractFile);
+        }
+
+        function getAbstractFileByPath(path) {
+            let p;
+            if (
+                (p = vault.getAbstractFileByPath(path)) instanceof TFile ||
+                (p = vault.getAbstractFileByPath(`${path}.html`)) instanceof TFile
+            ) {
+                return p;
+            }
+        }
+
+        function getVaultPathResourceUrl(vaultPath) {
+            try {
+                const abstractFile = getAbstractFileByPath(vaultPath);
+                const resourcePath = vault.getResourcePath(abstractFile);
+                urlToPathMap.set(resourcePath, vaultPath);
+                return resourcePath;
+            } catch (e) {
+                return `error:/${encodeURIComponent(e.toString())}/`;
+            }
+        }
+
+        return (
+            <OfflineIframe
+                address={props.baseSrc}
+                getUrl={url => {
+                    console.log('getting URL:', url);
+                    const proxiedUrl = proxy(url);
+                    if (proxiedUrl.protocol == 'vault:') {
+                        return getVaultPathResourceUrl(normalizePath(proxiedUrl.pathname));
+                    }
+                    if (proxiedUrl.protocol == 'zip:') {
+                        const pathName = normalizePath(proxiedUrl.pathname);
+                        const res = resourceUrls.get(pathName) || resourceUrls.get(`${pathName}.html`);
+                        if (res) return res;
+                        console.error('file not found', { url });
+                        debugger;
+                    }
+                    return proxiedUrl.toString();
+                }}
+                fetch={async (requestInfo: RequestInfo, requestInit?: RequestInit) => {
+                    console.log('fetching:', { requestInfo, requestInit });
+                    const href = typeof requestInfo == 'string' ? requestInfo : requestInfo.url;
+                    const url = new URL(href);
                     let res = null;
                     if (href == `junk:/ignore`) {
                         return new Response(JSON.stringify({}, null, 2), {
@@ -101,14 +148,73 @@ export default ({ vault, plugin, resourceUrls }) => {
                         }
                     }
                     if (href.startsWith(`http://localhost:8001/api/annotations`)) {
-                        if (init.method == 'DELETE') {
+                        if (requestInit.method == 'DELETE') {
                             res = await deleteAnnotation(
                                 href.substr(`http://localhost:8001/api/annotations/`.length),
                                 vault,
                                 props.annotationFile
                             );
                         } else {
-                            res = await writeAnnotation(JSON.parse(init.body.toString()), plugin, props.annotationFile);
+                            res = await writeAnnotation(
+                                JSON.parse(requestInit.body.toString()),
+                                plugin,
+                                props.annotationFile
+                            );
+                        }
+                    }
+                    let buf;
+                    if (url.protocol == 'vault:') {
+                        try {
+                            try {
+                                buf = await readFromVaultPath(normalizePath(url.pathname));
+                            } catch (e) {
+                                buf = await readFromVaultPath(normalizePath(decodeURI(url.pathname)));
+                            }
+                            return new Response(buf, {
+                                status: 200,
+                                statusText: 'ok'
+                            });
+                        } catch (e) {
+                            console.warn('mockFetch Failed, Error', { e, url });
+                            return new Response(null, { status: 404, statusText: 'file not found' });
+                        }
+                    }
+                    if (url.protocol == 'app:') {
+                        try {
+                            const vaultPath = urlToPathMap.get(
+                                url.protocol + '//' + url.host + url.pathname + url.search
+                            );
+                            buf = await readFromVaultPath(vaultPath);
+                            return new Response(buf, {
+                                status: 200,
+                                statusText: 'ok'
+                            });
+                        } catch (e) {
+                            console.warn('mockFetch Failed, Error', { e });
+                            return new Response(null, { status: 404, statusText: 'file not found' });
+                        }
+                    }
+                    if (url.protocol == 'file:') {
+                        try {
+                            buf = await new Promise(res => {
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                (window as any).app.vault.adapter.fs.readFile(
+                                    (x => (x.contains(':/') ? x.substr(1) : x))(
+                                        decodeURI(url.pathname).replaceAll('\\', '/')
+                                    ),
+                                    (_, buf) => {
+                                        res(buf);
+                                    }
+                                );
+                            });
+
+                            return new Response(buf, {
+                                status: 200,
+                                statusText: 'ok'
+                            });
+                        } catch (e) {
+                            console.warn('mockFetch Failed, Error', { e });
+                            return new Response(null, { status: 404, statusText: 'file not found' });
                         }
                     }
                     if (res) {
@@ -117,9 +223,29 @@ export default ({ vault, plugin, resourceUrls }) => {
                             statusText: 'ok'
                         });
                     }
-                    return await base(href);
+                    const folder = await hypothesisFolder;
+                    if (proxiedHosts.has(url.host)) {
+                        try {
+                            const pathName = `${url.host}${url.pathname}`.replace(/^\//, '');
+                            const file =
+                                folder.file(pathName) ||
+                                folder.file(`${pathName}.html`) ||
+                                folder.file(`${pathName}.json`) ||
+                                folder.file(`${decodeURI(pathName)}`) ||
+                                folder.file(`${decodeURI(pathName)}.html`) ||
+                                folder.file(`${decodeURI(pathName)}.json`);
+                            const buf = await file.async('arraybuffer');
+                            return new Response(buf, {
+                                status: 200,
+                                statusText: 'ok'
+                            });
+                        } catch (e) {
+                            console.warn('mockFetch Failed, Error', { e, url });
+                            return new Response(null, { status: 404, statusText: 'file not found' });
+                        }
+                    }
+                    return await fetch(requestInfo, requestInit);
                 }}
-                onDarkReadersUpdated={props.onDarkReadersUpdated}
                 htmlPostProcessFunction={(html: string) => {
                     if ('pdf' in props) {
                         html = html.replaceAll(SAMPLE_PDF_URL, proxy(props.pdf).href);
