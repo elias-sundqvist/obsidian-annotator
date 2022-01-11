@@ -9,6 +9,7 @@ import AnnotatorPlugin from 'main';
 import { checkPseudoAnnotationEquality, getAnnotationHighlightTextData } from 'annotationUtils';
 import { normalizePath, TFile } from 'obsidian';
 import hypothesisFolder from 'hypothesisFolder';
+import { DarkReaderType } from 'darkreader';
 
 const proxiedHosts = new Set(['cdn.hypothes.is', 'via.hypothes.is', 'hypothes.is']);
 export default ({ vault, plugin, resourceUrls }) => {
@@ -117,6 +118,8 @@ export default ({ vault, plugin, resourceUrls }) => {
                 return `error:/${encodeURIComponent(e.toString())}/`;
             }
         }
+
+        const darkReaderReferences: Set<WeakRef<DarkReaderType>> = new Set();
 
         const subFrames = new Set<WeakRef<Window>>();
 
@@ -282,6 +285,18 @@ export default ({ vault, plugin, resourceUrls }) => {
                 }}
                 onIframePatch={async iframe => {
                     await props.onIframePatch?.(iframe);
+                    /* eslint-disable @typescript-eslint/no-explicit-any */
+                    (iframe.contentWindow as any).DarkReader = (
+                        await (iframe.contentWindow as any).eval(
+                            `import(\`${resourceUrls.get('dark-reader/darkreader.js')}\`)`
+                        )
+                    ).default;
+                    darkReaderReferences.add(new WeakRef((iframe.contentWindow as any).DarkReader));
+                    const garbageCollectedDarkReaders = [...darkReaderReferences].filter(r => !r.deref());
+                    garbageCollectedDarkReaders.forEach(r => darkReaderReferences.delete(r));
+                    (iframe.contentWindow as any).DarkReader.setFetchMethod(iframe.contentWindow.fetch);
+                    await props.onDarkReadersUpdated(darkReaderReferences);
+                    /* eslint-enable @typescript-eslint/no-explicit-any */
                     subFrames.add(new WeakRef(iframe.contentWindow));
                     iframe.contentDocument.documentElement.addEventListener('keydown', function (ev) {
                         if (ev.key == 'Shift') {
