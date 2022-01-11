@@ -1,2 +1,0 @@
-#viewer.has-transparent-text-layer .textLayer{opacity:1}#viewer.has-transparent-text-layer .textLayer ::-moz-selection{background:rgba(0,0,255,.2)}#viewer.has-transparent-text-layer .textLayer ::selection{background:rgba(0,0,255,.2)}#viewer.has-transparent-text-layer .textLayer ::-moz-selection{background:rgba(0,0,255,.2)}#viewer.is-selecting .annotationLayer{display:none}.textLayer .highlight.selected{background-color:rgba(0,100,0,.5)}#toolbarViewer{margin-right:30px}.hypothesis-side-by-side #toolbarViewer{margin-right:0}
-/*# sourceMappingURL=pdfjs-overrides.css.map */

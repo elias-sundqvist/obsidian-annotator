@@ -77,7 +77,7 @@ const getFilePathsRecursively = (dir) => {
   return results;
 };
 
-const compressibleFormats = new Set(["html", "css", "js", "img"]);
+const compressibleFormats = new Set(["html", "js", "img"]);
 
 const getZipOfFolder = async (dir) => {
 

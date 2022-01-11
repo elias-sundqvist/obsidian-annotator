@@ -1,6 +1,6 @@
 import { SAMPLE_PDF_URL, SAMPLE_EPUB_URL } from './constants';
 import { OfflineIframe } from 'react-offline-iframe';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { SpecificAnnotationProps } from 'types';
 import { wait } from 'utils';
 import { deleteAnnotation, loadAnnotations, writeAnnotation } from 'annotationFileUtils';
@@ -13,13 +13,20 @@ import hypothesisFolder from 'hypothesisFolder';
 const proxiedHosts = new Set(['cdn.hypothes.is', 'via.hypothes.is', 'hypothes.is']);
 export default ({ vault, plugin, resourceUrls }) => {
     const urlToPathMap = new Map();
-    const GenericAnnotation = (props: SpecificAnnotationProps & { baseSrc: string }) => {
+    const GenericAnnotation = (
+        props: SpecificAnnotationProps & {
+            baseSrc: string;
+            onIframePatch?: (iframe: HTMLIFrameElement) => Promise<void>;
+        }
+    ) => {
         function proxy(url: URL | string): URL {
             const href = typeof url == 'string' ? url : url.href;
             if (
                 href == SAMPLE_PDF_URL ||
                 ('pdf' in props && props.pdf == href) ||
-                (href.startsWith(`https://via.hypothes.is/proxy/static/xP1ZVAo-CVhW7kwNneW_oQ/1628964000/`) &&
+                ((href.startsWith(`https://via.hypothes.is/proxy/static/xP1ZVAo-CVhW7kwNneW_oQ/1628964000/`) ||
+                    href.startsWith(`https://via.hypothes.is/proxy/static/UsvswpbIZv6ZUQTERtj1CA/1641646800/`) ||
+                    href.startsWith(`https://via.hypothes.is/proxy/static/VpXumaaWJSJVxmHv4EqN2g/1641916800/`)) &&
                     !href.endsWith('.html'))
             ) {
                 let path;
@@ -110,6 +117,24 @@ export default ({ vault, plugin, resourceUrls }) => {
                 return `error:/${encodeURIComponent(e.toString())}/`;
             }
         }
+
+        const subFrames = new Set<WeakRef<Window>>();
+
+        useEffect(() => {
+            // Hypothesis expects the top window to be the hypothesis window.
+            // This forwards any message posted to the top window to the children.
+            const listener = event => {
+                const currentSubFrames = new Set([...subFrames].map(x => x.deref()).filter(x => x));
+                if (currentSubFrames.has(event.source as Window) && event.source != window) {
+                    for (const subFrame of currentSubFrames) {
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        subFrame.dispatchEvent(new (event.constructor as any)(event.type, event));
+                    }
+                }
+            };
+            addEventListener('message', listener);
+            return () => removeEventListener('message', listener);
+        });
 
         return (
             <OfflineIframe
@@ -256,6 +281,8 @@ export default ({ vault, plugin, resourceUrls }) => {
                     return html;
                 }}
                 onIframePatch={async iframe => {
+                    await props.onIframePatch?.(iframe);
+                    subFrames.add(new WeakRef(iframe.contentWindow));
                     iframe.contentDocument.documentElement.addEventListener('keydown', function (ev) {
                         if (ev.key == 'Shift') {
                             for (const highlightElem of iframe.contentDocument.documentElement.getElementsByTagName(
@@ -367,6 +394,7 @@ export default ({ vault, plugin, resourceUrls }) => {
 
                     await props.onload(iframe);
                 }}
+                outerIframeProps={{ height: '100%', width: '100%' }}
             />
         );
     };
