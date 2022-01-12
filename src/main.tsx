@@ -31,6 +31,7 @@ import { PdfAnnotationProps, EpubAnnotationProps } from './types';
 import { get_url_extension, isUrl } from './utils';
 import { DarkReaderType } from './darkreader';
 import { getAnnotation } from 'annotationFileUtils';
+import { EditorState } from '@codemirror/state';
 
 export interface AnnotatorSettings {
     deafultDarkMode: boolean;
@@ -127,6 +128,11 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
             cm.on('drop', this.codeMirrorDropHandler);
         });
 
+        try {
+            const ext = this.getDropExtension();
+            this.registerEditorExtension(ext);
+        } catch (e) {}
+
         this.addCommand({
             id: 'toggle-annotation-mode',
             name: 'Toggle Annotation/Markdown Mode',
@@ -144,6 +150,41 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
                     this.setAnnotatorView(markdownView.leaf);
                 }
             }
+        });
+    }
+
+    getDropExtension() {
+        return EditorState.transactionFilter.of(transaction => {
+            if (transaction.isUserEvent('input.drop')) {
+                try {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const droppedText = (transaction.changes as any).inserted.map(x => x.text.join('')).join('');
+
+                    if (this.dragData !== null && droppedText == 'drag-event::hypothesis-highlight') {
+                        const startPos = transaction.selection.ranges[0].from;
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        const leaf: FileView = Object.keys((transaction.state as any).config.address)
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            .map(x => (transaction.state as any).field({ id: x }))
+                            .filter(x => x?.file)[0];
+
+                        const targetFile = leaf.file;
+
+                        const annotationFile = this.app.vault.getAbstractFileByPath(this.dragData.annotationFilePath);
+                        if (annotationFile instanceof TFile && targetFile instanceof TFile) {
+                            const linkString = this.app.fileManager.generateMarkdownLink(
+                                annotationFile,
+                                targetFile.path,
+                                `#^${this.dragData.annotationId}`,
+                                this.dragData.annotationText
+                            );
+                            this.dragData = null;
+                            return { changes: { from: startPos, insert: linkString }, selection: { anchor: startPos } };
+                        }
+                    }
+                } catch (e) {}
+            }
+            return transaction;
         });
     }
 
@@ -171,7 +212,6 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
     }
 
     public async openAnnotationTarget(annotationTargetFile: TFile, onNewPane: boolean, annotationId: string) {
-        console.log("opening annotation target", {annotationTargetFile, onNewPane, annotationId});
         const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_PDF_ANNOTATOR);
         let leaf: WorkspaceLeaf = null;
 
@@ -588,7 +628,7 @@ class PdfAnnotatorView extends FileView {
                         darkReader.disable();
                     }
                 } catch (e) {
-                    console.log('DarkReader', { r }, 'failed with error', { e });
+                    console.warn('DarkReader', { r }, 'failed with error', { e });
                 }
             };
             f();
@@ -632,9 +672,7 @@ class PdfAnnotatorView extends FileView {
     }
 
     async scrollToAnnotation(annotationId) {
-        console.log("scrolling to annotation", {annotationId});
         const annotation = await getAnnotation(annotationId, this.file, this.app.vault);
-        console.log("getting annotation, result", {annotation});
         if (!annotation) return;
         let yoffset = -10000;
         let newYOffset;
@@ -720,9 +758,7 @@ class PdfAnnotatorView extends FileView {
                             ).click();
                             break;
                     }
-                    guest._sidebarRPC.channelListeners.focusAnnotations(
-                        matchingAnchors.map(x => x.annotation.$tag)
-                    );
+                    guest._sidebarRPC.channelListeners.focusAnnotations(matchingAnchors.map(x => x.annotation.$tag));
                     (
                         sidebarIframe.contentDocument.getElementById(annotationId).firstChild as HTMLElement
                     ).dispatchEvent(new Event('mouseenter'));

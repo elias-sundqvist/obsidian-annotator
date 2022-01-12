@@ -143,7 +143,6 @@ export default ({ vault, plugin, resourceUrls }) => {
             <OfflineIframe
                 address={props.baseSrc}
                 getUrl={url => {
-                    console.log('getting URL:', url);
                     const proxiedUrl = proxy(url);
                     if (proxiedUrl.protocol == 'vault:') {
                         return getVaultPathResourceUrl(normalizePath(proxiedUrl.pathname));
@@ -158,7 +157,6 @@ export default ({ vault, plugin, resourceUrls }) => {
                     return proxiedUrl.toString();
                 }}
                 fetch={async (requestInfo: RequestInfo, requestInit?: RequestInit) => {
-                    console.log('fetching:', { requestInfo, requestInit });
                     const href = typeof requestInfo == 'string' ? requestInfo : requestInfo.url;
                     const url = new URL(href);
                     let res = null;
