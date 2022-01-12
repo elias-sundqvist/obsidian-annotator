@@ -171,6 +171,7 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
     }
 
     public async openAnnotationTarget(annotationTargetFile: TFile, onNewPane: boolean, annotationId: string) {
+        console.log("opening annotation target", {annotationTargetFile, onNewPane, annotationId});
         const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_PDF_ANNOTATOR);
         let leaf: WorkspaceLeaf = null;
 
@@ -631,7 +632,9 @@ class PdfAnnotatorView extends FileView {
     }
 
     async scrollToAnnotation(annotationId) {
+        console.log("scrolling to annotation", {annotationId});
         const annotation = await getAnnotation(annotationId, this.file, this.app.vault);
+        console.log("getting annotation, result", {annotation});
         if (!annotation) return;
         let yoffset = -10000;
         let newYOffset;
@@ -665,7 +668,7 @@ class PdfAnnotatorView extends FileView {
                         'body > hypothesis-app > div > div.HypothesisApp__content > main > div > div.SelectionTabs-container > div > div:nth-child(2) > button'
                     );
                     pageNotesButton?.click?.();
-                    guests[0].crossframe._bridge.channelListeners.openSidebar();
+                    guests[0]._sidebarRPC.channelListeners.openSidebar();
                     return;
                 }
 
@@ -689,7 +692,7 @@ class PdfAnnotatorView extends FileView {
                             .reduce((a, b) => a || b)
                     );
 
-                    guest.crossframe.call(
+                    guest._sidebarRPC.call(
                         'showAnnotations',
                         matchingAnchors.map(x => x.annotation.$tag)
                     );
@@ -717,7 +720,7 @@ class PdfAnnotatorView extends FileView {
                             ).click();
                             break;
                     }
-                    guest.crossframe._bridge.channelListeners.focusAnnotations(
+                    guest._sidebarRPC.channelListeners.focusAnnotations(
                         matchingAnchors.map(x => x.annotation.$tag)
                     );
                     (
