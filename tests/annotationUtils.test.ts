@@ -43,7 +43,8 @@ test("AnnotationsCanBeModified", ()=>{
     const loadedModifiedAnnotations = annotationUtils.loadAnnotationsAtUriFromFileText(null, res.newAnnotationFileString);
     expect(loadedModifiedAnnotations.total).toEqual(loadedAnnotations.total);
     expect(loadedModifiedAnnotations.rows[0]).toEqual(modifiedAnnotation);
-    const drop1 = ([arr, ...rest]: Annotation[])=>rest;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const drop1 = ([_, ...rest]: Annotation[])=>rest;
     expect(drop1(loadedAnnotations.rows)).toEqual(drop1(loadedModifiedAnnotations.rows));
 })
 

@@ -69,6 +69,13 @@ You can make a [pull request](https://github.com/elias-sundqvist/obsidian-annota
 
 ## Changelog
 
+### 0.1.6 (2022-01-12) **[BRAT](https://github.com/TfTHacker/obsidian42-brat) release** *Live Preview Drag and Drop fix + chinese character support* 
+* Drag and drop should now work in live preview (See issue #103)
+* Upgraded pdf.js to a newer version.
+  * Improved character support. (Japanese and Chinese letters should now work), (See issue #53)
+* Removed sentry logging (See issue #97)
+ 
+
 ### 0.1.5 (2021-12-19) *Quick fix*
 * Apparently the previous update broke some of the old annotations for some people (See issue #95). This version hopefully fixes that.   
 
