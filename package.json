@@ -1,6 +1,6 @@
 {
   "name": "obsidian-annotator",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "This is a sample plugin for Obsidian (https://obsidian.md)",
   "main": "main.js",
   "scripts": {
@@ -70,7 +70,7 @@
     "pdfjs-dist": "^2.6.347",
     "react": "^17.0.2",
     "react-dom": "^17.0.2",
-    "react-offline-iframe": "^0.1.2",
+    "react-offline-iframe": "^0.1.6",
     "react-pdf-highlighter": "^3.4.0",
     "rollup-plugin-import-css": "^2.0.1",
     "rollup-plugin-replace": "^2.2.0",

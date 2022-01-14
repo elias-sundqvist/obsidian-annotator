@@ -109,13 +109,20 @@ export default ({ vault, plugin, resourceUrls }) => {
         }
 
         function getVaultPathResourceUrl(vaultPath) {
-            try {
+            function tryGetResourceUrl(vaultPath) {
                 const abstractFile = getAbstractFileByPath(vaultPath);
                 const resourcePath = vault.getResourcePath(abstractFile);
                 urlToPathMap.set(resourcePath, vaultPath);
                 return resourcePath;
+            }
+            try {
+                return tryGetResourceUrl(vaultPath);
             } catch (e) {
-                return `error:/${encodeURIComponent(e.toString())}/`;
+                try {
+                    return tryGetResourceUrl(decodeURI(vaultPath));
+                } catch (e) {
+                    return `error:/${encodeURIComponent(e.toString())}/`;
+                }
             }
         }
 
@@ -348,6 +355,15 @@ export default ({ vault, plugin, resourceUrls }) => {
                                 };
                             }
                         };
+                    });
+                }}
+                webSocketSetup={createServer => {
+                    const mockServer = createServer('wss://h-websocket.hypothes.is/ws');
+                    mockServer.on('connection', () => '');
+                    mockServer.on('message', () => {
+                        mockServer.send(
+                            JSON.stringify({ type: 'whoyouare', userid: 'Obsidian User', ok: true, reply_to: 1 })
+                        );
                     });
                 }}
                 onload={async iframe => {
