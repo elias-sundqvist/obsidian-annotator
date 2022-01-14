@@ -4,3 +4,4 @@ export const ANNOTATION_TARGET_PROPERTY = "annotation-target";
 export const ANNOTATION_TARGET_TYPE_PROPERTY = "annotation-target-type";
 export const SAMPLE_PDF_URL = 'https://arxiv.org/pdf/1702.08734.pdf';
 export const SAMPLE_EPUB_URL = 'https://cdn.hypothes.is/demos/epub/content/moby-dick/book.epub'
+export const SAMPLE_EPUB_FOLDER_URL = 'https://cdn.hypothes.is/demos/epub/readium-js/epub_content/moby_dick'

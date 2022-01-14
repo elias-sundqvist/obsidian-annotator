@@ -1,8 +1,8 @@
-import { SAMPLE_PDF_URL, SAMPLE_EPUB_URL } from './constants';
+import { SAMPLE_PDF_URL, SAMPLE_EPUB_URL, SAMPLE_EPUB_FOLDER_URL } from './constants';
 import { OfflineIframe } from 'react-offline-iframe';
 import React, { useEffect } from 'react';
 import { SpecificAnnotationProps } from 'types';
-import { wait } from 'utils';
+import { get_url_extension, wait } from 'utils';
 import { deleteAnnotation, loadAnnotations, writeAnnotation } from 'annotationFileUtils';
 import { Annotation } from './types';
 import AnnotatorPlugin from 'main';
@@ -10,8 +10,15 @@ import { checkPseudoAnnotationEquality, getAnnotationHighlightTextData } from 'a
 import { normalizePath, TFile } from 'obsidian';
 import hypothesisFolder from 'hypothesisFolder';
 import { DarkReaderType } from 'darkreader';
+import JSZip, * as jszip from 'jszip';
+import mime from 'mime';
+import { generateFolderUrls } from 'loadResourceUrls';
 
-const proxiedHosts = new Set(['cdn.hypothes.is', 'via.hypothes.is', 'hypothes.is']);
+function mkUrl(...args) {
+    return args.reduce((a, b) => new URL(b, a));
+}
+
+const proxiedHosts = new Set(['cdn.hypothes.is', 'via.hypothes.is', 'web.hypothes.is', 'hypothes.is']);
 export default ({ vault, plugin, resourceUrls }) => {
     const urlToPathMap = new Map();
     const GenericAnnotation = (
@@ -20,6 +27,16 @@ export default ({ vault, plugin, resourceUrls }) => {
             onIframePatch?: (iframe: HTMLIFrameElement) => Promise<void>;
         }
     ) => {
+        let loadedEpub: Promise<JSZip>;
+        let epubUrls: Map<string, string>;
+        if('epub' in props) {
+            loadedEpub = (async()=>{
+                const epubFile = await customFetch(proxy(props.epub).href);
+                return await jszip.loadAsync(await epubFile.blob())
+            })()
+            generateFolderUrls(loadedEpub).then(urls=>epubUrls=urls);
+        }
+
         function proxy(url: URL | string): URL {
             const href = typeof url == 'string' ? url : url.href;
             if (
@@ -127,8 +144,10 @@ export default ({ vault, plugin, resourceUrls }) => {
             // Hypothesis expects the top window to be the hypothesis window.
             // This forwards any message posted to the top window to the children.
             const listener = event => {
+                console.log("got event", {event})
                 const currentSubFrames = new Set([...subFrames].map(x => x.deref()).filter(x => x));
                 if (currentSubFrames.has(event.source as Window) && event.source != window) {
+                    console.log("forwarding...")
                     for (const subFrame of currentSubFrames) {
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         subFrame.dispatchEvent(new (event.constructor as any)(event.type, event));
@@ -139,138 +158,179 @@ export default ({ vault, plugin, resourceUrls }) => {
             return () => removeEventListener('message', listener);
         });
 
+        async function customFetch(requestInfo: RequestInfo, requestInit?: RequestInit) {
+            console.log("fetching", {requestInfo,requestInit});
+            const href = typeof requestInfo == 'string' ? requestInfo : requestInfo.url;
+            const url = new URL(href);
+            let res = null;
+            if (href == `junk:/ignore`) {
+                return new Response(JSON.stringify({}, null, 2), {
+                    status: 200,
+                    statusText: 'ok'
+                });
+            }
+            if (href.startsWith(`http://localhost:8001/api/search`)) {
+                try {
+                    res = await loadAnnotations(new URL(href), vault, props.annotationFile);
+                } catch (e) {
+                    console.error('failed to load annotations', { error: e });
+                }
+            }
+            if (href.startsWith(`http://localhost:8001/api/annotations`)) {
+                if (requestInit.method == 'DELETE') {
+                    res = await deleteAnnotation(
+                        href.substr(`http://localhost:8001/api/annotations/`.length),
+                        vault,
+                        props.annotationFile
+                    );
+                } else {
+                    res = await writeAnnotation(
+                        JSON.parse(requestInit.body.toString()),
+                        plugin,
+                        props.annotationFile
+                    );
+                }
+            }
+            let buf;
+            if (url.protocol == 'vault:') {
+                try {
+                    try {
+                        buf = await readFromVaultPath(normalizePath(url.pathname));
+                    } catch (e) {
+                        buf = await readFromVaultPath(normalizePath(decodeURI(url.pathname)));
+                    }
+                    return new Response(buf, {
+                        status: 200,
+                        statusText: 'ok'
+                    });
+                } catch (e) {
+                    console.warn('mockFetch Failed, Error', { e, url });
+                    return new Response(null, { status: 404, statusText: 'file not found' });
+                }
+            }
+            if (url.protocol == 'app:') {
+                try {
+                    const vaultPath = urlToPathMap.get(
+                        url.protocol + '//' + url.host + url.pathname + url.search
+                    );
+                    buf = await readFromVaultPath(vaultPath);
+                    return new Response(buf, {
+                        status: 200,
+                        statusText: 'ok'
+                    });
+                } catch (e) {
+                    console.warn('mockFetch Failed, Error', { e });
+                    return new Response(null, { status: 404, statusText: 'file not found' });
+                }
+            }
+            if (url.protocol == 'file:') {
+                try {
+                    buf = await new Promise(res => {
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        (window as any).app.vault.adapter.fs.readFile(
+                            (x => (x.contains(':/') ? x.substr(1) : x))(
+                                decodeURI(url.pathname).replaceAll('\\', '/')
+                            ),
+                            (_, buf) => {
+                                res(buf);
+                            }
+                        );
+                    });
+
+                    return new Response(buf, {
+                        status: 200,
+                        statusText: 'ok'
+                    });
+                } catch (e) {
+                    console.warn('mockFetch Failed, Error', { e });
+                    return new Response(null, { status: 404, statusText: 'file not found' });
+                }
+            }
+            if (res) {
+                return new Response(JSON.stringify(res, null, 2), {
+                    status: 200,
+                    statusText: 'ok'
+                });
+            }
+
+            if((href.startsWith(SAMPLE_EPUB_FOLDER_URL) || href.startsWith(SAMPLE_EPUB_URL)) && href!=SAMPLE_EPUB_URL) {
+                try {
+                    const file =(await loadedEpub).file(href.substr(SAMPLE_EPUB_URL.length+1)) ||
+                                (await loadedEpub).file(decodeURI(href.substr(SAMPLE_EPUB_URL.length+1))) || 
+                                (await loadedEpub).file(href.substr(SAMPLE_EPUB_FOLDER_URL.length+1)) ||
+                                (await loadedEpub).file(decodeURI(href.substr(SAMPLE_EPUB_FOLDER_URL.length+1)));
+                    const buf = await file.async('arraybuffer');
+                    const blob = new Blob([buf], { type: mime.getType(get_url_extension(href)) });
+                    return new Response(blob, {
+                        status: 200,
+                        statusText: 'ok'
+                    });
+                } catch (e) {
+                    console.warn('epub mockFetch Failed, Error', { e, url });
+                    return new Response(null, { status: 404, statusText: 'file not found' });
+                }
+            }
+
+            const folder = await hypothesisFolder;
+            
+            if (proxiedHosts.has(url.host)) {
+                try {
+                    const pathName = `${url.host}${url.pathname}`.replace(/^\//, '');
+                    const file =
+                        folder.file(pathName) ||
+                        folder.file(`${pathName}.html`) ||
+                        folder.file(`${pathName}.json`) ||
+                        folder.file(`${decodeURI(pathName)}`) ||
+                        folder.file(`${decodeURI(pathName)}.html`) ||
+                        folder.file(`${decodeURI(pathName)}.json`);
+                    const buf = await file.async('arraybuffer');
+                    return new Response(buf, {
+                        status: 200,
+                        statusText: 'ok'
+                    });
+                } catch (e) {
+                    console.warn('mockFetch Failed, Error', { e, url });
+                    return new Response(null, { status: 404, statusText: 'file not found' });
+                }
+            }
+            return await fetch(requestInfo, requestInit);
+        };
+
+        function getUrl(url){
+            console.log("Getting url", {url:url.toString()});
+            const href = url.toString();
+            if((href.startsWith(SAMPLE_EPUB_FOLDER_URL) || href.startsWith(SAMPLE_EPUB_URL)) && href!=SAMPLE_EPUB_URL) {
+                try {
+                    return epubUrls.get(href.substr(SAMPLE_EPUB_URL.length+1)) || 
+                            epubUrls.get(decodeURI(href.substr(SAMPLE_EPUB_URL.length+1))) ||
+                            epubUrls.get(href.substr(SAMPLE_EPUB_FOLDER_URL.length+1)) || 
+                            epubUrls.get(decodeURI(href.substr(SAMPLE_EPUB_FOLDER_URL.length+1)));
+                } catch (e) {
+                    console.warn('could not get epub resource url', { href });
+                }
+            }
+            const proxiedUrl = proxy(url);
+            if (proxiedUrl.protocol == 'vault:') {
+                return getVaultPathResourceUrl(normalizePath(proxiedUrl.pathname));
+            }
+            if (proxiedUrl.protocol == 'zip:') {
+                const pathName = normalizePath(proxiedUrl.pathname);
+                const res = resourceUrls.get(pathName) || resourceUrls.get(`${pathName}.html`);
+                if (res) return res;
+                console.error('file not found', { url });
+                debugger;
+            }
+            return proxiedUrl.toString();
+        }
+
         return (
             <OfflineIframe
                 address={props.baseSrc}
-                getUrl={url => {
-                    const proxiedUrl = proxy(url);
-                    if (proxiedUrl.protocol == 'vault:') {
-                        return getVaultPathResourceUrl(normalizePath(proxiedUrl.pathname));
-                    }
-                    if (proxiedUrl.protocol == 'zip:') {
-                        const pathName = normalizePath(proxiedUrl.pathname);
-                        const res = resourceUrls.get(pathName) || resourceUrls.get(`${pathName}.html`);
-                        if (res) return res;
-                        console.error('file not found', { url });
-                        debugger;
-                    }
-                    return proxiedUrl.toString();
-                }}
-                fetch={async (requestInfo: RequestInfo, requestInit?: RequestInit) => {
-                    const href = typeof requestInfo == 'string' ? requestInfo : requestInfo.url;
-                    const url = new URL(href);
-                    let res = null;
-                    if (href == `junk:/ignore`) {
-                        return new Response(JSON.stringify({}, null, 2), {
-                            status: 200,
-                            statusText: 'ok'
-                        });
-                    }
-                    if (href.startsWith(`http://localhost:8001/api/search`)) {
-                        try {
-                            res = await loadAnnotations(new URL(href), vault, props.annotationFile);
-                        } catch (e) {
-                            console.error('failed to load annotations', { error: e });
-                        }
-                    }
-                    if (href.startsWith(`http://localhost:8001/api/annotations`)) {
-                        if (requestInit.method == 'DELETE') {
-                            res = await deleteAnnotation(
-                                href.substr(`http://localhost:8001/api/annotations/`.length),
-                                vault,
-                                props.annotationFile
-                            );
-                        } else {
-                            res = await writeAnnotation(
-                                JSON.parse(requestInit.body.toString()),
-                                plugin,
-                                props.annotationFile
-                            );
-                        }
-                    }
-                    let buf;
-                    if (url.protocol == 'vault:') {
-                        try {
-                            try {
-                                buf = await readFromVaultPath(normalizePath(url.pathname));
-                            } catch (e) {
-                                buf = await readFromVaultPath(normalizePath(decodeURI(url.pathname)));
-                            }
-                            return new Response(buf, {
-                                status: 200,
-                                statusText: 'ok'
-                            });
-                        } catch (e) {
-                            console.warn('mockFetch Failed, Error', { e, url });
-                            return new Response(null, { status: 404, statusText: 'file not found' });
-                        }
-                    }
-                    if (url.protocol == 'app:') {
-                        try {
-                            const vaultPath = urlToPathMap.get(
-                                url.protocol + '//' + url.host + url.pathname + url.search
-                            );
-                            buf = await readFromVaultPath(vaultPath);
-                            return new Response(buf, {
-                                status: 200,
-                                statusText: 'ok'
-                            });
-                        } catch (e) {
-                            console.warn('mockFetch Failed, Error', { e });
-                            return new Response(null, { status: 404, statusText: 'file not found' });
-                        }
-                    }
-                    if (url.protocol == 'file:') {
-                        try {
-                            buf = await new Promise(res => {
-                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                (window as any).app.vault.adapter.fs.readFile(
-                                    (x => (x.contains(':/') ? x.substr(1) : x))(
-                                        decodeURI(url.pathname).replaceAll('\\', '/')
-                                    ),
-                                    (_, buf) => {
-                                        res(buf);
-                                    }
-                                );
-                            });
-
-                            return new Response(buf, {
-                                status: 200,
-                                statusText: 'ok'
-                            });
-                        } catch (e) {
-                            console.warn('mockFetch Failed, Error', { e });
-                            return new Response(null, { status: 404, statusText: 'file not found' });
-                        }
-                    }
-                    if (res) {
-                        return new Response(JSON.stringify(res, null, 2), {
-                            status: 200,
-                            statusText: 'ok'
-                        });
-                    }
-                    const folder = await hypothesisFolder;
-                    if (proxiedHosts.has(url.host)) {
-                        try {
-                            const pathName = `${url.host}${url.pathname}`.replace(/^\//, '');
-                            const file =
-                                folder.file(pathName) ||
-                                folder.file(`${pathName}.html`) ||
-                                folder.file(`${pathName}.json`) ||
-                                folder.file(`${decodeURI(pathName)}`) ||
-                                folder.file(`${decodeURI(pathName)}.html`) ||
-                                folder.file(`${decodeURI(pathName)}.json`);
-                            const buf = await file.async('arraybuffer');
-                            return new Response(buf, {
-                                status: 200,
-                                statusText: 'ok'
-                            });
-                        } catch (e) {
-                            console.warn('mockFetch Failed, Error', { e, url });
-                            return new Response(null, { status: 404, statusText: 'file not found' });
-                        }
-                    }
-                    return await fetch(requestInfo, requestInit);
+                getUrl={getUrl}
+                fetch={customFetch}
+                fetchProxy={async ({ href, base, contextUrl, init }) => {
+                    href = getUrl(mkUrl(contextUrl, href.startsWith("app://obsidian.md/")?href.substr("app://obsidian.md/".length):href).href);
+                    return await base(href, init);
                 }}
                 htmlPostProcessFunction={(html: string) => {
                     if ('pdf' in props) {
@@ -283,6 +343,9 @@ export default ({ vault, plugin, resourceUrls }) => {
                 }}
                 onIframePatch={async iframe => {
                     await props.onIframePatch?.(iframe);
+
+                    //iframe.contentWindow.postMessage = window.postMessage.bind(window);
+
                     /* eslint-disable @typescript-eslint/no-explicit-any */
                     (iframe.contentWindow as any).DarkReader = (
                         await (iframe.contentWindow as any).eval(

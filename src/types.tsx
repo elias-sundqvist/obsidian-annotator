@@ -110,6 +110,7 @@ export type PdfAnnotationProps = GenericAnnotationProps & {
 
 export type EpubAnnotationProps = GenericAnnotationProps & {
     epub: string;
+    
 };
 
 export type SpecificAnnotationProps = PdfAnnotationProps | EpubAnnotationProps;

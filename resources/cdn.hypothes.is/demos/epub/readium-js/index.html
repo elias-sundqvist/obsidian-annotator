@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+        <link href="images/readium_favicon.png" rel="shortcut icon"/>
+        <link href="images/readium-touch-icon.png" rel="apple-touch-icon"/>
+
+    <style>
+        .library-item{
+            height: 100px;
+
+        }
+
+        body:not(.list-view) .library-item .no-cover{
+            width: 300px;
+            height: 400px;
+            font-size: 40px;
+        }
+    </style>
+
+    <link rel="stylesheet" type="text/css" href="css/readium-all.css">
+
+    <script type="text/javascript" src="scripts/readium-js-viewer_all.js"> </script>
+
+    <script type="text/javascript" src="font-faces/fonts.js"> </script>
+
+<script type="text/javascript">
+
+var path = (window.location && window.location.pathname) ? window.location.pathname : ''; 
+
+// extracts path to index.html (or more generally: /PATH/TO/*.[x]html)
+path = path.replace(/(.*)\/.*\.[x]?html$/, "$1");
+
+// removes trailing slash
+path = path.charAt(path.length-1) == '/'
+          ? path.substr(0, path.length-1)
+          : path;
+          
+var HTTPServerRootFolder =
+window.location ? (
+  window.location.protocol
+  + "//"
+  + window.location.hostname
+  + (window.location.port ? (':' + window.location.port) : '')
+  + path
+  ) : ''
+;
+
+console.log(HTTPServerRootFolder);
+
+
+
+var getURLQueryParams = function() {
+   var params = {};
+
+   var query = window.location.search;
+   if (query && query.length) {
+       query = query.substring(1);
+       var keyParams = query.split('&');
+       for (var x = 0; x < keyParams.length; x++)
+       {
+           var keyVal = keyParams[x].split('=');
+           if (keyVal.length > 1) {
+               params[keyVal[0]] = decodeURIComponent(keyVal[1]);
+           }
+       }
+   }
+
+   return params;
+};
+
+var urlParams = getURLQueryParams();
+console.log(urlParams);
+
+var fontsArray = [];
+if (typeof getFontFaces != "undefined") { // defined externally
+    fontsArray = getFontFaces(HTTPServerRootFolder + "/font-faces/");
+}
+
+// MUST BE *SINGLE* CALL TO require.config() FOR ALMOND (SINGLE BUNDLE) TO WORK CORRECTLY!!!
+require.config({
+    /* http://requirejs.org/docs/api.html#config-waitSeconds */
+    waitSeconds: 0,
+
+    config : {
+
+        'readium_js_viewer/ModuleConfig' : {
+
+            'mathJaxUrl': HTTPServerRootFolder + '/scripts/mathjax/MathJax.js',
+            
+            'fonts': fontsArray,
+
+            'annotationCSSUrl': HTTPServerRootFolder + '/css/annotations.css',
+
+            'jsLibRoot': HTTPServerRootFolder + '/scripts/zip/',
+
+            'useSimpleLoader' : false, // cloud reader (strictly-speaking, this config option is false by default, but we prefer to have it explicitly set here).
+
+            'epubLibraryPath': urlParams['epubs'] ? urlParams['epubs'] : "epub_content/epub_library.opds", // defaults to /epub_content/epub_library.json relative to the application's root index.html
+
+            'imagePathPrefix': undefined,
+
+            'canHandleUrl' : false,
+            'canHandleDirectory' : false,
+
+
+            'workerUrl': undefined,
+            'epubReadingSystemUrl': undefined
+        }
+    }
+});
+</script>
+
+    </head>
+
+    <!-- This is all application-specific HTML -->
+    <body>
+        <nav id="app-navbar" class="navbar" role="banner" aria-label="{{Strings.i18n_toolbar}}">
+        </nav>
+        <div id="app-container">
+        </div>
+    </body>
+
+</html>

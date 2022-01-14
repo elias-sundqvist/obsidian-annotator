@@ -16,7 +16,6 @@ import {
 } from 'obsidian';
 import React from 'react';
 import ReactDOM from 'react-dom';
-import loadResourceUrls from './loadResourceUrls';
 import definePdfAnnotation from './definePdfAnnotation';
 import { around } from 'monkey-around';
 
@@ -32,6 +31,7 @@ import { get_url_extension, isUrl } from './utils';
 import { DarkReaderType } from './darkreader';
 import { getAnnotation } from 'annotationFileUtils';
 import { EditorState } from '@codemirror/state';
+import { primaryResourceUrls } from './loadResourceUrls';
 
 export interface AnnotatorSettings {
     deafultDarkMode: boolean;
@@ -82,7 +82,7 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
     async onload() {
         await this.loadSettings();
         this.codeMirrorInstances = new Set();
-        this.resourceUrls = await loadResourceUrls;
+        this.resourceUrls = await primaryResourceUrls;
         this.PdfAnnotation = definePdfAnnotation({
             vault: this.app.vault,
             resourceUrls: this.resourceUrls,

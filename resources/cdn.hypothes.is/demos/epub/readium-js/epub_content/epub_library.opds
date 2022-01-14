@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:odl="http://opds-spec.org/odl" xml:lang="en" xmlns:dcterms="http://purl.org/dc/terms/" xmlns="http://www.w3.org/2005/Atom" xmlns:app="http://www.w3.org/2007/app" xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns:thr="http://purl.org/syndication/thread/1.0" xmlns:opds="http://opds-spec.org/2010/catalog">
+
+<id>READIUM_OPDS_0123456789</id>
+<updated>2016-02-12T00:00:00Z</updated>
+<title>Readium CloudReader OPDS feed</title>
+<link rel="self" href="epub_library.opds" type="application/atom+xml;profile=opds-catalog;kind=navigation"/>
+<link rel="start" href="epub_library.opds" type="application/atom+xml;profile=opds-catalog;kind=navigation"/>
+
+<entry>
+  <title>Book</title>
+  <author>
+    <name>Author</name>
+  </author>
+  <link type="application/epub+zip" href="https://cdn.hypothes.is/demos/epub/content/moby-dick/book.epub" rel="http://opds-spec.org/acquisition"/>
+
+  <updated>2016-02-12T00:00:00Z</updated>
+  <id>READIUM_OPDS_0123456789_3</id>
+  
+  </entry>
+
+</feed>

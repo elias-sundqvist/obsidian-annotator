@@ -1,10 +1,11 @@
 import { get_url_extension } from './utils';
 import mime from 'mime';
 import hypothesisFolder from 'hypothesisFolder';
+import JSZip from 'jszip';
 
-const f = async () => {
+export async function generateFolderUrls(zipFolder: Promise<JSZip>) {
     const urls = new Map<string, string>();
-    const folder = await hypothesisFolder;
+    const folder = await zipFolder;
     for (const filePath of Object.keys(folder.files)) {
         const file = folder.file(filePath);
         if (!file || file.dir) continue;
@@ -15,4 +16,4 @@ const f = async () => {
     return urls;
 };
 
-export default f();
+export const primaryResourceUrls = generateFolderUrls(hypothesisFolder);
