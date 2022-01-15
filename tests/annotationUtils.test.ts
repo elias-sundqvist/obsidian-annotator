@@ -1,13 +1,14 @@
 import fs from "fs";
 import path from "path";
+import { IHasAnnotatorSettings } from "settings";
 import * as annotationUtils from "../src/annotationUtils";
 import { Annotation } from '../src/types';
-import { IHasAnnotatorSettings } from '../src/main';
 
 const testAnnotatorSettings: IHasAnnotatorSettings = {
     settings: {
         deafultDarkMode: false,
         darkReaderSettings: null,
+        debugLogging: false,
         customDefaultPath: null,
         annotationMarkdownSettings: {
             includePostfix: true,

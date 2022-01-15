@@ -15,7 +15,7 @@
       width: "100%",
       height: "100%"
     });
-    window.rendition = rendition; // expose the rendered epub object. 
+    window.rendition = rendition; 
 
     // var hash = window.location.hash.slice(2);
     var loc = window.location.href.indexOf("?loc=");

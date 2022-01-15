@@ -22,3 +22,7 @@ The following resources have been modified in the (`resources`) folder, and will
     ```js
     /*expose the guest object for annotation navigation.*//*START EDIT HERE*/window.guests=[...(window.guests??[]),this]/*END EDIT HERE*/
     ```
+    > This fixes an issue with highlights not working:
+      Replace `if(l||(l=new Set,this._sentChannels.set(i,l)),l.has(a))return;` from annotator.bundle.js
+      with `if(l||(l=new Set,this._sentChannels.set(i,l)),l.has(a)){};`
+

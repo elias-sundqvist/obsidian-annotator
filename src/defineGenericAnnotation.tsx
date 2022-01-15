@@ -129,18 +129,29 @@ export default ({ vault, plugin, resourceUrls }) => {
         const darkReaderReferences: Set<WeakRef<DarkReaderType>> = new Set();
 
         const subFrames = new Set<WeakRef<Window>>();
-
+        const forwardedMessages = new WeakSet();
         useEffect(() => {
             // Hypothesis expects the top window to be the hypothesis window.
             // This forwards any message posted to the top window to the children.
-            const listener = event => {
-                const currentSubFrames = new Set([...subFrames].map(x => x.deref()).filter(x => x));
-                if (currentSubFrames.has(event.source as Window) && event.source != window) {
-                    for (const subFrame of currentSubFrames) {
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        subFrame.dispatchEvent(new (event.constructor as any)(event.type, event));
+            const listener = async event => {
+                if (forwardedMessages.has(event)) return;
+                plugin.log('Top Window got message', { event, ...event.data });
+                const forwarded = new Set();
+                const forwardToSubFrames = () => {
+                    const currentSubFrames = new Set([...subFrames].map(x => x.deref()).filter(x => x));
+                    if (currentSubFrames.has(event.source as Window) && event.source != window) {
+                        plugin.log('forwarding...');
+                        for (const subFrame of currentSubFrames) {
+                            if (forwarded.has(subFrame)) continue;
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            const newMessage = new (event.constructor as any)(event.type, event);
+                            forwardedMessages.add(newMessage);
+                            subFrame.dispatchEvent(newMessage);
+                            forwarded.add(subFrame);
+                        }
                     }
-                }
+                };
+                forwardToSubFrames();
             };
             addEventListener('message', listener);
             return () => removeEventListener('message', listener);
@@ -289,7 +300,27 @@ export default ({ vault, plugin, resourceUrls }) => {
                     return html;
                 }}
                 onIframePatch={async iframe => {
+                    subFrames.add(new WeakRef(iframe.contentWindow));
                     await props.onIframePatch?.(iframe);
+                    iframe.contentWindow.addEventListener('message', async msg => {
+                        if (forwardedMessages.has(msg)) return;
+                        plugin.log('On Message Called', { iframe, msg, ...msg.data });
+                        const forwarded = new Set();
+                        const forwardToSubFrames = () => {
+                            const currentSubFrames = new Set([...subFrames].map(x => x.deref()).filter(x => x));
+                            plugin.log('forwarding...');
+                            for (const subFrame of currentSubFrames) {
+                                if (forwarded.has(subFrame)) continue;
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                const newMessage = new (msg.constructor as any)(msg.type, msg);
+                                forwardedMessages.add(newMessage);
+                                subFrame.dispatchEvent(newMessage);
+                                forwarded.add(subFrame);
+                            }
+                        };
+                        forwardToSubFrames();
+                    });
+
                     /* eslint-disable @typescript-eslint/no-explicit-any */
                     (iframe.contentWindow as any).DarkReader = (
                         await (iframe.contentWindow as any).eval(
@@ -302,7 +333,6 @@ export default ({ vault, plugin, resourceUrls }) => {
                     (iframe.contentWindow as any).DarkReader.setFetchMethod(iframe.contentWindow.fetch);
                     await props.onDarkReadersUpdated(darkReaderReferences);
                     /* eslint-enable @typescript-eslint/no-explicit-any */
-                    subFrames.add(new WeakRef(iframe.contentWindow));
                     iframe.contentDocument.documentElement.addEventListener('keydown', function (ev) {
                         if (ev.key == 'Shift') {
                             for (const highlightElem of iframe.contentDocument.documentElement.getElementsByTagName(

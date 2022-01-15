@@ -1,5 +1,5 @@
 import { SAMPLE_PDF_URL } from './constants';
-import { IHasAnnotatorSettings } from 'main';
+import { IHasAnnotatorSettings } from 'settings';
 import { Annotation, AnnotationList } from 'types';
 
 const makeAnnotationBlockRegex = (annotationId?: string) =>
