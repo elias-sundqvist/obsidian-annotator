@@ -10,6 +10,7 @@ export interface AnnotatorSettings {
     };
     customDefaultPath: string;
     annotationMarkdownSettings: {
+        annotationModeByDefault: boolean;
         includePrefix: boolean;
         highlightHighlightedText: boolean;
         includePostfix: boolean;
@@ -27,6 +28,7 @@ export const DEFAULT_SETTINGS: AnnotatorSettings = {
     debugLogging: false,
     customDefaultPath: '',
     annotationMarkdownSettings: {
+        annotationModeByDefault: true,
         includePrefix: true,
         highlightHighlightedText: true,
         includePostfix: true
@@ -72,6 +74,16 @@ export default class AnnotatorSettingsTab extends PluginSettingTab {
             );
 
         containerEl.createEl('h3', { text: 'Annotation Markdown Settings' });
+
+        new Setting(containerEl)
+            .setName('Use Annotation Mode By Default')
+            .setDesc('Whether to use annotation mode by default when opening a note with annotation-target')
+            .addToggle(toggle =>
+                toggle.setValue(this.plugin.settings.annotationMarkdownSettings.annotationModeByDefault).onChange(async value => {
+                    this.plugin.settings.annotationMarkdownSettings.annotationModeByDefault = value;
+                    await this.plugin.saveSettings();
+                })
+            );
 
         new Setting(containerEl)
             .setName('Include Prefix')

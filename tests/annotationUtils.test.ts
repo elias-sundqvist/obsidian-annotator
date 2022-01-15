@@ -11,6 +11,7 @@ const testAnnotatorSettings: IHasAnnotatorSettings = {
         debugLogging: false,
         customDefaultPath: null,
         annotationMarkdownSettings: {
+            annotationModeByDefault: true,
             includePostfix: true,
             includePrefix: true,
             highlightHighlightedText: true
