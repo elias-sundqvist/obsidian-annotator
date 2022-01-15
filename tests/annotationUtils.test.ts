@@ -6,6 +6,7 @@ import { Annotation } from '../src/types';
 
 const testAnnotatorSettings: IHasAnnotatorSettings = {
     settings: {
+        annotationModeByDefault: true,
         deafultDarkMode: false,
         darkReaderSettings: null,
         debugLogging: false,

@@ -2,6 +2,7 @@ import AnnotatorPlugin from 'main';
 import { App, PluginSettingTab, Setting } from 'obsidian';
 
 export interface AnnotatorSettings {
+    annotationModeByDefault: boolean;
     deafultDarkMode: boolean;
     darkReaderSettings: {
         brightness: number;
@@ -18,6 +19,7 @@ export interface AnnotatorSettings {
 }
 
 export const DEFAULT_SETTINGS: AnnotatorSettings = {
+    annotationModeByDefault: true,
     deafultDarkMode: false,
     darkReaderSettings: {
         brightness: 150,
@@ -72,6 +74,16 @@ export default class AnnotatorSettingsTab extends PluginSettingTab {
             );
 
         containerEl.createEl('h3', { text: 'Annotation Markdown Settings' });
+
+        new Setting(containerEl)
+            .setName('Use Annotation Mode By Default')
+            .setDesc('Whether to use annotation mode by default when opening a note with annotation-target')
+            .addToggle(toggle =>
+                toggle.setValue(this.plugin.settings.annotationModeByDefault).onChange(async value => {
+                    this.plugin.settings.annotationModeByDefault = value;
+                    await this.plugin.saveSettings();
+                })
+            );
 
         new Setting(containerEl)
             .setName('Include Prefix')
