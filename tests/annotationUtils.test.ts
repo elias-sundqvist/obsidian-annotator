@@ -6,12 +6,12 @@ import { Annotation } from '../src/types';
 
 const testAnnotatorSettings: IHasAnnotatorSettings = {
     settings: {
-        annotationModeByDefault: true,
         deafultDarkMode: false,
         darkReaderSettings: null,
         debugLogging: false,
         customDefaultPath: null,
         annotationMarkdownSettings: {
+            annotationModeByDefault: true,
             includePostfix: true,
             includePrefix: true,
             highlightHighlightedText: true

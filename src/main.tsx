@@ -246,7 +246,7 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
                             state.type === 'markdown' &&
                             state.state?.file &&
                             self.pdfAnnotatorFileModes[this.id || state.state.file] !== 'markdown' &&
-                            self.settings.annotationModeByDefault === true
+                            self.settings.annotationMarkdownSettings.annotationModeByDefault === true
                         ) {
                             const file = self.app.vault.getAbstractFileByPath(state.state.file);
 

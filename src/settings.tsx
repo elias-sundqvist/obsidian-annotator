@@ -2,7 +2,6 @@ import AnnotatorPlugin from 'main';
 import { App, PluginSettingTab, Setting } from 'obsidian';
 
 export interface AnnotatorSettings {
-    annotationModeByDefault: boolean;
     deafultDarkMode: boolean;
     darkReaderSettings: {
         brightness: number;
@@ -11,6 +10,7 @@ export interface AnnotatorSettings {
     };
     customDefaultPath: string;
     annotationMarkdownSettings: {
+        annotationModeByDefault: boolean;
         includePrefix: boolean;
         highlightHighlightedText: boolean;
         includePostfix: boolean;
@@ -19,7 +19,6 @@ export interface AnnotatorSettings {
 }
 
 export const DEFAULT_SETTINGS: AnnotatorSettings = {
-    annotationModeByDefault: true,
     deafultDarkMode: false,
     darkReaderSettings: {
         brightness: 150,
@@ -29,6 +28,7 @@ export const DEFAULT_SETTINGS: AnnotatorSettings = {
     debugLogging: false,
     customDefaultPath: '',
     annotationMarkdownSettings: {
+        annotationModeByDefault: true,
         includePrefix: true,
         highlightHighlightedText: true,
         includePostfix: true
@@ -79,8 +79,8 @@ export default class AnnotatorSettingsTab extends PluginSettingTab {
             .setName('Use Annotation Mode By Default')
             .setDesc('Whether to use annotation mode by default when opening a note with annotation-target')
             .addToggle(toggle =>
-                toggle.setValue(this.plugin.settings.annotationModeByDefault).onChange(async value => {
-                    this.plugin.settings.annotationModeByDefault = value;
+                toggle.setValue(this.plugin.settings.annotationMarkdownSettings.annotationModeByDefault).onChange(async value => {
+                    this.plugin.settings.annotationMarkdownSettings.annotationModeByDefault = value;
                     await this.plugin.saveSettings();
                 })
             );
