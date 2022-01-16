@@ -69,6 +69,11 @@ You can make a [pull request](https://github.com/elias-sundqvist/obsidian-annota
 
 ## Changelog
 
+### 0.1.8 (2022-01-16) *Minor fixes, added default annotation mode setting* 
+* Fixed issue with pane loading on startup
+* Fixed some issues with epub highlighting
+* Added setting to choose default annotation mode, Thanks to @aladmit for the PR! (See PR #113)
+ 
 ### 0.1.7 (2022-01-14) **[BRAT](https://github.com/TfTHacker/obsidian42-brat) release** *chinese file name support* 
 * Fixed issue with chinese file names, as discussed in issue #53
  
