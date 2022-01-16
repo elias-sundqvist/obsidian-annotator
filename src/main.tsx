@@ -21,6 +21,7 @@ import { PdfAnnotationProps, EpubAnnotationProps } from './types';
 import { EditorState } from '@codemirror/state';
 import AnnotatorSettingsTab, { AnnotatorSettings, DEFAULT_SETTINGS, IHasAnnotatorSettings } from 'settings';
 import AnnotatorView from 'annotatorView';
+import { wait } from 'utils';
 
 export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSettings {
     settings: AnnotatorSettings;
@@ -33,9 +34,16 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
     dragData: { annotationFilePath: string; annotationId: string; annotationText: string };
     codeMirrorInstances: Set<WeakRef<CodeMirror.Editor>>;
     codeMirrorDropHandler: (editor: CodeMirror.Editor, ev: DragEvent) => void;
+    setupPromise: Promise<void>;
 
     async onload() {
+        this.setupPromise = this.onloadImpl();
+        await this.setupPromise;
+    }
+
+    async onloadImpl() {
         await this.loadSettings();
+        this.registerView(VIEW_TYPE_PDF_ANNOTATOR, leaf => new AnnotatorView(leaf, this));
         this.codeMirrorInstances = new Set();
         this.resourceUrls = await loadResourceUrls;
         this.PdfAnnotation = definePdfAnnotation({
@@ -48,7 +56,6 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
             resourceUrls: this.resourceUrls,
             plugin: this
         });
-        this.registerView(VIEW_TYPE_PDF_ANNOTATOR, leaf => new AnnotatorView(leaf, this));
         this.addMarkdownPostProcessor();
         this.registerMonkeyPatches();
         this.registerSettingsTab();
@@ -199,13 +206,22 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         }
     }
 
+    async awaitDataView() {
+        const dataview = (this.app as any)?.plugins?.getPlugin('dataview'); // eslint-disable-line
+        while (dataview && !dataview.api) {
+            await wait(50);
+        }
+    }
+
     getPropertyValue(propertyName: string, file: TFile) {
         if (!file) {
             return null;
         }
-
-        const dataViewPropertyValue = (this.app as any)?.plugins?.plugins?.dataview?.api // eslint-disable-line
-            ?.page(file.path)?.[propertyName];
+        const dataview = (this.app as any)?.plugins?.getPlugin('dataview'); // eslint-disable-line
+        const dataviewApi = dataview?.api;
+        const dataviewPage = dataviewApi?.page(file.path);
+        const dataViewPropertyValue = dataviewPage?.[propertyName];
+        this.log({ dataview, loaded: dataview?._loaded, dataviewApi, dataviewPage, dataViewPropertyValue });
         if (dataViewPropertyValue) {
             if (dataViewPropertyValue.path) {
                 return this.app.metadataCache.getFirstLinkpathDest(dataViewPropertyValue.path, file.path)?.path;

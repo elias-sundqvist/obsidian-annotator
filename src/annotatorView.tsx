@@ -26,6 +26,10 @@ export default class AnnotatorView extends FileView {
 
     getAnnotationTarget(file: TFile): string {
         const annotationTargetPropertyValue = this.plugin.getPropertyValue(ANNOTATION_TARGET_PROPERTY, file);
+        if (!annotationTargetPropertyValue) {
+            this.plugin.log('Invalid annotation target!');
+            return '';
+        }
         for (let target of [
             annotationTargetPropertyValue,
             `${this.plugin.settings.customDefaultPath}${annotationTargetPropertyValue}`
@@ -57,53 +61,59 @@ export default class AnnotatorView extends FileView {
     }
 
     async onLoadFile(file: TFile) {
-        ReactDOM.unmountComponentAtNode(this.contentEl);
-        this.contentEl.empty();
-        const annotationTarget = this.getAnnotationTarget(file);
+        // this ensures that the steps below are carried out asynchronously without being awatied.
+        (async () => {
+            // Prevent pane from loading too early.
+            await this.plugin.setupPromise;
+            await this.plugin.awaitDataView();
+            ReactDOM.unmountComponentAtNode(this.contentEl);
+            this.contentEl.empty();
+            const annotationTarget = this.getAnnotationTarget(file);
 
-        this.contentEl.removeClass('view-content');
-        this.contentEl.style.height = '100%';
-        this.annotationTarget = annotationTarget;
-        if (annotationTarget) {
-            const annotationTargetType =
-                this.plugin.getPropertyValue(ANNOTATION_TARGET_TYPE_PROPERTY, file) ||
-                get_url_extension(annotationTarget);
-            let component;
-            switch (annotationTargetType) {
-                case 'pdf':
-                    component = (
-                        <this.plugin.PdfAnnotation
-                            pdf={annotationTarget}
-                            annotationFile={file.path}
-                            onload={async iframe => {
-                                this.iframe = iframe;
-                            }}
-                            onDarkReadersUpdated={this.onDarkReadersUpdated.bind(this)}
-                        />
-                    );
-                    break;
-                case 'epub':
-                    component = (
-                        <this.plugin.EpubAnnotation
-                            epub={annotationTarget}
-                            annotationFile={file.path}
-                            onload={async iframe => {
-                                this.iframe = iframe;
-                            }}
-                            onDarkReadersUpdated={this.onDarkReadersUpdated.bind(this)}
-                        />
-                    );
-                    break;
+            this.contentEl.removeClass('view-content');
+            this.contentEl.style.height = '100%';
+            this.annotationTarget = annotationTarget;
+            if (annotationTarget) {
+                const annotationTargetType =
+                    this.plugin.getPropertyValue(ANNOTATION_TARGET_TYPE_PROPERTY, file) ||
+                    get_url_extension(annotationTarget);
+                let component;
+                switch (annotationTargetType) {
+                    case 'pdf':
+                        component = (
+                            <this.plugin.PdfAnnotation
+                                pdf={annotationTarget}
+                                annotationFile={file.path}
+                                onload={async iframe => {
+                                    this.iframe = iframe;
+                                }}
+                                onDarkReadersUpdated={this.onDarkReadersUpdated.bind(this)}
+                            />
+                        );
+                        break;
+                    case 'epub':
+                        component = (
+                            <this.plugin.EpubAnnotation
+                                epub={annotationTarget}
+                                annotationFile={file.path}
+                                onload={async iframe => {
+                                    this.iframe = iframe;
+                                }}
+                                onDarkReadersUpdated={this.onDarkReadersUpdated.bind(this)}
+                            />
+                        );
+                        break;
+                }
+                ReactDOM.render(component, this.contentEl);
+            } else {
+                ReactDOM.render(
+                    <div>
+                        No <pre>annotation-target</pre> property present in frontmatter.
+                    </div>,
+                    this.contentEl
+                );
             }
-            ReactDOM.render(component, this.contentEl);
-        } else {
-            ReactDOM.render(
-                <div>
-                    No <pre>annotation-target</pre> property present in frontmatter.
-                </div>,
-                this.contentEl
-            );
-        }
+        })();
     }
 
     async onDarkReadersUpdated(darkReaderReferences?: Set<WeakRef<DarkReaderType>>): Promise<void> {

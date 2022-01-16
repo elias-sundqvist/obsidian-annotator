@@ -79,10 +79,12 @@ export default class AnnotatorSettingsTab extends PluginSettingTab {
             .setName('Use Annotation Mode By Default')
             .setDesc('Whether to use annotation mode by default when opening a note with annotation-target')
             .addToggle(toggle =>
-                toggle.setValue(this.plugin.settings.annotationMarkdownSettings.annotationModeByDefault).onChange(async value => {
-                    this.plugin.settings.annotationMarkdownSettings.annotationModeByDefault = value;
-                    await this.plugin.saveSettings();
-                })
+                toggle
+                    .setValue(this.plugin.settings.annotationMarkdownSettings.annotationModeByDefault)
+                    .onChange(async value => {
+                        this.plugin.settings.annotationMarkdownSettings.annotationModeByDefault = value;
+                        await this.plugin.saveSettings();
+                    })
             );
 
         new Setting(containerEl)
