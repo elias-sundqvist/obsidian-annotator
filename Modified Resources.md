@@ -1,5 +1,8 @@
 The following resources have been modified in the (`resources`) folder, and will need to be reapplied when updating hypothesis version. 
 
+* `hypothes.is\app.html` and `hypothes.is\app.html` 
+    > remove "dsn" from the sentry object. This prevents crash logs from being sent to the hypothes.is theme.  (See issue #97)
+
 * `cdn.hypothes.is\demos\epub\epub.js\js\reader.js`
     > This is needed for switching EPUB pages 
     ```js

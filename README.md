@@ -69,6 +69,9 @@ You can make a [pull request](https://github.com/elias-sundqvist/obsidian-annota
 
 ## Changelog
 
+### 0.1.9 (2022-01-17) *Minor fix* 
+* Removed sentry logging, again, (See issue #97)
+
 ### 0.1.8 (2022-01-16) *Minor fixes, added default annotation mode setting* 
 * Fixed issue with pane loading on startup
 * Fixed some issues with epub highlighting
