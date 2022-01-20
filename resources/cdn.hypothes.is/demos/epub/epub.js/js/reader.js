@@ -1,6 +1,9 @@
-(function() {
+  window.epubReader = function (readerSettings) {
+    var readingMode = ({
+      'scroll': { manager: "continuous", flow: "scrolled" },
+      'pagination': { manager: "default", flow: "paginated" }
+    });
 
-  function start() {
     var params = URLSearchParams && new URLSearchParams(document.location.search.substring(1));
     var url = params && params.get("url") && decodeURIComponent(params.get("url"));
 
@@ -11,6 +14,7 @@
       }
     });
     var rendition = book.renderTo("viewer", {
+      ...readingMode[readerSettings.readingMode],
       ignoreClass: "annotator-hl",
       width: "100%",
       height: "100%"
@@ -160,6 +164,3 @@
 
     });
   }
-
-  document.addEventListener('DOMContentLoaded', start, false);
-})();

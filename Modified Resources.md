@@ -4,6 +4,24 @@ The following resources have been modified in the (`resources`) folder, and will
     > remove "dsn" from the sentry object. This prevents crash logs from being sent to the hypothes.is theme.  (See issue #97)
 
 * `cdn.hypothes.is\demos\epub\epub.js\js\reader.js`
+    > Expose `start()` function as `window.epubReader(readerSettings)`. It allows to pass settings to reader from `annotatorView`
+    ```js
+    window.epubReader = function (readerSettings) {
+        var readingMode = ({
+        'scroll': { manager: "continuous", flow: "scrolled" },
+        'pagination': { manager: "default", flow: "paginated" }
+    });
+    ```
+    > Pass reading mode settings to rendition. This is required for changing EPUB reader mode.
+    ```js
+    var rendition = book.renderTo("viewer", {
+      ...readingMode[readerSettings.readingMode],
+      ...
+      ...
+    ```
+
+    > REMOVE `document.addEventListener('DOMContentLoaded', start, false);` because `epubReader` function runs from `annotatorView` with params.
+
     > This is needed for switching EPUB pages 
     ```js
     window.rendition = rendition; // expose the rendered epub object. 
@@ -28,4 +46,3 @@ The following resources have been modified in the (`resources`) folder, and will
     > This fixes an issue with highlights not working:
       Replace `if(l||(l=new Set,this._sentChannels.set(i,l)),l.has(a))return;` from annotator.bundle.js
       with `if(l||(l=new Set,this._sentChannels.set(i,l)),l.has(a)){};`
-

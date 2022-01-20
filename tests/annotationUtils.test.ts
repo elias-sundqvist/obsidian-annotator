@@ -10,6 +10,9 @@ const testAnnotatorSettings: IHasAnnotatorSettings = {
         darkReaderSettings: null,
         debugLogging: false,
         customDefaultPath: null,
+        epubSettings: {
+            readingMode: "scroll"
+        },
         annotationMarkdownSettings: {
             annotationModeByDefault: true,
             includePostfix: true,
