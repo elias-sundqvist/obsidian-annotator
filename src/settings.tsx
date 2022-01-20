@@ -9,6 +9,9 @@ export interface AnnotatorSettings {
         sepia: number;
     };
     customDefaultPath: string;
+    epubSettings: {
+        readingMode: "scroll" | "pagination";
+    };
     annotationMarkdownSettings: {
         annotationModeByDefault: boolean;
         includePrefix: boolean;
@@ -27,6 +30,9 @@ export const DEFAULT_SETTINGS: AnnotatorSettings = {
     },
     debugLogging: false,
     customDefaultPath: '',
+    epubSettings: {
+        readingMode: "pagination"
+    },
     annotationMarkdownSettings: {
         annotationModeByDefault: true,
         includePrefix: true,
@@ -71,6 +77,21 @@ export default class AnnotatorSettingsTab extends PluginSettingTab {
                     this.plugin.settings.customDefaultPath = value;
                     await this.plugin.saveSettings();
                 })
+            );
+
+        containerEl.createEl('h3', { text: 'Epub Reader Settings'});
+
+        new Setting(containerEl)
+            .setName('Epub reader mode')
+            .addDropdown(dropdown =>
+                dropdown
+                    .addOption("scroll", "Scroll")
+                    .addOption("pagination", "Pagination")
+                    .setValue(this.plugin.settings.epubSettings.readingMode)
+                    .onChange(async value => {
+                        this.plugin.settings.epubSettings.readingMode = value as "scroll" | "pagination";
+                        await this.plugin.saveSettings();
+                    })
             );
 
         containerEl.createEl('h3', { text: 'Annotation Markdown Settings' });
