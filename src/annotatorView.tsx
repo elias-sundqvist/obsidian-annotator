@@ -98,7 +98,6 @@ export default class AnnotatorView extends FileView {
                                 annotationFile={file.path}
                                 onload={async iframe => {
                                     this.iframe = iframe;
-                                    (iframe.contentWindow as any).epubReader(this.plugin.settings.epubSettings);
                                 }}
                                 onDarkReadersUpdated={this.onDarkReadersUpdated.bind(this)}
                             />
