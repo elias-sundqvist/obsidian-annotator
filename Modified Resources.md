@@ -29,6 +29,7 @@ The following resources have been modified in the (`resources`) folder, and will
     switch (readerSettings.readingMode) {
       case "scroll":
         document.querySelectorAll("a.arrow").forEach((e) => e.remove());
+        document.querySelector("#viewer").classList.add("hide-after");
         break;
 
       case "pagination":
@@ -46,6 +47,13 @@ The following resources have been modified in the (`resources`) folder, and will
 
         break;
     }
+    ```
+* `cdn.hypothes.is\demos\epub\epub.js\css\reader.css`
+    > Add `.hide-after` class. This is needed to hide page separator in Scroll view
+    ```css
+    .hide-after:after {
+        display: none;
+    };
     ```
 * `via.hypothes.is\https.html`
     > The `event.source` check has to be disabled for the loading progress bar to dissappear. 

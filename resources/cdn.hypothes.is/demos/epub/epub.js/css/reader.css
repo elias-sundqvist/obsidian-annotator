@@ -331,3 +331,7 @@ svg {
 #controls > input[type=range] {
     width: 400px;
 }
+
+.hide-after:after {
+  display: none;
+};
