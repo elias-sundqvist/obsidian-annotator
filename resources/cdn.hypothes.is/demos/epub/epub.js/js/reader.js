@@ -30,18 +30,26 @@
 
     rendition.display(hash || undefined);
 
+    switch (readerSettings.readingMode) {
+      case "scroll":
+        document.querySelectorAll("a.arrow").forEach((e) => e.remove());
+        break;
 
-    var next = document.getElementById("next");
-    next.addEventListener("click", function(e){
-      rendition.next();
-      e.preventDefault();
-    }, false);
+      case "pagination":
+        var next = document.getElementById("next");
+        next.addEventListener("click", function(e){
+          rendition.next();
+          e.preventDefault();
+        }, false);
 
-    var prev = document.getElementById("prev");
-    prev.addEventListener("click", function(e){
-      rendition.prev();
-      e.preventDefault();
-    }, false);
+        var prev = document.getElementById("prev");
+        prev.addEventListener("click", function(e){
+          rendition.prev();
+          e.preventDefault();
+        }, false);
+
+        break;
+    }
 
     var nav = document.getElementById("navigation");
     var opener = document.getElementById("opener");

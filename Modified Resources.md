@@ -23,6 +23,30 @@ The following resources have been modified in the (`resources`) folder, and will
     ```js
     window.rendition = rendition; // expose the rendered epub object. 
     ```
+
+    > Add addEventListener for arrows only it's Pagination mdoe. Remove arrows if it's Scoll mode
+    ```js
+    switch (readerSettings.readingMode) {
+      case "scroll":
+        document.querySelectorAll("a.arrow").forEach((e) => e.remove());
+        break;
+
+      case "pagination":
+        var next = document.getElementById("next");
+        next.addEventListener("click", function(e){
+          rendition.next();
+          e.preventDefault();
+        }, false);
+
+        var prev = document.getElementById("prev");
+        prev.addEventListener("click", function(e){
+          rendition.prev();
+          e.preventDefault();
+        }, false);
+
+        break;
+    }
+    ```
 * `via.hypothes.is\https.html`
     > The `event.source` check has to be disabled for the loading progress bar to dissappear. 
     ```js
