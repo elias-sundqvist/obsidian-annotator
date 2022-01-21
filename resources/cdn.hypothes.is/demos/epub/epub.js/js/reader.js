@@ -33,6 +33,7 @@
     switch (readerSettings.readingMode) {
       case "scroll":
         document.querySelectorAll("a.arrow").forEach((e) => e.remove());
+        document.querySelector("#viewer").classList.add("hide-after");
         break;
 
       case "pagination":
