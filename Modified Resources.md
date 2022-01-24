@@ -78,3 +78,10 @@ The following resources have been modified in the (`resources`) folder, and will
     > This fixes an issue with highlights not working:
       Replace `if(l||(l=new Set,this._sentChannels.set(i,l)),l.has(a))return;` from annotator.bundle.js
       with `if(l||(l=new Set,this._sentChannels.set(i,l)),l.has(a)){};`
+
+
+* `cdn.hypothes.is\hypothesis\1.960.0\build\scripts\sidebar.bundle.js`
+   > This is needed for custom markdown rendering (replace in the part that corresponds to `renderMathAndMarkdown`)
+   ```js
+   /*REPLACE THE MARKDOWN RENDERING FUNCTION*/return window.renderObsidianMarkdown(e);
+   ``` 
