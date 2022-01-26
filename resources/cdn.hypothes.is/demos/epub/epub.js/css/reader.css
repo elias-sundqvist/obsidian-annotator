@@ -140,7 +140,6 @@ svg {
 
 #prev {
   float: left;
-  left: -10px;
 }
 
 #next {
@@ -216,7 +215,6 @@ svg {
   margin: 10px auto;
 }
 
-/* КОГДА БОЛЬШЕ 1000 пикселей */
 @media (min-width: 1000px) {
   #viewer.spreads:after {
     position: absolute;
