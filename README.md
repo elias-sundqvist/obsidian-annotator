@@ -69,6 +69,13 @@ You can make a [pull request](https://github.com/elias-sundqvist/obsidian-annota
 
 ## Changelog
 
+### 0.2.0 (2022-01-17) **[BRAT](https://github.com/TfTHacker/obsidian42-brat) release** *Improved markdown rendering, epub reader* 
+* Markdown in the hypothesis sidebar should now fully support the regular obsidian syntax. (including links, embeds, custom codeblocks etc.)
+* Several Epub improvements, Thanks to @aladmit for these!
+  * New option added for font size scaling (See PR #127)
+  * New "epub reader mode" setting added. Infinite scrolling is now supported! (See PR #114)
+  * Reduced page padding so that maximum available space is used. (See PR #126)
+  
 ### 0.1.9 (2022-01-17) *Minor fix* 
 * Removed sentry logging, again, (See issue #97)
 
