@@ -22,6 +22,11 @@ The following resources have been modified in the (`resources`) folder, and will
 
     > REMOVE `document.addEventListener('DOMContentLoaded', start, false);` because `epubReader` function runs from `annotatorView` with params.
 
+    > Add this to change fontSize from plugin settings
+    ```js
+    rendition.themes.fontSize(`${readerSettings.fontSize}%`);
+    ```
+
     > This is needed for switching EPUB pages 
     ```js
     window.rendition = rendition; // expose the rendered epub object. 

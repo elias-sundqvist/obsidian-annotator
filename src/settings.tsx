@@ -33,7 +33,7 @@ export const DEFAULT_SETTINGS: AnnotatorSettings = {
     customDefaultPath: '',
     epubSettings: {
         readingMode: 'pagination',
-        fontSize: 16,
+        fontSize: 100,
     },
     annotationMarkdownSettings: {
         annotationModeByDefault: true,
@@ -96,15 +96,15 @@ export default class AnnotatorSettingsTab extends PluginSettingTab {
 
         const epubFontSize = new Setting(containerEl)
             .setName('Font Size')
-            .setDesc(`Base fron size in pixels. Current: ${this.plugin.settings.epubSettings.fontSize}`);
+            .setDesc(`Base fron size in percents. Current: ${this.plugin.settings.epubSettings.fontSize}%`);
 
         epubFontSize.addSlider(slider =>
             slider
-                .setLimits(8, 32, 2)
+                .setLimits(50, 200, 5)
                 .setValue(this.plugin.settings.epubSettings.fontSize)
                 .onChange(async value => {
                     this.plugin.settings.epubSettings.fontSize = value;
-                    epubFontSize.setDesc(`Base fron size in pixels. Current: ${this.plugin.settings.epubSettings.fontSize}`)
+                    epubFontSize.setDesc(`Base fron size in percents. Current: ${this.plugin.settings.epubSettings.fontSize}%`)
                     slider.setDynamicTooltip();
                     await this.plugin.saveSettings();
                 })
