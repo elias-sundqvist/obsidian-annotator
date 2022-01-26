@@ -100,6 +100,7 @@ export type TextQuoteSelector = {
 
 export type GenericAnnotationProps = {
     annotationFile: string;
+    containerEl: HTMLElement;
     onload: (iframe: HTMLIFrameElement) => Promise<void>;
     onDarkReadersUpdated: (darkReaderReferences: Set<WeakRef<DarkReaderType>>) => Promise<void>;
 };

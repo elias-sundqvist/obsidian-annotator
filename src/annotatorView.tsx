@@ -83,6 +83,7 @@ export default class AnnotatorView extends FileView {
                         component = (
                             <this.plugin.PdfAnnotation
                                 pdf={annotationTarget}
+                                containerEl={this.contentEl}
                                 annotationFile={file.path}
                                 onload={async iframe => {
                                     this.iframe = iframe;
@@ -95,6 +96,7 @@ export default class AnnotatorView extends FileView {
                         component = (
                             <this.plugin.EpubAnnotation
                                 epub={annotationTarget}
+                                containerEl={this.contentEl}
                                 annotationFile={file.path}
                                 onload={async iframe => {
                                     this.iframe = iframe;

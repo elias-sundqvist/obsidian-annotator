@@ -340,7 +340,7 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
                 const annotationid = parsedLink.subpath.startsWith('#^') ? parsedLink.subpath.substr(2) : null;
                 const file = this.app.metadataCache.getFirstLinkpathDest(parsedLink.path, ctx.sourcePath);
                 if (this.isAnnotationFile(file)) {
-                    link.onClickEvent(ev => {
+                    link.addEventListener('click', ev => {
                         ev.preventDefault();
                         ev.stopPropagation();
                         ev.stopImmediatePropagation();

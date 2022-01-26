@@ -302,6 +302,7 @@ export default ({ vault, plugin, resourceUrls }) => {
                 onIframePatch={async iframe => {
                     subFrames.add(new WeakRef(iframe.contentWindow));
                     patchSidebarMarkdownRendering(iframe, props.annotationFile, plugin);
+                    patchIframeEventBubbling(iframe, props.containerEl);
                     await props.onIframePatch?.(iframe);
                     iframe.contentWindow.addEventListener('message', async msg => {
                         if (forwardedMessages.has(msg)) return;
@@ -477,7 +478,6 @@ function patchSidebarMarkdownRendering(iframe: HTMLIFrameElement, filePath: stri
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     class ObsidianMarkdown extends ((iframe.contentWindow as any).HTMLElement as HTMLElementConstructor) {
         markdown: string;
-        filepath: string;
 
         // Whenever an attibute is changed, this function is called. A switch statement is a good way to handle the various attributes.
         // Note that this also gets called the first time the attribute is set, so we do not need any special initialisation code.
@@ -485,7 +485,7 @@ function patchSidebarMarkdownRendering(iframe: HTMLIFrameElement, filePath: stri
             if (name == 'markdownbase64') {
                 this.markdown = b64_to_utf8(newValue);
                 (async () => {
-                    MarkdownRenderer.renderMarkdown(this.markdown, this, this.filepath, null);
+                    MarkdownRenderer.renderMarkdown(this.markdown, this, filePath, null);
                     const maxDepth = 10;
                     const patchEmbeds = (el: HTMLElement, filePath: string, depth: number) => {
                         if (depth > maxDepth) return;
@@ -544,4 +544,20 @@ function patchSidebarMarkdownRendering(iframe: HTMLIFrameElement, filePath: stri
     (iframe.contentWindow as any).renderObsidianMarkdown = markdown => {
         return `<obsidian-markdown markdownbase64="${utf8_to_b64(markdown)}" />`;
     };
+}
+
+function patchIframeEventBubbling(iframe: HTMLIFrameElement, container: HTMLElement) {
+    const events = [];
+    for (const property in container) {
+        const match = property.match(/^on(.*)/);
+        if (match) {
+            events.push(match[1]);
+        }
+    }
+    for (const event of events) {
+        iframe.addEventListener(event, ev => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            container.dispatchEvent(new (ev.constructor as any)(ev.type, ev));
+        });
+    }
 }
