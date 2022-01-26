@@ -11,6 +11,7 @@ export interface AnnotatorSettings {
     customDefaultPath: string;
     epubSettings: {
         readingMode: 'scroll' | 'pagination';
+        fontSize: number;
     };
     annotationMarkdownSettings: {
         annotationModeByDefault: boolean;
@@ -31,7 +32,8 @@ export const DEFAULT_SETTINGS: AnnotatorSettings = {
     debugLogging: false,
     customDefaultPath: '',
     epubSettings: {
-        readingMode: 'pagination'
+        readingMode: 'pagination',
+        fontSize: 16,
     },
     annotationMarkdownSettings: {
         annotationModeByDefault: true,
@@ -88,6 +90,22 @@ export default class AnnotatorSettingsTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.epubSettings.readingMode)
                 .onChange(async value => {
                     this.plugin.settings.epubSettings.readingMode = value as 'scroll' | 'pagination';
+                    await this.plugin.saveSettings();
+                })
+        );
+
+        const epubFontSize = new Setting(containerEl)
+            .setName('Font Size')
+            .setDesc(`Base fron size in pixels. Current: ${this.plugin.settings.epubSettings.fontSize}`);
+
+        epubFontSize.addSlider(slider =>
+            slider
+                .setLimits(8, 32, 2)
+                .setValue(this.plugin.settings.epubSettings.fontSize)
+                .onChange(async value => {
+                    this.plugin.settings.epubSettings.fontSize = value;
+                    epubFontSize.setDesc(`Base fron size in pixels. Current: ${this.plugin.settings.epubSettings.fontSize}`)
+                    slider.setDynamicTooltip();
                     await this.plugin.saveSettings();
                 })
         );

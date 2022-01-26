@@ -11,7 +11,8 @@ const testAnnotatorSettings: IHasAnnotatorSettings = {
         debugLogging: false,
         customDefaultPath: null,
         epubSettings: {
-            readingMode: "scroll"
+            readingMode: "scroll",
+            fontSize: 16
         },
         annotationMarkdownSettings: {
             annotationModeByDefault: true,
