@@ -117,7 +117,7 @@ svg {
 }
 
 #main {
-  margin-top: 60px;
+  margin-top: 20px;
 }
 
 #pagination {
@@ -140,6 +140,7 @@ svg {
 
 #prev {
   float: left;
+  left: -10px;
 }
 
 #next {
@@ -210,19 +211,12 @@ svg {
   color: #777;
 }
 
-#prev {
-  left: 0;
-}
-
-#next {
-  right: 0;
-}
-
 #toc {
   display: block;
   margin: 10px auto;
 }
 
+/* КОГДА БОЛЬШЕ 1000 пикселей */
 @media (min-width: 1000px) {
   #viewer.spreads:after {
     position: absolute;
@@ -238,23 +232,41 @@ svg {
     content:  "";
   }
 
+  #viewer.spreads {
+    width: 92vw;
+    margin: 0 0 0 3.5vw;
+  }
+
   #prev {
-    left: 40px;
+    left: -5px;
   }
 
   #next {
-    right: 40px;
+    right: 10px;
+  }
+}
+
+@media (max-width: 1000px) {
+  #viewer.spreads {
+    width: 87vw;
+    margin: 0 0 0 5vw;
+  }
+
+  #prev {
+    left: -5px;
+  }
+
+  #next {
+    right: 10px;
   }
 }
 
 #viewer.spreads {
-  width: 84vw;
-  height: 80vh;
+  height: 95vh;
   box-shadow: 0 0 4px #ccc;
   border-radius: 5px;
   padding: 0;
   position: relative;
-  margin: 10vh auto;
   background: white;
   top: 0;
 }
