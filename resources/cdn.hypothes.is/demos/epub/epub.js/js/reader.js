@@ -19,6 +19,7 @@
       width: "100%",
       height: "100%"
     });
+    rendition.themes.fontSize(`${readerSettings.fontSize}%`);
     window.rendition = rendition; 
 
     // var hash = window.location.hash.slice(2);
