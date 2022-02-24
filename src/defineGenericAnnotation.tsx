@@ -295,7 +295,7 @@ export default ({ vault, plugin, resourceUrls }) => {
                         html = html.replaceAll(SAMPLE_PDF_URL, proxy(props.pdf).href);
                     }
                     if ('epub' in props) {
-                        html = html.replaceAll(SAMPLE_EPUB_URL, proxy(props.epub).href);
+                       html = html.replaceAll(SAMPLE_EPUB_URL, proxy(props.epub).href);
                     }
                     return html;
                 }}
@@ -554,10 +554,10 @@ function patchIframeEventBubbling(iframe: HTMLIFrameElement, container: HTMLElem
             events.push(match[1]);
         }
     }
-    for (const event of events) {
+    /*for (const event of events) {
         iframe.addEventListener(event, ev => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             container.dispatchEvent(new (ev.constructor as any)(ev.type, ev));
         });
-    }
+    }*/
 }
