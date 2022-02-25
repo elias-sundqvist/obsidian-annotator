@@ -12,120 +12,15 @@ import hypothesisFolder from 'hypothesisFolder';
 import { DarkReaderType } from 'darkreader';
 
 const proxiedHosts = new Set(['cdn.hypothes.is', 'via.hypothes.is', 'hypothes.is']);
+const urlToPathMap = new Map();
+
 export default ({ vault, plugin, resourceUrls }) => {
-    const urlToPathMap = new Map();
     const GenericAnnotation = (
         props: SpecificAnnotationProps & {
             baseSrc: string;
             onIframePatch?: (iframe: HTMLIFrameElement) => Promise<void>;
         }
     ) => {
-        function proxy(url: URL | string): URL {
-            const href = typeof url == 'string' ? url : url.href;
-            if (
-                href == SAMPLE_PDF_URL ||
-                ('pdf' in props && props.pdf == href) ||
-                ((href.startsWith(`https://via.hypothes.is/proxy/static/xP1ZVAo-CVhW7kwNneW_oQ/1628964000/`) ||
-                    href.startsWith(`https://via.hypothes.is/proxy/static/UsvswpbIZv6ZUQTERtj1CA/1641646800/`) ||
-                    href.startsWith(`https://via.hypothes.is/proxy/static/VpXumaaWJSJVxmHv4EqN2g/1641916800/`)) &&
-                    !href.endsWith('.html'))
-            ) {
-                let path;
-                if (!('pdf' in props)) {
-                    console.warn('Missing prop "pdf"');
-                    return;
-                }
-                try {
-                    path = new URL(props.pdf).href;
-                } catch {
-                    path = `vault:/${props.pdf}`;
-                }
-                return new URL(path);
-            }
-            if (href == SAMPLE_EPUB_URL || ('epub' in props && props.epub == href)) {
-                let path;
-                if (!('epub' in props)) {
-                    console.warn('Missing prop "epub"');
-                    return;
-                }
-                try {
-                    path = new URL(props.epub).href;
-                } catch {
-                    path = `vault:/${props.epub}`;
-                }
-                return new URL(path);
-            }
-            if (href == `https://hypothes.is/api/`) {
-                return new URL(`zip:/fake-service/api.json`);
-            }
-            if (href == `http://localhost:8001/api/links`) {
-                return new URL(`zip:/fake-service/api/links.json`);
-            }
-            if (href == `http://localhost:8001/api/profile`) {
-                return new URL(`zip:/fake-service/api/profile.json`);
-            }
-            if (href.startsWith(`http://localhost:8001/api/profile/groups`)) {
-                return new URL(`zip:/fake-service/api/profile/groups.json`);
-            }
-            if (href.startsWith(`http://localhost:8001/api/groups`)) {
-                return new URL(`zip:/fake-service/api/groups.json`);
-            }
-            if (typeof url == 'string') {
-                return new URL(url);
-            }
-            switch (url.hostname) {
-                case 'via.hypothes.is':
-                    return new URL(`zip:/via.hypothes.is${url.pathname}`);
-                case 'hypothes.is':
-                    return new URL(`zip:/hypothes.is${url.pathname}`);
-                case 'cdn.hypothes.is':
-                    return new URL(`zip:/cdn.hypothes.is${url.pathname}`);
-                // Remove hypothes.is trackers
-                case 'js-agent.newrelic.com':
-                case 'bam-cell.nr-data.net':
-                    return new URL('zip:/ignore');
-                default:
-                    return url;
-            }
-        }
-
-        async function readFromVaultPath(path) {
-            const abstractFile = getAbstractFileByPath(path);
-            return await readAbstractFile(abstractFile);
-        }
-
-        async function readAbstractFile(abstractFile) {
-            return await vault.readBinary(abstractFile);
-        }
-
-        function getAbstractFileByPath(path) {
-            let p;
-            if (
-                (p = vault.getAbstractFileByPath(path)) instanceof TFile ||
-                (p = vault.getAbstractFileByPath(`${path}.html`)) instanceof TFile
-            ) {
-                return p;
-            }
-        }
-
-        function getVaultPathResourceUrl(vaultPath) {
-            function tryGetResourceUrl(vaultPath) {
-                const abstractFile = getAbstractFileByPath(vaultPath);
-                const resourcePath = vault.getResourcePath(abstractFile);
-                urlToPathMap.set(resourcePath, vaultPath);
-                return resourcePath;
-            }
-            try {
-                return tryGetResourceUrl(vaultPath);
-            } catch (e) {
-                try {
-                    return tryGetResourceUrl(decodeURI(vaultPath));
-                } catch (e) {
-                    return `error:/${encodeURIComponent(e.toString())}/`;
-                }
-            }
-        }
-
         const darkReaderReferences: Set<WeakRef<DarkReaderType>> = new Set();
 
         const subFrames = new Set<WeakRef<Window>>();
@@ -161,18 +56,7 @@ export default ({ vault, plugin, resourceUrls }) => {
             <OfflineIframe
                 address={props.baseSrc}
                 getUrl={url => {
-                    const proxiedUrl = proxy(url);
-                    if (proxiedUrl.protocol == 'vault:') {
-                        return getVaultPathResourceUrl(normalizePath(proxiedUrl.pathname));
-                    }
-                    if (proxiedUrl.protocol == 'zip:') {
-                        const pathName = normalizePath(proxiedUrl.pathname);
-                        const res = resourceUrls.get(pathName) || resourceUrls.get(`${pathName}.html`);
-                        if (res) return res;
-                        console.error('file not found', { url });
-                        debugger;
-                    }
-                    return proxiedUrl.toString();
+                    return getProxiedUrl(url, props, resourceUrls, vault);
                 }}
                 fetch={async (requestInfo: RequestInfo, requestInit?: RequestInit) => {
                     const href = typeof requestInfo == 'string' ? requestInfo : requestInfo.url;
@@ -210,9 +94,9 @@ export default ({ vault, plugin, resourceUrls }) => {
                     if (url.protocol == 'vault:') {
                         try {
                             try {
-                                buf = await readFromVaultPath(normalizePath(url.pathname));
+                                buf = await readFromVaultPath(normalizePath(url.pathname), vault);
                             } catch (e) {
-                                buf = await readFromVaultPath(normalizePath(decodeURI(url.pathname)));
+                                buf = await readFromVaultPath(normalizePath(decodeURI(url.pathname)), vault);
                             }
                             return new Response(buf, {
                                 status: 200,
@@ -228,7 +112,7 @@ export default ({ vault, plugin, resourceUrls }) => {
                             const vaultPath = urlToPathMap.get(
                                 url.protocol + '//' + url.host + url.pathname + url.search
                             );
-                            buf = await readFromVaultPath(vaultPath);
+                            buf = await readFromVaultPath(vaultPath, vault);
                             return new Response(buf, {
                                 status: 200,
                                 statusText: 'ok'
@@ -292,10 +176,10 @@ export default ({ vault, plugin, resourceUrls }) => {
                 }}
                 htmlPostProcessFunction={(html: string) => {
                     if ('pdf' in props) {
-                        html = html.replaceAll(SAMPLE_PDF_URL, proxy(props.pdf).href);
+                        html = html.replaceAll(SAMPLE_PDF_URL, proxy(props.pdf, props).href);
                     }
                     if ('epub' in props) {
-                        html = html.replaceAll(SAMPLE_EPUB_URL, proxy(props.epub).href);
+                        html = html.replaceAll(SAMPLE_EPUB_URL, proxy(props.epub, props).href);
                     }
                     return html;
                 }}
@@ -546,6 +430,22 @@ function patchSidebarMarkdownRendering(iframe: HTMLIFrameElement, filePath: stri
     };
 }
 
+export const getProxiedUrl = (url: URL | string, props, resourceUrls, vault):string => {
+    const proxiedUrl = proxy(url, props);
+
+    if (proxiedUrl.protocol == 'vault:') {
+        return getVaultPathResourceUrl(normalizePath(proxiedUrl.pathname), vault);
+    }
+    if (proxiedUrl.protocol == 'zip:') {
+        const pathName = normalizePath(proxiedUrl.pathname);
+        const res = resourceUrls.get(pathName) || resourceUrls.get(`${pathName}.html`);
+        if (res) return res;
+        console.error('file not found', { url });
+        debugger;
+    }
+    return proxiedUrl.toString();
+}
+
 function patchIframeEventBubbling(iframe: HTMLIFrameElement, container: HTMLElement) {
     const events = [];
     for (const property in container) {
@@ -559,5 +459,112 @@ function patchIframeEventBubbling(iframe: HTMLIFrameElement, container: HTMLElem
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             container.dispatchEvent(new (ev.constructor as any)(ev.type, ev));
         });
+    }
+}
+
+function proxy(url: URL | string, props): URL {
+    const href = typeof url == 'string' ? url : url.href;
+
+    if (
+        href == SAMPLE_PDF_URL ||
+        ('pdf' in props && props.pdf == href) ||
+        ((href.startsWith(`https://via.hypothes.is/proxy/static/xP1ZVAo-CVhW7kwNneW_oQ/1628964000/`) ||
+            href.startsWith(`https://via.hypothes.is/proxy/static/UsvswpbIZv6ZUQTERtj1CA/1641646800/`) ||
+            href.startsWith(`https://via.hypothes.is/proxy/static/VpXumaaWJSJVxmHv4EqN2g/1641916800/`)) &&
+            !href.endsWith('.html'))
+    ) {
+        let path;
+        if (!('pdf' in props)) {
+            console.warn('Missing prop "pdf"');
+            return;
+        }
+        try {
+            path = new URL(props.pdf).href;
+        } catch {
+            path = `vault:/${props.pdf}`;
+        }
+        return new URL(path);
+    }
+    if (href == SAMPLE_EPUB_URL || ('epub' in props && props.epub == href)) {
+        let path;
+        if (!('epub' in props)) {
+            console.warn('Missing prop "epub"');
+            return;
+        }
+        try {
+            path = new URL(props.epub).href;
+        } catch {
+            path = `vault:/${props.epub}`;
+        }
+        return new URL(path);
+    }
+    if (href == `https://hypothes.is/api/`) {
+        return new URL(`zip:/fake-service/api.json`);
+    }
+    if (href == `http://localhost:8001/api/links`) {
+        return new URL(`zip:/fake-service/api/links.json`);
+    }
+    if (href == `http://localhost:8001/api/profile`) {
+        return new URL(`zip:/fake-service/api/profile.json`);
+    }
+    if (href.startsWith(`http://localhost:8001/api/profile/groups`)) {
+        return new URL(`zip:/fake-service/api/profile/groups.json`);
+    }
+    if (href.startsWith(`http://localhost:8001/api/groups`)) {
+        return new URL(`zip:/fake-service/api/groups.json`);
+    }
+    if (typeof url == 'string') {
+        return new URL(url);
+    }
+    switch (url.hostname) {
+        case 'via.hypothes.is':
+            return new URL(`zip:/via.hypothes.is${url.pathname}`);
+        case 'hypothes.is':
+            return new URL(`zip:/hypothes.is${url.pathname}`);
+        case 'cdn.hypothes.is':
+            return new URL(`zip:/cdn.hypothes.is${url.pathname}`);
+        // Remove hypothes.is trackers
+        case 'js-agent.newrelic.com':
+        case 'bam-cell.nr-data.net':
+            return new URL('zip:/ignore');
+        default:
+            return url;
+    }
+}
+
+function getAbstractFileByPath(path, vault) {
+    let p;
+    if (
+        (p = vault.getAbstractFileByPath(path)) instanceof TFile ||
+        (p = vault.getAbstractFileByPath(`${path}.html`)) instanceof TFile
+    ) {
+        return p;
+    }
+}
+
+async function readAbstractFile(abstractFile, vault) {
+    return await vault.readBinary(abstractFile);
+}
+
+async function readFromVaultPath(path, vault) {
+    const abstractFile = getAbstractFileByPath(path, vault);
+    return await readAbstractFile(abstractFile, vault);
+}
+
+function getVaultPathResourceUrl(vaultPath, vault) {
+    function tryGetResourceUrl(vaultPath, vault) {
+        const abstractFile = getAbstractFileByPath(vaultPath, vault);
+        const resourcePath = vault.getResourcePath(abstractFile);
+        urlToPathMap.set(resourcePath, vaultPath);
+        return resourcePath;
+    }
+    try {
+        return tryGetResourceUrl(vaultPath, vault);
+    } catch (e) {
+        try {
+            return tryGetResourceUrl(decodeURI(vaultPath), vault);
+        } catch (e) {
+            return `error:/${encodeURIComponent(e.toString())}/`;
+        }
     }
 }
