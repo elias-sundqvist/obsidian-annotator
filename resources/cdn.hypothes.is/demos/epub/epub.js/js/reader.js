@@ -1,5 +1,6 @@
   window.epubReader = function (readerSettings) {
-    var readingMode = ({
+/*
+		var readingMode = ({
       'scroll': { manager: "continuous", flow: "scrolled" },
       'pagination': { manager: "default", flow: "paginated" }
     });
@@ -173,4 +174,5 @@
       });
 
     });
+*/
   }
