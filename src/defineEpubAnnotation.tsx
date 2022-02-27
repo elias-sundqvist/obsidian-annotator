@@ -2,7 +2,6 @@ import * as genericAnnotation from 'defineGenericAnnotation';
 import React from 'react';
 import { EpubAnnotationProps } from './types';
 import * as epubjs from 'epubjs';
-import { settings } from 'cluster';
 
 export default ({ vault, plugin, resourceUrls }) => {
     const GenericAnnotationEpub = genericAnnotation.default({ vault, plugin, resourceUrls });
@@ -33,6 +32,11 @@ export default ({ vault, plugin, resourceUrls }) => {
                             height: "100%",
                             allowScriptedContent: true
                         });
+
+                        //TODO: FIX fontSize settings. It doesn't work anymore :(
+                        // Looks like book renders with font size from the settings and then the setting drops to default 100%
+                        rendition.themes.fontSize(`${plugin.settings.epubSettings.fontSize}%`);
+                        (iframe.contentWindow as any ).rendition = rendition; 
 
                         // var hash = window.location.hash.slice(2);
                         var loc = iframe.contentWindow.location.href.indexOf("?loc=");
