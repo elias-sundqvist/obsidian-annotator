@@ -127,29 +127,29 @@ export default ({ vault, plugin, resourceUrls }) => {
                           $viewer.classList.remove("loading");
                         });
 
-                        // book.loaded.navigation.then(function(toc){
-                        //   var $nav = iframe.contentDocument.getElementById("toc"),
-                        //       docfrag = iframe.contentDocument.createDocumentFragment();
+                        book.loaded.navigation.then((nav:any) => {
+                            var $nav = iframe.contentDocument.getElementById("toc"),
+                                docfrag = iframe.contentDocument.createDocumentFragment();
 
-                        //   toc.forEach(function(chapter, index) {
-                        //     var item = iframe.contentDocument.createElement("li");
-                        //     var link = iframe.contentDocument.createElement("a");
-                        //     link.id = "chap-" + chapter.id;
-                        //     link.textContent = chapter.label;
-                        //     link.href = chapter.href;
-                        //     item.appendChild(link);
-                        //     docfrag.appendChild(item);
+                            nav.forEach((chapter:epubjs.NavItem) => {
+                                const item = iframe.contentDocument.createElement("li");
+                                const link = iframe.contentDocument.createElement("a");
 
-                        //     link.onclick = function(){
-                        //       var url = link.getAttribute("href");
-                        //       rendition.display(url);
-                        //       return false;
-                        //     };
+                                link.id = "chap-" + chapter.id;
+                                link.textContent = chapter.label;
+                                link.href = chapter.href;
+                                item.appendChild(link);
+                                docfrag.appendChild(item);
 
-                        //   });
+                                link.onclick = () => {
+                                    const url = link.getAttribute("href");
+                                    rendition.display(url);
+                                    return false;
+                                };
+                            });
 
-                        //   $nav.appendChild(docfrag);
-                        // });
+                            $nav.appendChild(docfrag);
+                        });
 
                         // book.loaded.metadata.then(function(meta){
                         //   var $title = iframe.contentDocument.getElementById("title");
