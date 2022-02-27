@@ -12,6 +12,8 @@ export default ({ vault, plugin, resourceUrls }) => {
                 {...props}
                 onload={async iframe => {
                     const bookUrl = genericAnnotation.getProxiedUrl(props.epub, props, resourceUrls, vault);
+                    const viewerEl = iframe.contentDocument.getElementById("viewer");
+
 
                     (iframe.contentWindow as any).startEpubReader = function() {
                         const book = new epubjs.Book(bookUrl, {
@@ -25,7 +27,7 @@ export default ({ vault, plugin, resourceUrls }) => {
                           'pagination': { manager: "default", flow: "paginated" }
                         });
 
-                        const rendition = book.renderTo(iframe.contentDocument.getElementById("viewer"), {
+                        const rendition = book.renderTo(viewerEl, {
                             ...readingMode[plugin.settings.epubSettings.readingMode],
                             ignoreClass: "annotator-hl",
                             width: "100%",
@@ -130,63 +132,7 @@ export default ({ vault, plugin, resourceUrls }) => {
                             $viewer.classList.remove("loading");
                         });
 
-                        book.loaded.navigation.then((nav:any) => {
-                            var $nav = iframe.contentDocument.getElementById("toc"),
-                                docfrag = iframe.contentDocument.createDocumentFragment();
-
-                            nav.forEach((chapter:epubjs.NavItem) => {
-                                const item = iframe.contentDocument.createElement("li");
-                                const link = iframe.contentDocument.createElement("a");
-
-                                link.id = "chap-" + chapter.id;
-                                link.textContent = chapter.label;
-                                link.href = chapter.href;
-                                item.appendChild(link);
-                                docfrag.appendChild(item);
-
-                                link.onclick = () => {
-                                    const url = link.getAttribute("href");
-                                    rendition.display(url);
-                                    return false;
-                                };
-                            });
-
-                            $nav.appendChild(docfrag);
-                        });
-
-                        book.loaded.metadata.then(function(meta){
-                            var $title = iframe.contentDocument.getElementById("title");
-                            var $author = iframe.contentDocument.getElementById("author");
-                            var $cover = iframe.contentDocument.getElementById("cover");
-                            var $nav = iframe.contentDocument.getElementById('navigation');
-
-                            $title.textContent = meta.title;
-                            $author.textContent = meta.creator;
-
-                            book.loaded.cover.then((cover) => {
-                                if (cover) {
-                                    if(book.archive) {
-                                        book.archive.createUrl(cover, { base64: false }).then((url) => {
-                                            ($cover as HTMLImageElement).src = url;
-                                        });
-                                    } else {
-                                        ($cover as HTMLImageElement).src = cover;
-                                    }
-                                }
-                            });
-                        });
-
-                        book.rendition.hooks.content.register(function(contents, view) {
-                            contents.window.addEventListener('scrolltorange', function (e) {
-                                var range = e.detail;
-                                var cfi = new epubjs.EpubCFI(range, contents.cfiBase).toString();
-
-                                if (cfi) {
-                                  book.rendition.display(cfi);
-                                }
-                                e.preventDefault();
-                            });
-                        });
+                        addBookMetaToUI(iframe, book);
                     }
 
                     iframe.addEventListener('DOMContentLoaded', (iframe.contentWindow as any).startEpubReader(), { once: true });
@@ -196,3 +142,63 @@ export default ({ vault, plugin, resourceUrls }) => {
     };
     return EpubAnnotation;
 };
+
+function addBookMetaToUI(iframe:HTMLIFrameElement, book: epubjs.Book) {
+    // add chapters to table of contents
+    book.loaded.navigation.then((nav:any) => {
+        const toc = iframe.contentDocument.getElementById("toc"),
+            docfrag = iframe.contentDocument.createDocumentFragment();
+
+        nav.forEach((chapter:epubjs.NavItem) => {
+            const item = iframe.contentDocument.createElement("li");
+            const link = iframe.contentDocument.createElement("a");
+
+            link.id = "chap-" + chapter.id;
+            link.textContent = chapter.label;
+            link.href = chapter.href;
+            item.appendChild(link);
+            docfrag.appendChild(item);
+
+            link.onclick = () => {
+                const url = link.getAttribute("href");
+                book.rendition.display(url);
+                return false;
+            };
+        });
+
+        toc.appendChild(docfrag);
+    });
+
+    // add title and author to table of contents
+    book.loaded.metadata.then(function(meta){
+        iframe.contentDocument.getElementById("title").textContent = meta.title;
+        iframe.contentDocument.getElementById("author").textContent = meta.creator;
+    });
+
+    // add cover to table of contents
+    book.loaded.cover.then((cover:string) => {
+        const coverImgEl = iframe.contentDocument.getElementById("cover") as HTMLImageElement;
+
+        if (cover) {
+            if(book.archive) {
+                book.archive.createUrl(cover, { base64: false }).then((url) => {
+                    coverImgEl.src = url;
+                });
+            } else {
+                coverImgEl.src = cover;
+            }
+        }
+    });
+
+    book.rendition.hooks.content.register(function(contents) {
+        contents.window.addEventListener('scrolltorange', function (e) {
+            var range = e.detail;
+            var cfi = new epubjs.EpubCFI(range, contents.cfiBase).toString();
+
+            if (cfi) {
+              book.rendition.display(cfi);
+            }
+            e.preventDefault();
+        });
+    });
+}
