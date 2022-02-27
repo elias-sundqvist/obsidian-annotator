@@ -151,24 +151,27 @@ export default ({ vault, plugin, resourceUrls }) => {
                             $nav.appendChild(docfrag);
                         });
 
-                        // book.loaded.metadata.then(function(meta){
-                        //   var $title = iframe.contentDocument.getElementById("title");
-                        //   var $author = iframe.contentDocument.getElementById("author");
-                        //   var $cover = iframe.contentDocument.getElementById("cover");
-                        //   var $nav = iframe.contentDocument.getElementById('navigation');
+                        book.loaded.metadata.then(function(meta){
+                          var $title = iframe.contentDocument.getElementById("title");
+                          var $author = iframe.contentDocument.getElementById("author");
+                          var $cover = iframe.contentDocument.getElementById("cover");
+                          var $nav = iframe.contentDocument.getElementById('navigation');
 
-                        //   $title.textContent = meta.title;
-                        //   $author.textContent = meta.creator;
-                        //   if (book.archive) {
-                        //     book.archive.createUrl(book.cover)
-                        //       .then(function (url) {
-                        //         $cover.src = url;
-                        //       })
-                        //   } else {
-                        //     $cover.src = book.cover;
-                        //   }
+                          $title.textContent = meta.title;
+                          $author.textContent = meta.creator;
+                          if (book.archive) {
+                            book.loaded.cover.then((cover) => {
+                                book.archive.createUrl(cover, { base64: false }).then((url) => {
+                                    ($cover as HTMLImageElement).src = url;
+                                });
+                            });
+                          } else {
+                            book.loaded.cover.then((cover) => {
+                                ($cover as HTMLImageElement).src = cover;
+                            });
+                          }
 
-                        // });
+                        });
 
                         // book.rendition.hooks.content.register(function(contents, view) {
 
