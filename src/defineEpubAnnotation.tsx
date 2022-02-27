@@ -159,32 +159,31 @@ export default ({ vault, plugin, resourceUrls }) => {
 
                           $title.textContent = meta.title;
                           $author.textContent = meta.creator;
-                          if (book.archive) {
-                            book.loaded.cover.then((cover) => {
-                                book.archive.createUrl(cover, { base64: false }).then((url) => {
-                                    ($cover as HTMLImageElement).src = url;
-                                });
-                            });
-                          } else {
-                            book.loaded.cover.then((cover) => {
-                                ($cover as HTMLImageElement).src = cover;
-                            });
-                          }
 
+                            book.loaded.cover.then((cover) => {
+                                if (cover) {
+                                    if(book.archive) {
+                                        book.archive.createUrl(cover, { base64: false }).then((url) => {
+                                            ($cover as HTMLImageElement).src = url;
+                                        });
+                                    } else {
+                                        ($cover as HTMLImageElement).src = cover;
+                                    }
+                                }
+                            });
                         });
 
-                        // book.rendition.hooks.content.register(function(contents, view) {
+                        book.rendition.hooks.content.register(function(contents, view) {
+                          contents.window.addEventListener('scrolltorange', function (e) {
+                            var range = e.detail;
+                            var cfi = new epubjs.EpubCFI(range, contents.cfiBase).toString();
 
-                        //   contents.window.addEventListener('scrolltorange', function (e) {
-                        //     var range = e.detail;
-                        //     var cfi = new ePub.CFI(range, contents.cfiBase).toString();
-                        //     if (cfi) {
-                        //       book.rendition.display(cfi);
-                        //     }
-                        //     e.preventDefault();
-                        //   });
-
-                        // });
+                            if (cfi) {
+                              book.rendition.display(cfi);
+                            }
+                            e.preventDefault();
+                          });
+                        });
                     }
 
                     iframe.addEventListener('DOMContentLoaded', (iframe.contentWindow as any).startEpubReader(), { once: true });
