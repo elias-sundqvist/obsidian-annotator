@@ -3128,6 +3128,11 @@
   "resolved" "https://registry.npmjs.org/human-signals/-/human-signals-2.1.0.tgz"
   "version" "2.1.0"
 
+"hypothesis@^1.992.0":
+  "integrity" "sha512-XjzLZnTKQBno9v6nfc5aqLJevuStOeGhrNdYOkSGr8oeHepFsT07URgT/dNI1MYI4xQmlfHw2iQ2WmLuBWK7dQ=="
+  "resolved" "https://registry.npmjs.org/hypothesis/-/hypothesis-1.992.0.tgz"
+  "version" "1.992.0"
+
 "iconv-lite@0.4.24":
   "integrity" "sha512-v3MXnZAcvnywkTUEZomIActle7RXXeedOR31wwl7VlyoXO4Qi9arvSenNQWne1TcRwhCL1HwLI21bEqdpj8/rA=="
   "resolved" "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.4.24.tgz"
