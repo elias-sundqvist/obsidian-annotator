@@ -13,7 +13,10 @@ export default ({ vault, plugin, resourceUrls }) => {
                 onload={async iframe => {
                     const bookUrl = genericAnnotation.getProxiedUrl(props.epub, props, resourceUrls, vault);
                     const viewerEl = iframe.contentDocument.getElementById("viewer");
-
+                    const readingMode = ({
+                      'scroll': { manager: "continuous", flow: "scrolled" },
+                      'pagination': { manager: "default", flow: "paginated" }
+                    });
 
                     (iframe.contentWindow as any).startEpubReader = function() {
                         const book = new epubjs.Book(bookUrl, {
@@ -22,12 +25,7 @@ export default ({ vault, plugin, resourceUrls }) => {
                           }
                         });
 
-                        const readingMode = ({
-                          'scroll': { manager: "continuous", flow: "scrolled" },
-                          'pagination': { manager: "default", flow: "paginated" }
-                        });
-
-                        const rendition = book.renderTo(viewerEl, {
+                        book.renderTo(viewerEl, {
                             ...readingMode[plugin.settings.epubSettings.readingMode],
                             ignoreClass: "annotator-hl",
                             width: "100%",
@@ -37,54 +35,18 @@ export default ({ vault, plugin, resourceUrls }) => {
 
                         //TODO: FIX fontSize settings. It doesn't work anymore :(
                         // Looks like book renders with font size from the settings and then the setting drops to default 100%
-                        rendition.themes.fontSize(`${plugin.settings.epubSettings.fontSize}%`);
-                        (iframe.contentWindow as any ).rendition = rendition; 
+                        // book.rendition.themes.fontSize(`${plugin.settings.epubSettings.fontSize}%`);
+                        (iframe.contentWindow as any).rendition = book.rendition; 
 
-                        // var hash = window.location.hash.slice(2);
-                        var loc = iframe.contentWindow.location.href.indexOf("?loc=");
-                        if (loc > -1) {
-                            var href =  iframe.contentWindow.location.href.slice(loc + 5);
-                            var hash = decodeURIComponent(href);
-                        }
+                        book.rendition.display();
 
-                        rendition.display(hash || undefined);
-
-                        switch (plugin.settings.epubSettings.readingMode) {
-                            case "scroll":
-                                iframe.contentDocument.querySelectorAll("a.arrow").forEach((e) => e.remove());
-                                iframe.contentDocument.querySelector("#viewer").classList.add("hide-after");
-                                break;
-
-                            case "pagination":
-                                var next = iframe.contentDocument.getElementById("next");
-                                next.addEventListener("click", function(e){
-                                    rendition.next();
-                                    e.preventDefault();
-                                }, false);
-
-                                var prev = iframe.contentDocument.getElementById("prev");
-                                prev.addEventListener("click", function(e){
-                                    rendition.prev();
-                                    e.preventDefault();
-                                }, false);
-                                break;
-                        }
-
-                        var nav = iframe.contentDocument.getElementById("navigation");
-                        var opener = iframe.contentDocument.getElementById("opener");
-                        opener.addEventListener("click", function(e){
-                            nav.classList.add("open");
-                        }, false);
-
-                        var closer = iframe.contentDocument.getElementById("closer");
-                        closer.addEventListener("click", function(e){
-                            nav.classList.remove("open");
-                        }, false);
+                        configureNavigationEvents(iframe, book, plugin.settings.epubSettings.readingMode);
+                        addBookMetaToUI(iframe, book);
 
                         // Hidden
                         var hiddenTitle = iframe.contentDocument.getElementById("hiddenTitle");
 
-                        rendition.on("rendered", function(section){
+                        book.rendition.on("rendered", function(section){
                             var current = book.navigation && book.navigation.get(section.href);
 
                             if (current) {
@@ -112,27 +74,10 @@ export default ({ vault, plugin, resourceUrls }) => {
                             }
                         });
 
-                        var keyListener = function(e){
-                          // Left Key
-                          if ((e.keyCode || e.which) == 37) {
-                              rendition.prev();
-                          }
-
-                          // Right Key
-                          if ((e.keyCode || e.which) == 39) {
-                              rendition.next();
-                          }
-                        };
-
-                        rendition.on("keyup", keyListener);
-                        iframe.contentDocument.addEventListener("keyup", keyListener, false);
-
                         book.ready.then(function () {
                             var $viewer = iframe.contentDocument.getElementById("viewer");
                             $viewer.classList.remove("loading");
                         });
-
-                        addBookMetaToUI(iframe, book);
                     }
 
                     iframe.addEventListener('DOMContentLoaded', (iframe.contentWindow as any).startEpubReader(), { once: true });
@@ -201,4 +146,52 @@ function addBookMetaToUI(iframe:HTMLIFrameElement, book: epubjs.Book) {
             e.preventDefault();
         });
     });
+}
+
+function configureNavigationEvents(iframe:HTMLIFrameElement, book:epubjs.Book, readingMode:"scroll" | "pagination") {
+    const idoc = iframe.contentDocument;
+
+    // configure UI arrows
+    if (readingMode == 'scroll') {
+        idoc.querySelectorAll("a.arrow").forEach((e:HTMLElement) => e.style.display = 'none');
+        idoc.querySelector("#viewer").classList.add("hide-after");
+    }
+
+    idoc.getElementById("next").addEventListener("click", function(e:Event){
+        book.rendition.next();
+        e.preventDefault();
+    }, false);
+
+    idoc.getElementById("prev").addEventListener("click", function(e:Event){
+        book.rendition.prev();
+        e.preventDefault();
+    }, false);
+
+    // turn pages by arrow buttons
+    const keyListener = function(e:KeyboardEvent){
+      // Left Key
+      if ((e.keyCode || e.which) == 37) {
+          book.rendition.prev();
+      }
+
+      // Right Key
+      if ((e.keyCode || e.which) == 39) {
+          book.rendition.next();
+      }
+    };
+
+    book.rendition.on("keyup", keyListener);
+    // to make keys work even when focus outside of reader iframe
+    document.addEventListener("keyup", keyListener, false);
+
+    // open/close table of contents
+    const nav = iframe.contentDocument.getElementById("navigation");
+
+    idoc.getElementById("opener").addEventListener("click", function(_){
+        nav.classList.add("open");
+    }, false);
+
+    idoc.getElementById("closer").addEventListener("click", function(_){
+        nav.classList.remove("open");
+    }, false);
 }
