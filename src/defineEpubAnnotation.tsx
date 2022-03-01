@@ -1,7 +1,12 @@
 import * as genericAnnotation from 'defineGenericAnnotation';
 import React from 'react';
+import { AnnotatorSettings } from 'settings';
 import { EpubAnnotationProps } from './types';
+
 import * as epubjs from 'epubjs';
+import { SpineItem } from 'epubjs/types/section';
+import { PackagingMetadataObject } from 'epubjs/types/packaging';
+import Navigation from 'epubjs/types/navigation';
 
 export default ({ vault, plugin, resourceUrls }) => {
     const GenericAnnotationEpub = genericAnnotation.default({ vault, plugin, resourceUrls });
@@ -12,7 +17,7 @@ export default ({ vault, plugin, resourceUrls }) => {
                 {...props}
                 onload={async iframe => {
                     const epubReader = new EpubReader(plugin.settings.epubSettings, props, resourceUrls, vault);
-                    iframe.addEventListener('DOMContentLoaded', epubReader.start(iframe), { capture: true, once: true });
+                    iframe.contentDocument.addEventListener('DOMContentLoaded', epubReader.start(iframe), false);
                 }}
             />
         );
@@ -22,13 +27,13 @@ export default ({ vault, plugin, resourceUrls }) => {
 
 class EpubReader {
     readonly bookUrl:string;
-    readonly settings:any;
+    readonly settings:AnnotatorSettings["epubSettings"];
     readonly readingModes:Object = {
       'scroll': { manager: "continuous", flow: "scrolled" },
       'pagination': { manager: "default", flow: "paginated" }
     }
 
-    constructor(epubSettings:any, props:EpubAnnotationProps, resourceUrls:any, vault:any) {
+    constructor(epubSettings:AnnotatorSettings["epubSettings"], props:EpubAnnotationProps, resourceUrls:any, vault:any) {
         this.bookUrl = genericAnnotation.getProxiedUrl(props.epub, props, resourceUrls, vault);
         this.settings = epubSettings;
     }
@@ -41,10 +46,10 @@ class EpubReader {
 
         this.configureNavigationEvents(book, id, this.settings.readingMode);
         this.addBookMetaToUI(book, iframe);
-        book.rendition.on("rendered", (section:any) => this.renderedHook(book, id, section));
+        book.rendition.on("rendered", (section:SpineItem) => this.renderedHook(book, id, section));
 
         book.rendition.display();
-        book.ready.then(() => this.hideLoader(id));
+        book.ready.then(() => this.removeLoader(id));
     }
 
     initBook(id:Document, iw:Window):epubjs.Book {
@@ -53,7 +58,6 @@ class EpubReader {
                 return iw.location.origin + iw.location.pathname + "?loc=" + path;
             }
         });
-        (iw as any).rendition = book.rendition; 
 
         book.renderTo(id.getElementById("viewer"), {
             ...this.readingModes[this.settings.readingMode],
@@ -63,14 +67,16 @@ class EpubReader {
             allowScriptedContent: true
         });
 
-        // TODO: FIX fontSize settings. It doesn't work anymore :(
-        // Looks like book renders with font size from the settings and then the setting drops to default 100%
-        book.rendition.themes.fontSize(`${this.settings.fontSize}%`);
+        book.rendition.themes.fontSize(`${this.settings.fontSize}%`)
+        book.rendition.on("relocated", (_:any) => {
+            book.rendition.themes.fontSize(`${this.settings.fontSize}%`)
+        });
 
+        (iw as any).rendition = book.rendition; 
         return book;
     }
 
-    renderedHook(book:epubjs.Book, id:Document, section:any) {
+    renderedHook(book:epubjs.Book, id:Document, section:SpineItem) {
         var current = book.navigation && book.navigation.get(section.href);
 
         if (current) {
@@ -98,11 +104,11 @@ class EpubReader {
 
     addBookMetaToUI(book: epubjs.Book, iframe:HTMLIFrameElement) {
         // add chapters to table of contents
-        book.loaded.navigation.then((nav:any) => {
+        book.loaded.navigation.then((nav:Navigation) => {
             const toc = iframe.contentDocument.getElementById("toc"),
                 docfrag = iframe.contentDocument.createDocumentFragment();
 
-            nav.forEach((chapter:epubjs.NavItem) => {
+            nav.forEach((chapter:epubjs.NavItem):any => {
                 const item = iframe.contentDocument.createElement("li");
                 const link = iframe.contentDocument.createElement("a");
 
@@ -123,7 +129,7 @@ class EpubReader {
         });
 
         // add title and author to table of contents
-        book.loaded.metadata.then(function(meta){
+        book.loaded.metadata.then(function(meta:PackagingMetadataObject){
             iframe.contentDocument.getElementById("title").textContent = meta.title;
             iframe.contentDocument.getElementById("author").textContent = meta.creator;
         });
@@ -143,8 +149,8 @@ class EpubReader {
             }
         });
 
-        book.rendition.hooks.content.register(function(contents) {
-            contents.window.addEventListener('scrolltorange', function (e) {
+        book.rendition.hooks.content.register(function(contents:epubjs.Contents) {
+            contents.window.addEventListener('scrolltorange', function (e:any) {
                 var range = e.detail;
                 var cfi = new epubjs.EpubCFI(range, contents.cfiBase).toString();
 
@@ -203,7 +209,7 @@ class EpubReader {
         }, false);
     }
 
-    hideLoader = (id:Document) => {
+    removeLoader = (id:Document) => {
         id.getElementById("viewer").classList.remove("loading");
     }
 }
