@@ -16,6 +16,20 @@ export type Group = {
     type: 'private' | 'restricted';
 };
 
+export type VideoAnnotation = {
+    readwiseId: string;
+    content: string;
+    title: string;
+    tags: string[];
+    _id: string;
+    video: string;
+    start: number;
+    user: 'obsidianuser';
+    updatedAt: string;
+    createdAt: string;
+    __v: 0;
+};
+
 export type Annotation = {
     id: string;
     document: {
@@ -113,8 +127,15 @@ export type EpubAnnotationProps = GenericAnnotationProps & {
     epub: string;
 };
 
-export type SpecificAnnotationProps = PdfAnnotationProps | EpubAnnotationProps;
+export type VideoAnnotationProps = GenericAnnotationProps & {
+    video: string;
+};
 
+
+export type SpecificAnnotationProps =
+    | PdfAnnotationProps
+    | EpubAnnotationProps
+    | VideoAnnotationProps
 export type LocalIFrameProps = {
     onIframePatch: (iframe: HTMLIFrameElement) => Promise<void>;
     onload: (iframe: HTMLIFrameElement) => Promise<void>;

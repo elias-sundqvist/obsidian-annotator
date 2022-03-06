@@ -9,9 +9,13 @@ import AnnotatorPlugin from 'main';
 import { checkPseudoAnnotationEquality, getAnnotationHighlightTextData } from 'annotationUtils';
 import { MarkdownRenderer, normalizePath, TFile } from 'obsidian';
 import { DarkReaderType } from 'darkreader';
+import { getSubtitles } from 'youtube-captions-scraper';
+import getYouTubeMetaData from 'youtube-metadata-scraper';
+import { deleteVideoAnnotation, loadVideoAnnotations, writeVideoAnnotation } from 'videoAnnotationFileUtils';
 import { awaitResourceLoading, resourcesZip, resourceUrls } from 'resourcesFolder';
+import { corsFetch } from 'corsFetch';
 
-const proxiedHosts = new Set(['cdn.hypothes.is', 'via.hypothes.is', 'hypothes.is']);
+const proxiedHosts = new Set(['cdn.hypothes.is', 'via.hypothes.is', 'hypothes.is', 'annotate.tv']);
 export default ({ vault, plugin }) => {
     const urlToPathMap = new Map();
     const GenericAnnotation = (
@@ -144,7 +148,16 @@ export default ({ vault, plugin }) => {
                         for (const subFrame of currentSubFrames) {
                             if (forwarded.has(subFrame)) continue;
                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            const newMessage = new (event.constructor as any)(event.type, event);
+                            const newMessage = new (event.constructor as any)(
+                                event.type,
+                                'video' in props
+                                    ? new Proxy(event, {
+                                          get: (target, prop) =>
+                                              prop == 'origin' ? 'https://www.youtube.com' : target[prop]
+                                      })
+                                    : event
+                            );
+
                             forwardedMessages.add(newMessage);
                             subFrame.dispatchEvent(newMessage);
                             forwarded.add(subFrame);
@@ -184,9 +197,156 @@ export default ({ vault, plugin }) => {
                             statusText: 'ok'
                         });
                     }
+                    if (href.startsWith(`https://annotate.tv/api/transcript`) && 'video' in props) {
+                        const video_metadata = await getYouTubeMetaData(corsFetch, props.video);
+                        const video_id = video_metadata.shortlinkUrl.substr('https://youtu.be/'.length);
+                        res = (
+                            await getSubtitles(corsFetch, {
+                                videoID: video_id, // youtube video id
+                                lang: 'en' // default: `en`
+                            })
+                        ).map((x, i) => ({ id: `${i}`, ...x }));
+                    }
+                    if (href.startsWith(`https://annotate.tv/api/annotations`)) {
+                        switch (requestInit.method) {
+                            case 'DELETE':
+                                res = {
+                                    data: await deleteVideoAnnotation(
+                                        href.substr(`https://annotate.tv/api/annotations/`.length),
+                                        vault,
+                                        props.annotationFile
+                                    )
+                                };
+                                break;
+                            case 'GET':
+                                try {
+                                    res = {
+                                        data: await loadVideoAnnotations(new URL(href), vault, props.annotationFile)
+                                    };
+                                } catch (e) {
+                                    console.error('failed to load annotations', { error: e });
+                                }
+                                break;
+                            case 'POST':
+                                res = {
+                                    data: await writeVideoAnnotation(
+                                        JSON.parse(requestInit.body.toString()),
+                                        plugin,
+                                        props.annotationFile
+                                    )
+                                };
+                                break;
+                            case 'PUT':
+                                res = {
+                                    data: await writeVideoAnnotation(
+                                        {
+                                            ...JSON.parse(requestInit.body.toString()),
+                                            _id: href.substr(`https://annotate.tv/api/annotations/`.length)
+                                        },
+                                        plugin,
+                                        props.annotationFile
+                                    )
+                                };
+                                break;
+                        }
+                    }
+                    if (href.startsWith(`https://annotate.tv/api/auth/session`)) {
+                        res = {
+                            user: {
+                                name: 'Obsidian User',
+                                email: 'example@example.com',
+                                image: '',
+                                _id: 'obsidianuser',
+                                createdAt: JSON.parse(JSON.stringify(new Date())),
+                                updatedAt: JSON.parse(JSON.stringify(new Date()))
+                            },
+                            expires: JSON.parse(
+                                JSON.stringify(new Date(new Date().setFullYear(new Date().getFullYear() + 1)))
+                            )
+                        };
+                    }
+                    if (href == `https://annotate.tv/videos/620d5a42b9ab630009bf3e31.html` && 'video' in props) {
+                        const video_metadata = await getYouTubeMetaData(corsFetch, props.video);
+                        const video_id = video_metadata.shortlinkUrl.substr('https://youtu.be/'.length);
+                        const video_data = {
+                            props: {
+                                pageProps: {
+                                    video: {
+                                        _id: '620d5a42b9ab630009bf3e31',
+                                        finished: false,
+                                        archived: false,
+                                        originalTags: [],
+                                        tags: [],
+                                        lastProgress: 3.0936230133514404,
+                                        url: video_metadata.shortlinkUrl,
+                                        platform: 'youtube',
+                                        title: video_metadata.title,
+                                        duration: 99999, // Unknown
+                                        thumbnails: {
+                                            default: {
+                                                url: `https://i.ytimg.com/vi/${video_id}/default.jpg`,
+                                                width: 120,
+                                                height: 90
+                                            },
+                                            medium: {
+                                                url: `https://i.ytimg.com/vi/${video_id}/mqdefault.jpg`,
+                                                width: 320,
+                                                height: 180
+                                            },
+                                            high: {
+                                                url: `https://i.ytimg.com/vi/${video_id}/hqdefault.jpg`,
+                                                width: 480,
+                                                height: 360
+                                            },
+                                            standard: {
+                                                url: `https://i.ytimg.com/vi/${video_id}/sddefault.jpg`,
+                                                width: 640,
+                                                height: 480
+                                            },
+                                            maxres: {
+                                                url: `https://i.ytimg.com/vi/${video_id}/maxresdefault.jpg`,
+                                                width: 1280,
+                                                height: 720
+                                            }
+                                        },
+                                        description: video_metadata.description,
+                                        channelId: 'UCbmNph6atAoGfqLoCL_duAg',
+                                        channelTitle: video_metadata.embedinfo?.author_name,
+                                        categoryId: '22',
+                                        user: 'obsidianuser',
+                                        updatedAt: 'Wed Feb 16 2022 20:11:28 GMT+0000 (Coordinated Universal Time)',
+                                        createdAt: 'Wed Feb 16 2022 20:10:42 GMT+0000 (Coordinated Universal Time)',
+                                        __v: 0,
+                                        playlist: null
+                                    }
+                                },
+                                __N_SSP: true
+                            },
+                            page: '/videos/[id]',
+                            query: { id: '620d5a42b9ab630009bf3e31' },
+                            buildId: 'kuDd0N4Bv73cMnqLZZKCW',
+                            isFallback: false,
+                            gssp: true,
+                            locale: 'en-US',
+                            locales: ['en-US'],
+                            defaultLocale: 'en-US',
+                            scriptLoader: []
+                        };
+                        res = `<!DOCTYPE html><html lang="en-US"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width"/><meta name="next-head-count" content="2"/><link rel="preload" href="/_next/static/css/6ecf6918cbb4c1161966.css" as="style"/><link rel="stylesheet" href="/_next/static/css/6ecf6918cbb4c1161966.css" data-n-g=""/><noscript data-n-css=""></noscript><script defer="" nomodule="" src="/_next/static/chunks/polyfills-f35e5aaa8964e930bb93.js"></script><script src="/_next/static/chunks/webpack-2cf3f46015d5cb72bffe.js" defer=""></script><script src="/_next/static/chunks/framework-281e90899ec90e7c48e8.js" defer=""></script><script src="/_next/static/chunks/main-f2958fa1c43570a638b9.js" defer=""></script><script src="/_next/static/chunks/pages/_app-29f2c5e3af36e3818334.js" defer=""></script><script src="/_next/static/chunks/f057a831-80b285c8b241af667dc5.js" defer=""></script><script src="/_next/static/chunks/210e6083-b60d9f84e428e38795c0.js" defer=""></script><script src="/_next/static/chunks/f9fff01a-bd49c52cc4c0f92b2ff2.js" defer=""></script><script src="/_next/static/chunks/84c042bb-4da4e215e634a7601ea2.js" defer=""></script><script src="/_next/static/chunks/420-7a83248dc7b2632b47d1.js" defer=""></script><script src="/_next/static/chunks/555-ab82c0f2bbb3d3371e76.js" defer=""></script><script src="/_next/static/chunks/570-9d744d6eeeb86b1dae1c.js" defer=""></script><script src="/_next/static/chunks/pages/videos/%5Bid%5D-5626b26dd8fea94c76b7.js" defer=""></script><script src="/_next/static/kuDd0N4Bv73cMnqLZZKCW/_buildManifest.js" defer=""></script><script src="/_next/static/kuDd0N4Bv73cMnqLZZKCW/_ssgManifest.js" defer=""></script></head><body><div id="__next"></div><script id="__NEXT_DATA__" type="application/json">${JSON.stringify(
+                            video_data
+                        )}</script></body></html>`;
+                        return new Response(Buffer.from(res, 'utf8'), {
+                            status: 200,
+                            statusText: 'ok'
+                        });
+                    }
                     if (href.startsWith(`http://localhost:8001/api/search`)) {
                         try {
-                            res = await loadAnnotations(new URL(href), vault, props.annotationFile);
+                            res = await loadAnnotations(
+                                'epub' in props ? new URL(href) : null,
+                                vault,
+                                props.annotationFile
+                            );
                         } catch (e) {
                             console.error('failed to load annotations', { error: e });
                         }
@@ -289,7 +449,7 @@ export default ({ vault, plugin }) => {
                             return new Response(null, { status: 404, statusText: 'file not found' });
                         }
                     }
-                    return await fetch(requestInfo, requestInit);
+                    return await corsFetch(requestInfo, requestInit);
                 }}
                 htmlPostProcessFunction={(html: string) => {
                     if ('pdf' in props) {
@@ -300,29 +460,14 @@ export default ({ vault, plugin }) => {
                     }
                     return html;
                 }}
+                postMessagePatchStrategy={'video' in props ? 'top' : null}
+                tagPatchStrategy={'video' in props ? 'createEl' : 'prototype'}
+                onMessagePatchStrategy={'video' in props ? null : null}
                 onIframePatch={async iframe => {
                     subFrames.add(new WeakRef(iframe.contentWindow));
                     patchSidebarMarkdownRendering(iframe, props.annotationFile, plugin);
                     patchIframeEventBubbling(iframe, props.containerEl);
                     await props.onIframePatch?.(iframe);
-                    iframe.contentWindow.addEventListener('message', async msg => {
-                        if (forwardedMessages.has(msg)) return;
-                        plugin.log('On Message Called', { iframe, msg, ...msg.data });
-                        const forwarded = new Set();
-                        const forwardToSubFrames = () => {
-                            const currentSubFrames = new Set([...subFrames].map(x => x.deref()).filter(x => x));
-                            plugin.log('forwarding...');
-                            for (const subFrame of currentSubFrames) {
-                                if (forwarded.has(subFrame)) continue;
-                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                const newMessage = new (msg.constructor as any)(msg.type, msg);
-                                forwardedMessages.add(newMessage);
-                                subFrame.dispatchEvent(newMessage);
-                                forwarded.add(subFrame);
-                            }
-                        };
-                        forwardToSubFrames();
-                    });
 
                     /* eslint-disable @typescript-eslint/no-explicit-any */
                     (iframe.contentWindow as any).DarkReader = (
@@ -400,6 +545,7 @@ export default ({ vault, plugin }) => {
                     });
                 }}
                 onload={async iframe => {
+                    await props.onload(iframe);
                     let sidebarFrame;
                     do {
                         await wait(100);
@@ -453,10 +599,12 @@ export default ({ vault, plugin }) => {
             display: none!important;
         }`;
                     sidebarFrame.contentDocument.head.appendChild(style);
-
-                    await props.onload(iframe);
                 }}
-                outerIframeProps={{ height: '100%', width: '100%' }}
+                outerIframeProps={{
+                    height: '100%',
+                    width: '100%',
+                    sandbox: 'allow-same-origin allow-scripts allow-presentation'
+                }}
             />
         );
     };

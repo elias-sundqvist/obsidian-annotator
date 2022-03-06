@@ -9,7 +9,8 @@ import {
     TFile,
     MarkdownPostProcessorContext,
     parseLinktext,
-    MarkdownPreviewView
+    MarkdownPreviewView,
+    Notice
 } from 'obsidian';
 
 import definePdfAnnotation from './definePdfAnnotation';
@@ -17,7 +18,8 @@ import { around } from 'monkey-around';
 
 import { VIEW_TYPE_PDF_ANNOTATOR, ICON_NAME, ANNOTATION_TARGET_PROPERTY } from './constants';
 import defineEpubAnnotation from './defineEpubAnnotation';
-import { PdfAnnotationProps, EpubAnnotationProps } from './types';
+import defineVideoAnnotation from './defineVideoAnnotation';
+import { PdfAnnotationProps, EpubAnnotationProps, VideoAnnotationProps } from './types';
 import { EditorState } from '@codemirror/state';
 import AnnotatorSettingsTab, { AnnotatorSettings, DEFAULT_SETTINGS, IHasAnnotatorSettings } from 'settings';
 import AnnotatorView from 'annotatorView';
@@ -25,14 +27,15 @@ import { wait } from 'utils';
 import { awaitResourceLoading, loadResourcesZip, unloadResources } from 'resourcesFolder';
 import stringEncodedResourcesFolder from './resources!zipStringEncoded';
 import * as jszip from 'jszip';
+import { corsFetch } from './corsFetch';
 
 export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSettings {
     settings: AnnotatorSettings;
-    resourceUrls: Map<string, string>;
     public pdfAnnotatorFileModes: { [file: string]: string } = {};
     private _loaded = false;
     PdfAnnotation: (props: PdfAnnotationProps) => JSX.Element;
     EpubAnnotation: (props: EpubAnnotationProps) => JSX.Element;
+    VideoAnnotation: (props: VideoAnnotationProps) => JSX.Element;
     views: Set<AnnotatorView> = new Set();
     dragData: { annotationFilePath: string; annotationId: string; annotationText: string };
     codeMirrorInstances: Set<WeakRef<CodeMirror.Editor>>;
@@ -46,6 +49,18 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
 
     async loadResources() {
         await loadResourcesZip(jszip.loadAsync(stringEncodedResourcesFolder));
+        if (this.settings.annotateTvUrl) {
+            try {
+                const response = await corsFetch(this.settings.annotateTvUrl);
+                if (response.ok) {
+                    await loadResourcesZip(jszip.loadAsync(await response.arrayBuffer()));
+                } else {
+                    new Notice('Annotator: Could not fetch Annotate.TV resource zip');
+                }
+            } catch (e) {
+                new Notice('Annotator: Could not fetch Annotate.TV resource zip');
+            }
+        }
         await awaitResourceLoading();
     }
 

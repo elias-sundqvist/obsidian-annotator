@@ -105,6 +105,19 @@ export default class AnnotatorView extends FileView {
                             />
                         );
                         break;
+                    case 'video':
+                        component = (
+                            <this.plugin.VideoAnnotation
+                                video={annotationTarget}
+                                containerEl={this.contentEl}
+                                annotationFile={file.path}
+                                onload={async iframe => {
+                                    this.iframe = iframe;
+                                }}
+                                onDarkReadersUpdated={this.onDarkReadersUpdated.bind(this)}
+                            />
+                        );
+                        break;
                 }
                 ReactDOM.render(component, this.contentEl);
             } else {
