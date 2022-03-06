@@ -139,7 +139,7 @@ export default ({ vault, plugin }) => {
             // This forwards any message posted to the top window to the children.
             const listener = async event => {
                 if (forwardedMessages.has(event)) return;
-                plugin.log('Top Window got message', { event, ...event.data });
+                plugin.log('Top Window got message', typeof event.data == 'string' ? event : { event, ...event.data });
                 const forwarded = new Set();
                 const forwardToSubFrames = () => {
                     const currentSubFrames = new Set([...subFrames].map(x => x.deref()).filter(x => x));
