@@ -1,23 +1,23 @@
 import defineGenericAnnotation from 'defineGenericAnnotation';
 import React from 'react';
-import { wait } from 'utils';
-import { EpubAnnotationProps } from './types';
+import { WebAnnotationProps } from './types';
+import { wait } from './utils';
 
 export default ({ vault, plugin }) => {
     const GenericAnnotationEpub = defineGenericAnnotation({ vault, plugin });
-    const EpubAnnotation = ({ ...props }: EpubAnnotationProps) => {
+    const EpubAnnotation = ({ ...props }: WebAnnotationProps) => {
         return (
             <GenericAnnotationEpub
-                baseSrc="https://cdn.hypothes.is/demos/epub/epub.js/index.html"
+                baseSrc={props.url}
                 {...props}
                 onload={async iframe => {
                     await props.onload?.(iframe);
                     while (iframe?.contentDocument?.body?.innerHTML == '') {
                         await wait(50);
                     }
-
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    (iframe.contentWindow as any).epubReader(plugin.settings.epubSettings);
+                    const script = iframe.contentDocument.createElement('script');
+                    script.src = 'https://cdn.hypothes.is/hypothesis';
+                    iframe.contentDocument.head.appendChild(script);
                 }}
             />
         );

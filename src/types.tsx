@@ -131,11 +131,16 @@ export type VideoAnnotationProps = GenericAnnotationProps & {
     video: string;
 };
 
+export type WebAnnotationProps = GenericAnnotationProps & {
+    url: string;
+};
 
 export type SpecificAnnotationProps =
     | PdfAnnotationProps
     | EpubAnnotationProps
     | VideoAnnotationProps
+    | WebAnnotationProps;
+
 export type LocalIFrameProps = {
     onIframePatch: (iframe: HTMLIFrameElement) => Promise<void>;
     onload: (iframe: HTMLIFrameElement) => Promise<void>;

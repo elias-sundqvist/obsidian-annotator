@@ -118,6 +118,19 @@ export default class AnnotatorView extends FileView {
                             />
                         );
                         break;
+                    case 'web':
+                        component = (
+                            <this.plugin.WebAnnotation
+                                url={annotationTarget}
+                                containerEl={this.contentEl}
+                                annotationFile={file.path}
+                                onload={async iframe => {
+                                    this.iframe = iframe;
+                                }}
+                                onDarkReadersUpdated={this.onDarkReadersUpdated.bind(this)}
+                            />
+                        );
+                        break;
                 }
                 ReactDOM.render(component, this.contentEl);
             } else {
