@@ -1,5 +1,6 @@
 import typescript from '@rollup/plugin-typescript';
 import {nodeResolve} from '@rollup/plugin-node-resolve';
+import json from '@rollup/plugin-json';
 import commonjs from '@rollup/plugin-commonjs';
 import copy from 'rollup-plugin-copy'
 import fs from 'fs';
@@ -58,6 +59,7 @@ export default {
   "@lezer/lr"],
   plugins: [
     typescript(),
+    json(),
     nodeResolve({browser: true}),
     replace({
       'process.env.NODE_ENV': JSON.stringify('production')

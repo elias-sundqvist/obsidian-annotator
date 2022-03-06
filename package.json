@@ -1,6 +1,6 @@
 {
   "name": "obsidian-annotator",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "This is a sample plugin for Obsidian (https://obsidian.md)",
   "main": "main.js",
   "scripts": {
@@ -8,7 +8,9 @@
     "lint": "eslint src --ext .ts,.tsx",
     "dev": "rollup --config rollup.config.js -w",
     "test": "jest",
-    "build": "rollup --config rollup.config.js --environment BUILD:production"
+    "quick-build": "rollup --config rollup.config.js --environment BUILD:production",
+    "build": "npm run build-hypothesis && npm run quick-build",
+    "build-hypothesis": "rimraf resources/cdn.hypothes.is/hypothesis/build && cd submodules/hypothesis-client-annotator-fork && npm i --force && npm run build && cd ../.. && move-file submodules/hypothesis-client-annotator-fork/build resources/cdn.hypothes.is/hypothesis/build"
   },
   "keywords": [],
   "author": "",
@@ -26,7 +28,6 @@
     "@codemirror/rangeset": "^0.19.0",
     "@codemirror/search": "^0.19.0",
     "@codemirror/state": "^0.19.0",
-    "@codemirror/stream-parser": "https://github.com/lishid/stream-parser",
     "@codemirror/view": "^0.19.0",
     "@rollup/plugin-commonjs": "^18.0.0",
     "@rollup/plugin-json": "^4.1.0",
@@ -39,6 +40,7 @@
     "@typescript-eslint/eslint-plugin": "^4.29.3",
     "@typescript-eslint/parser": "^4.29.3",
     "babel-jest": "^27.1.1",
+    "cross-env": "^7.0.3",
     "eslint": "^7.32.0",
     "eslint-config-prettier": "^8.3.0",
     "eslint-plugin-prettier": "^3.4.1",
@@ -46,8 +48,11 @@
     "jest": "^27.1.1",
     "magic-string": "^0.25.7",
     "minify": "^7.0.2",
+    "move-cli": "^2.0.0",
+    "move-file-cli": "^3.0.0",
     "obsidian": "^0.13.11",
     "prettier": "^2.3.2",
+    "rimraf": "^3.0.2",
     "rollup": "^2.32.1",
     "rollup-plugin-analyzer": "^4.0.0",
     "rollup-plugin-base64": "^1.0.1",
