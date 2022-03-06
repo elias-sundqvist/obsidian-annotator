@@ -65,7 +65,7 @@ export default class AnnotatorView extends FileView {
         (async () => {
             // Prevent pane from loading too early.
             await this.plugin.setupPromise;
-            await this.plugin.awaitDataView();
+            await this.plugin.awaitDataViewPage(file.path);
             ReactDOM.unmountComponentAtNode(this.contentEl);
             this.contentEl.empty();
             const annotationTarget = this.getAnnotationTarget(file);

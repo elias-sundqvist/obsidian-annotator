@@ -206,9 +206,9 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         }
     }
 
-    async awaitDataView() {
+    async awaitDataViewPage(filePath: string) {
         const dataview = (this.app as any)?.plugins?.getPlugin('dataview'); // eslint-disable-line
-        while (dataview && !dataview.api) {
+        while (dataview && (!dataview.api || !dataview.api.page(filePath))) {
             await wait(50);
         }
     }
