@@ -11,7 +11,7 @@ import {
     parseLinktext,
     MarkdownPreviewView
 } from 'obsidian';
-import loadResourceUrls from './loadResourceUrls';
+
 import definePdfAnnotation from './definePdfAnnotation';
 import { around } from 'monkey-around';
 
@@ -22,6 +22,9 @@ import { EditorState } from '@codemirror/state';
 import AnnotatorSettingsTab, { AnnotatorSettings, DEFAULT_SETTINGS, IHasAnnotatorSettings } from 'settings';
 import AnnotatorView from 'annotatorView';
 import { wait } from 'utils';
+import { awaitResourceLoading, loadResourcesZip, unloadResources } from 'resourcesFolder';
+import stringEncodedResourcesFolder from './resources!zipStringEncoded';
+import * as jszip from 'jszip';
 
 export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSettings {
     settings: AnnotatorSettings;
@@ -41,19 +44,34 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         await this.setupPromise;
     }
 
+    async loadResources() {
+        await loadResourcesZip(jszip.loadAsync(stringEncodedResourcesFolder));
+        await awaitResourceLoading();
+    }
+
+    unloadResources() {
+        unloadResources();
+    }
+
     async onloadImpl() {
         await this.loadSettings();
         this.registerView(VIEW_TYPE_PDF_ANNOTATOR, leaf => new AnnotatorView(leaf, this));
+        await this.loadResources();
         this.codeMirrorInstances = new Set();
-        this.resourceUrls = await loadResourceUrls;
         this.PdfAnnotation = definePdfAnnotation({
             vault: this.app.vault,
-            resourceUrls: this.resourceUrls,
             plugin: this
         });
         this.EpubAnnotation = defineEpubAnnotation({
             vault: this.app.vault,
-            resourceUrls: this.resourceUrls,
+            plugin: this
+        });
+        this.VideoAnnotation = defineVideoAnnotation({
+            vault: this.app.vault,
+            plugin: this
+        });
+        this.WebAnnotation = defineWebAnnotation({
+            vault: this.app.vault,
             plugin: this
         });
         this.addMarkdownPostProcessor();
@@ -155,9 +173,7 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
     }
 
     onunload() {
-        for (const url of this.resourceUrls.values()) {
-            URL.revokeObjectURL(url);
-        }
+        this.unloadResources();
         for (const instanceRef of this.codeMirrorInstances) {
             instanceRef.deref()?.off('drop', this.codeMirrorDropHandler);
         }

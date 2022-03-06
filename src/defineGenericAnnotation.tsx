@@ -8,11 +8,11 @@ import { Annotation } from './types';
 import AnnotatorPlugin from 'main';
 import { checkPseudoAnnotationEquality, getAnnotationHighlightTextData } from 'annotationUtils';
 import { MarkdownRenderer, normalizePath, TFile } from 'obsidian';
-import hypothesisFolder from 'hypothesisFolder';
 import { DarkReaderType } from 'darkreader';
+import { awaitResourceLoading, resourcesZip, resourceUrls } from 'resourcesFolder';
 
 const proxiedHosts = new Set(['cdn.hypothes.is', 'via.hypothes.is', 'hypothes.is']);
-export default ({ vault, plugin, resourceUrls }) => {
+export default ({ vault, plugin }) => {
     const urlToPathMap = new Map();
     const GenericAnnotation = (
         props: SpecificAnnotationProps & {
@@ -267,7 +267,8 @@ export default ({ vault, plugin, resourceUrls }) => {
                             statusText: 'ok'
                         });
                     }
-                    const folder = await hypothesisFolder;
+                    await awaitResourceLoading;
+                    const folder = resourcesZip;
                     if (proxiedHosts.has(url.host)) {
                         try {
                             const pathName = `${url.host}${url.pathname}`.replace(/^\//, '');

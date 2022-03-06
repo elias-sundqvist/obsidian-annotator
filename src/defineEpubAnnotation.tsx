@@ -2,8 +2,8 @@ import defineGenericAnnotation from 'defineGenericAnnotation';
 import React from 'react';
 import { EpubAnnotationProps } from './types';
 
-export default ({ vault, plugin, resourceUrls }) => {
-    const GenericAnnotationEpub = defineGenericAnnotation({ vault, plugin, resourceUrls });
+export default ({ vault, plugin }) => {
+    const GenericAnnotationEpub = defineGenericAnnotation({ vault, plugin });
     const EpubAnnotation = ({ ...props }: EpubAnnotationProps) => {
         return (
             <GenericAnnotationEpub
