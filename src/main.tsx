@@ -9,27 +9,35 @@ import {
     TFile,
     MarkdownPostProcessorContext,
     parseLinktext,
-    MarkdownPreviewView
+    MarkdownPreviewView,
+    Notice
 } from 'obsidian';
-import loadResourceUrls from './loadResourceUrls';
+
 import definePdfAnnotation from './definePdfAnnotation';
 import { around } from 'monkey-around';
 
 import { VIEW_TYPE_PDF_ANNOTATOR, ICON_NAME, ANNOTATION_TARGET_PROPERTY } from './constants';
 import defineEpubAnnotation from './defineEpubAnnotation';
-import { PdfAnnotationProps, EpubAnnotationProps } from './types';
+import defineVideoAnnotation from './defineVideoAnnotation';
+import { PdfAnnotationProps, EpubAnnotationProps, VideoAnnotationProps, WebAnnotationProps } from './types';
 import { EditorState } from '@codemirror/state';
 import AnnotatorSettingsTab, { AnnotatorSettings, DEFAULT_SETTINGS, IHasAnnotatorSettings } from 'settings';
 import AnnotatorView from 'annotatorView';
 import { wait } from 'utils';
+import defineWebAnnotation from 'defineWebAnnotation';
+import { awaitResourceLoading, loadResourcesZip, unloadResources } from 'resourcesFolder';
+import stringEncodedResourcesFolder from './resources!zipStringEncoded';
+import * as jszip from 'jszip';
+import { corsFetch } from './corsFetch';
 
 export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSettings {
     settings: AnnotatorSettings;
-    resourceUrls: Map<string, string>;
     public pdfAnnotatorFileModes: { [file: string]: string } = {};
     private _loaded = false;
     PdfAnnotation: (props: PdfAnnotationProps) => JSX.Element;
     EpubAnnotation: (props: EpubAnnotationProps) => JSX.Element;
+    VideoAnnotation: (props: VideoAnnotationProps) => JSX.Element;
+    WebAnnotation: (props: WebAnnotationProps) => JSX.Element;
     views: Set<AnnotatorView> = new Set();
     dragData: { annotationFilePath: string; annotationId: string; annotationText: string };
     codeMirrorInstances: Set<WeakRef<CodeMirror.Editor>>;
@@ -41,19 +49,46 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         await this.setupPromise;
     }
 
+    async loadResources() {
+        await loadResourcesZip(jszip.loadAsync(stringEncodedResourcesFolder));
+        if (this.settings.annotateTvUrl) {
+            try {
+                const response = await corsFetch(this.settings.annotateTvUrl);
+                if (response.ok) {
+                    await loadResourcesZip(jszip.loadAsync(await response.arrayBuffer()));
+                } else {
+                    new Notice('Annotator: Could not fetch Annotate.TV resource zip');
+                }
+            } catch (e) {
+                new Notice('Annotator: Could not fetch Annotate.TV resource zip');
+            }
+        }
+        await awaitResourceLoading();
+    }
+
+    unloadResources() {
+        unloadResources();
+    }
+
     async onloadImpl() {
         await this.loadSettings();
         this.registerView(VIEW_TYPE_PDF_ANNOTATOR, leaf => new AnnotatorView(leaf, this));
+        await this.loadResources();
         this.codeMirrorInstances = new Set();
-        this.resourceUrls = await loadResourceUrls;
         this.PdfAnnotation = definePdfAnnotation({
             vault: this.app.vault,
-            resourceUrls: this.resourceUrls,
             plugin: this
         });
         this.EpubAnnotation = defineEpubAnnotation({
             vault: this.app.vault,
-            resourceUrls: this.resourceUrls,
+            plugin: this
+        });
+        this.VideoAnnotation = defineVideoAnnotation({
+            vault: this.app.vault,
+            plugin: this
+        });
+        this.WebAnnotation = defineWebAnnotation({
+            vault: this.app.vault,
             plugin: this
         });
         this.addMarkdownPostProcessor();
@@ -155,9 +190,7 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
     }
 
     onunload() {
-        for (const url of this.resourceUrls.values()) {
-            URL.revokeObjectURL(url);
-        }
+        this.unloadResources();
         for (const instanceRef of this.codeMirrorInstances) {
             instanceRef.deref()?.off('drop', this.codeMirrorDropHandler);
         }
@@ -206,9 +239,9 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         }
     }
 
-    async awaitDataView() {
+    async awaitDataViewPage(filePath: string) {
         const dataview = (this.app as any)?.plugins?.getPlugin('dataview'); // eslint-disable-line
-        while (dataview && !dataview.api) {
+        while (dataview && (!dataview.api || !dataview.api.page(filePath))) {
             await wait(50);
         }
     }

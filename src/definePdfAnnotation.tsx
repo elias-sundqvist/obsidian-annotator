@@ -3,8 +3,8 @@ import React from 'react';
 import { wait } from 'utils';
 import { PdfAnnotationProps } from './types';
 
-export default ({ vault, plugin, resourceUrls }) => {
-    const GenericAnnotationPdf = defineGenericAnnotation({ vault, plugin, resourceUrls });
+export default ({ vault, plugin }) => {
+    const GenericAnnotationPdf = defineGenericAnnotation({ vault, plugin });
     const PdfAnnotation = ({ onload, ...props }: PdfAnnotationProps) => {
         return (
             <GenericAnnotationPdf

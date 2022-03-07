@@ -69,6 +69,14 @@ You can make a [pull request](https://github.com/elias-sundqvist/obsidian-annota
 
 ## Changelog
 
+### 0.2.1 (2022-03-06) **[BRAT](https://github.com/TfTHacker/obsidian42-brat) release** *Basic web and video annotation* 
+* `annotation-target-type` can now take on the values `web` and `video`. 
+  * With `web` the annotation target can (in theory) be any website. Some work better than others. Link navigation does not work. 
+  * With `video`, only youtube links are supported. In order to use this feature, a link to a zip file with the annotator.tv resources must be provided in the plugin settings. It cannot be bundled with the plugin since that would most likely violate copyright. 
+    * You can ask someone for a link, or generate it yourself by making an account at annotate.tv, signing in, going to https://annotate.tv/videos/620d5a42b9ab630009bf3e31#, and downloading the website using the [Save All Resources](https://chrome.google.com/webstore/detail/save-all-resources/abpdnfjocnmdomablahdcfnoggeeiedb?hl=en) chrome extension, uploading it to google drive, and [generating a direct link](https://sites.google.com/site/gdocs2direct/). 
+  * Other improvements:
+    * Some behind-the-scenes changes have been made so that the hypothes.is version can be more easily upgraded in the future. 
+
 ### 0.2.0 (2022-01-26) **[BRAT](https://github.com/TfTHacker/obsidian42-brat) release** *Improved markdown rendering, epub reader* 
 * Markdown in the hypothesis sidebar should now fully support the regular obsidian syntax. (including links, embeds, custom codeblocks etc.)
 * Several Epub improvements, Thanks to @aladmit for these!

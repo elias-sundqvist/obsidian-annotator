@@ -1,5 +1,6 @@
 import AnnotatorPlugin from 'main';
 import { App, PluginSettingTab, Setting } from 'obsidian';
+import { callDelayer } from 'utils';
 
 export interface AnnotatorSettings {
     deafultDarkMode: boolean;
@@ -19,6 +20,7 @@ export interface AnnotatorSettings {
         highlightHighlightedText: boolean;
         includePostfix: boolean;
     };
+    annotateTvUrl?: string;
     debugLogging: boolean;
 }
 
@@ -215,6 +217,24 @@ export default class AnnotatorSettingsTab extends PluginSettingTab {
                         this.plugin.settings.darkReaderSettings.brightness = value;
                         await this.plugin.saveSettings();
                     })
+            );
+
+        containerEl.createEl('h3', { text: 'Annotate.TV settings' });
+
+        const resourceUrlUpdateDelayer = callDelayer();
+
+        new Setting(containerEl)
+            .setName('Annotate.tv resource URL')
+            .setDesc('Not bundled with the plugin due to potential copyright issues.')
+            .addText(text =>
+                text.setValue(this.plugin.settings.annotateTvUrl).onChange(async value => {
+                    this.plugin.settings.annotateTvUrl = value;
+                    resourceUrlUpdateDelayer(async () => {
+                        await this.plugin.unloadResources();
+                        await this.plugin.loadResources();
+                    }, 2000);
+                    await this.plugin.saveSettings();
+                })
             );
 
         containerEl.createEl('h3', { text: 'Developer Settings' });

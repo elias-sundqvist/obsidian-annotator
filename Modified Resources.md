@@ -1,7 +1,7 @@
 The following resources have been modified in the (`resources`) folder, and will need to be reapplied when updating hypothesis version. 
 
 * `hypothes.is\app.html` and `hypothes.is\app.html` 
-    > remove "dsn" from the sentry object. This prevents crash logs from being sent to the hypothes.is theme.  (See issue #97)
+    > remove "dsn" from the sentry object. This prevents crash logs from being sent to the hypothes.is team.  (See issue #97)
 
 * `cdn.hypothes.is\demos\epub\epub.js\js\reader.js`
     > Expose `start()` function as `window.epubReader(readerSettings)`. It allows to pass settings to reader from `annotatorView`
@@ -142,18 +142,3 @@ The following resources have been modified in the (`resources`) folder, and will
         }
         ...
     ```
-* `cdn.hypothes.is\hypothesis\1.853.0\build\scripts\annotator.bundle.js`
-    > This is needed for reliable navigation and focusing of highlights. 
-    ```js
-    /*expose the guest object for annotation navigation.*//*START EDIT HERE*/window.guests=[...(window.guests??[]),this]/*END EDIT HERE*/
-    ```
-    > This fixes an issue with highlights not working:
-      Replace `if(l||(l=new Set,this._sentChannels.set(i,l)),l.has(a))return;` from annotator.bundle.js
-      with `if(l||(l=new Set,this._sentChannels.set(i,l)),l.has(a)){};`
-
-
-* `cdn.hypothes.is\hypothesis\1.960.0\build\scripts\sidebar.bundle.js`
-   > This is needed for custom markdown rendering (replace in the part that corresponds to `renderMathAndMarkdown`)
-   ```js
-   /*REPLACE THE MARKDOWN RENDERING FUNCTION*/return window.renderObsidianMarkdown(e);
-   ``` 

@@ -65,7 +65,7 @@ export default class AnnotatorView extends FileView {
         (async () => {
             // Prevent pane from loading too early.
             await this.plugin.setupPromise;
-            await this.plugin.awaitDataView();
+            await this.plugin.awaitDataViewPage(file.path);
             ReactDOM.unmountComponentAtNode(this.contentEl);
             this.contentEl.empty();
             const annotationTarget = this.getAnnotationTarget(file);
@@ -96,6 +96,32 @@ export default class AnnotatorView extends FileView {
                         component = (
                             <this.plugin.EpubAnnotation
                                 epub={annotationTarget}
+                                containerEl={this.contentEl}
+                                annotationFile={file.path}
+                                onload={async iframe => {
+                                    this.iframe = iframe;
+                                }}
+                                onDarkReadersUpdated={this.onDarkReadersUpdated.bind(this)}
+                            />
+                        );
+                        break;
+                    case 'video':
+                        component = (
+                            <this.plugin.VideoAnnotation
+                                video={annotationTarget}
+                                containerEl={this.contentEl}
+                                annotationFile={file.path}
+                                onload={async iframe => {
+                                    this.iframe = iframe;
+                                }}
+                                onDarkReadersUpdated={this.onDarkReadersUpdated.bind(this)}
+                            />
+                        );
+                        break;
+                    case 'web':
+                        component = (
+                            <this.plugin.WebAnnotation
+                                url={annotationTarget}
                                 containerEl={this.contentEl}
                                 annotationFile={file.path}
                                 onload={async iframe => {
