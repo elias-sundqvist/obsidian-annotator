@@ -26,9 +26,6 @@ export default ({ vault, plugin }) => {
 
                     const epubReader = new EpubReader(plugin.settings.epubSettings, props, vault);
                     iframe.contentDocument.addEventListener('DOMContentLoaded', epubReader.start(iframe), false);
-
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    (iframe.contentWindow as any).epubReader(plugin.settings.epubSettings);
                 }}
             />
         );
