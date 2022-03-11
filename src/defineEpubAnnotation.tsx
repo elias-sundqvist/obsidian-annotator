@@ -10,6 +10,7 @@ import { PackagingMetadataObject } from 'epubjs/types/packaging';
 import Navigation from 'epubjs/types/navigation';
 
 import { wait } from 'utils';
+import { SAMPLE_EPUB_URL } from './constants';
 
 export default ({ vault, plugin }) => {
     const GenericAnnotationEpub = genericAnnotation.default({ vault, plugin });
@@ -42,7 +43,7 @@ class EpubReader {
     };
 
     constructor(epubSettings: AnnotatorSettings['epubSettings'], props: EpubAnnotationProps, vault: any) {
-        this.bookUrl = genericAnnotation.getProxiedUrl(props.epub, props, vault);
+        this.bookUrl = SAMPLE_EPUB_URL;
         this.settings = epubSettings;
     }
 
@@ -62,6 +63,9 @@ class EpubReader {
 
     initBook(id: Document, iw: Window): epubjs.Book {
         const book = new epubjs.Book(this.bookUrl, {
+            requestMethod: async function(url) {
+                return await (await iw.fetch(url)).arrayBuffer();
+            },
             canonical: function (path) {
                 return iw.location.origin + iw.location.pathname + '?loc=' + path;
             }
