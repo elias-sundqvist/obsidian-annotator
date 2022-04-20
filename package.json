@@ -10,7 +10,7 @@
     "test": "jest",
     "quick-build": "rollup --config rollup.config.js --environment BUILD:production",
     "build": "npm run build-hypothesis && npm run quick-build",
-    "build-hypothesis": "rimraf resources/cdn.hypothes.is/hypothesis/build && cd submodules/hypothesis-client-annotator-fork && npm i --force && npm run build && cd ../.. && move-file submodules/hypothesis-client-annotator-fork/build resources/cdn.hypothes.is/hypothesis/build"
+    "build-hypothesis": "rimraf resources/cdn.hypothes.is/hypothesis/build && cd submodules/hypothesis-client-annotator-fork && make build && cd ../.. && move-file submodules/hypothesis-client-annotator-fork/build resources/cdn.hypothes.is/hypothesis/build"
   },
   "keywords": [],
   "author": "",
