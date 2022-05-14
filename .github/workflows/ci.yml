@@ -8,7 +8,7 @@ jobs:
       uses: actions/checkout@v2
       with:
         submodules: recursive
-    - name: Install modules
-      run: yarn
-    - name: Run ESLint
-      run: yarn run eslint . --ext .js,.jsx,.ts,.tsx
+    - name: Link
+      run: |
+        npm i
+        npm run lint
