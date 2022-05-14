@@ -69,6 +69,9 @@ You can make a [pull request](https://github.com/elias-sundqvist/obsidian-annota
 
 ## Changelog
 
+### 0.2.2 (2022-05-14) *Minor improvement*
+* hypothes.is updated up to v1.1055.0
+
 ### 0.2.1 (2022-03-06) **[BRAT](https://github.com/TfTHacker/obsidian42-brat) release** *Basic web and video annotation* 
 * `annotation-target-type` can now take on the values `web` and `video`. 
   * With `web` the annotation target can (in theory) be any website. Some work better than others. Link navigation does not work. 
