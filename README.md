@@ -69,6 +69,9 @@ You can make a [pull request](https://github.com/elias-sundqvist/obsidian-annota
 
 ## Changelog
 
+### 0.2.4 (2022-07-23)
+* Fix [plugin fails to start on iPad](https://github.com/elias-sundqvist/obsidian-annotator/issues/176)
+
 ### 0.2.2 (2022-05-14) *Minor improvement*
 * hypothes.is updated up to v1.1055.0
 

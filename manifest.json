@@ -1,8 +1,8 @@
 {
 	"id": "obsidian-annotator",
 	"name": "Annotator",
-	"version": "0.2.2",
-	"minAppVersion": "0.13.19",
+	"version": "0.2.4",
+	"minAppVersion": "0.13.25",
 	"description": "This is a sample plugin for Obsidian. It allows you to open and annotate PDF and EPUB files.",
 	"author": "Obsidian",
 	"authorUrl": "https://obsidian.md/about",

@@ -1,3 +1,28 @@
+import { requestUrl } from 'obsidian';
+
+// This fetch can be used to get internal(like blob) and external resources with CORS policies
+export async function fetchUrl(requestInfo: RequestInfo, requestInit?: RequestInit): Promise<Response> {
+
+    // Use regular fetch for blobs, because obsidian.requestUrl can't access files by path
+    if (requestInfo.toString().startsWith('blob:')) return await fetch(requestInfo, requestInit);
+
+    try {
+        const response = await requestUrl({
+            url: requestInfo instanceof Request ? requestInfo.url : requestInfo,
+            method: requestInit.method
+        });
+
+        return new Response(response.arrayBuffer, {
+            status: response.status,
+            statusText: 'ok',
+            headers: new Headers(response.headers)
+        });
+    } catch (e) {
+        // fallback to regular fetch, because requestUrl sometimes fails on iPad
+        return await fetch(requestInfo, requestInit);
+    }
+}
+
 export const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 export function get_url_extension(url) {
