@@ -23,12 +23,11 @@ import { PdfAnnotationProps, EpubAnnotationProps, VideoAnnotationProps, WebAnnot
 import { EditorState } from '@codemirror/state';
 import AnnotatorSettingsTab, { AnnotatorSettings, DEFAULT_SETTINGS, IHasAnnotatorSettings } from 'settings';
 import AnnotatorView from 'annotatorView';
-import { wait } from 'utils';
+import { fetchUrl, wait } from 'utils';
 import defineWebAnnotation from 'defineWebAnnotation';
 import { awaitResourceLoading, loadResourcesZip, unloadResources } from 'resourcesFolder';
 import stringEncodedResourcesFolder from './resources!zipStringEncoded';
 import * as jszip from 'jszip';
-import { corsFetch } from './corsFetch';
 
 export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSettings {
     settings: AnnotatorSettings;
@@ -53,7 +52,7 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         await loadResourcesZip(jszip.loadAsync(stringEncodedResourcesFolder));
         if (this.settings.annotateTvUrl) {
             try {
-                const response = await corsFetch(this.settings.annotateTvUrl);
+                const response = await fetchUrl(this.settings.annotateTvUrl);
                 if (response.ok) {
                     await loadResourcesZip(jszip.loadAsync(await response.arrayBuffer()));
                 } else {

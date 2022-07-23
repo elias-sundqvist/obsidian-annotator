@@ -2,7 +2,7 @@ import { SAMPLE_PDF_URL, SAMPLE_EPUB_URL } from './constants';
 import { OfflineIframe } from 'react-offline-iframe';
 import React, { useEffect } from 'react';
 import { SpecificAnnotationProps } from 'types';
-import { b64_to_utf8, utf8_to_b64, wait } from 'utils';
+import { fetchUrl, b64_to_utf8, utf8_to_b64, wait } from 'utils';
 import { deleteAnnotation, loadAnnotations, writeAnnotation } from 'annotationFileUtils';
 import { Annotation } from './types';
 import AnnotatorPlugin from 'main';
@@ -13,7 +13,6 @@ import { getSubtitles } from 'youtube-captions-scraper';
 import getYouTubeMetaData from 'youtube-metadata-scraper';
 import { deleteVideoAnnotation, loadVideoAnnotations, writeVideoAnnotation } from 'videoAnnotationFileUtils';
 import { awaitResourceLoading, resourcesZip, resourceUrls } from 'resourcesFolder';
-import { corsFetch } from 'corsFetch';
 
 const urlToPathMap = new Map();
 const proxiedHosts = new Set(['cdn.hypothes.is', 'via.hypothes.is', 'hypothes.is', 'annotate.tv']);
@@ -81,10 +80,10 @@ export default ({ vault, plugin }) => {
                         });
                     }
                     if (href.startsWith(`https://annotate.tv/api/transcript`) && 'video' in props) {
-                        const video_metadata = await getYouTubeMetaData(corsFetch, props.video);
+                        const video_metadata = await getYouTubeMetaData(fetchUrl, props.video);
                         const video_id = video_metadata.shortlinkUrl.substr('https://youtu.be/'.length);
                         res = (
-                            await getSubtitles(corsFetch, {
+                            await getSubtitles(fetchUrl, {
                                 videoID: video_id, // youtube video id
                                 lang: 'en' // default: `en`
                             })
@@ -149,7 +148,7 @@ export default ({ vault, plugin }) => {
                         };
                     }
                     if (href == `https://annotate.tv/videos/620d5a42b9ab630009bf3e31.html` && 'video' in props) {
-                        const video_metadata = await getYouTubeMetaData(corsFetch, props.video);
+                        const video_metadata = await getYouTubeMetaData(fetchUrl, props.video);
                         const video_id = video_metadata.shortlinkUrl.substr('https://youtu.be/'.length);
                         const video_data = {
                             props: {
@@ -332,7 +331,8 @@ export default ({ vault, plugin }) => {
                             return new Response(null, { status: 404, statusText: 'file not found' });
                         }
                     }
-                    return await corsFetch(requestInfo, requestInit);
+
+                    return await fetchUrl(requestInfo, requestInit);
                 }}
                 htmlPostProcessFunction={(html: string) => {
                     if ('pdf' in props) {
