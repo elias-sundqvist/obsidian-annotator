@@ -25,7 +25,7 @@ export default ({ vault, plugin }) => {
                         await wait(50);
                     }
 
-                    const epubReader = new EpubReader(plugin.settings.epubSettings, props, vault);
+                    const epubReader = new EpubReader(plugin.settings.epubSettings);
                     iframe.contentDocument.addEventListener('DOMContentLoaded', epubReader.start(iframe), false);
                 }}
             />
@@ -33,6 +33,15 @@ export default ({ vault, plugin }) => {
     };
     return EpubAnnotation;
 };
+
+interface readerWindow extends Window {
+    rendition?: epubjs.Rendition
+}
+
+// hypothes.is custom event
+interface ScrollToRange extends Event {
+    detail?: Range
+}
 
 class EpubReader {
     readonly bookUrl: string;
@@ -42,14 +51,18 @@ class EpubReader {
         pagination: { manager: 'default', flow: 'paginated' }
     };
 
-    constructor(epubSettings: AnnotatorSettings['epubSettings'], props: EpubAnnotationProps, vault: any) {
+    constructor(epubSettings: AnnotatorSettings['epubSettings']) {
         this.bookUrl = SAMPLE_EPUB_URL;
         this.settings = epubSettings;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     start(iframe: HTMLIFrameElement): any {
         const id = iframe.contentDocument;
-        const iw = iframe.contentWindow;
+
+        // linter says it's possible that iframe would be null
+        // should be fixed in a future
+        const iw: readerWindow | null = iframe.contentWindow;
 
         const book = this.initBook(id, iw);
 
@@ -61,7 +74,7 @@ class EpubReader {
         book.ready.then(() => this.removeLoader(id));
     }
 
-    initBook(id: Document, iw: Window): epubjs.Book {
+    initBook(id: Document, iw: readerWindow): epubjs.Book {
         const book = new epubjs.Book(this.bookUrl, {
             requestMethod: async function(url) {
                 return await (await iw.fetch(url)).arrayBuffer();
@@ -80,11 +93,11 @@ class EpubReader {
         });
 
         book.rendition.themes.fontSize(`${this.settings.fontSize}%`);
-        book.rendition.on('relocated', (_: any) => {
+        book.rendition.on('relocated', () => {
             book.rendition.themes.fontSize(`${this.settings.fontSize}%`);
         });
 
-        (iw as any).rendition = book.rendition;
+        iw.rendition = book.rendition;
         return book;
     }
 
@@ -116,10 +129,11 @@ class EpubReader {
 
     addBookMetaToUI(book: epubjs.Book, iframe: HTMLIFrameElement) {
         // add chapters to table of contents
-        book.loaded.navigation.then((nav: Navigation) => {
+        book.loaded.navigation.then((nav: Navigation): void => {
             const toc = iframe.contentDocument.getElementById('toc'),
                 docfrag = iframe.contentDocument.createDocumentFragment();
 
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             nav.forEach((chapter: epubjs.NavItem): any => {
                 const item = iframe.contentDocument.createElement('li');
                 const link = iframe.contentDocument.createElement('a');
@@ -138,7 +152,7 @@ class EpubReader {
             });
 
             toc.appendChild(docfrag);
-        });
+        }).catch(() => { throw 'Failed to load book navigation' });
 
         // add title and author to table of contents
         book.loaded.metadata.then(function (meta: PackagingMetadataObject) {
@@ -162,8 +176,10 @@ class EpubReader {
         });
 
         book.rendition.hooks.content.register(function (contents: epubjs.Contents) {
-            contents.window.addEventListener('scrolltorange', function (e: any) {
-                const range = e.detail;
+            contents.window.addEventListener('scrolltorange', function (e: ScrollToRange) {
+                if (e.detail === undefined) return;
+
+                const range = e.detail.toString();
                 const cfi = new epubjs.EpubCFI(range, contents.cfiBase).toString();
 
                 if (cfi) {
@@ -222,7 +238,7 @@ class EpubReader {
 
         id.getElementById('opener').addEventListener(
             'click',
-            function (_) {
+            function () {
                 nav.classList.add('open');
             },
             false
@@ -230,7 +246,7 @@ class EpubReader {
 
         id.getElementById('closer').addEventListener(
             'click',
-            function (_) {
+            function () {
                 nav.classList.remove('open');
             },
             false
