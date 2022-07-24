@@ -8,7 +8,7 @@ import folderZipString from './rollup-folder-zip-string';
 import nodePolyfills from 'rollup-plugin-polyfill-node';
 import analyze from 'rollup-plugin-analyzer';
 import { terser } from "rollup-plugin-terser";
-import replace from "rollup-plugin-replace";
+import replace from "@rollup/plugin-replace";
 
 const banner = 
 `/*
@@ -62,7 +62,8 @@ export default {
     json(),
     nodeResolve({browser: true}),
     replace({
-      'process.env.NODE_ENV': JSON.stringify('production')
+      'process.env.NODE_ENV': JSON.stringify('production'),
+      preventAssignment: true
     }),
     commonjs(),
     nodePolyfills(),
