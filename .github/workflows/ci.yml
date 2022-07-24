@@ -1,15 +1,26 @@
 name: CI
 on: push
 jobs:
-  build:
+  linter:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository and submodules
       uses: actions/checkout@v2
       with:
         submodules: recursive
-    - name: Link
+    - name: Lint
       run: |
         npm i
-        npm run lint
+        npm run lint -- --max-warnings 0
+
+  betterer:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository and submodules
+      uses: actions/checkout@v2
+      with:
+        submodules: recursive
+    - name: Check if code became worse
+      run: |
+        npm i
         npm run betterer ci
