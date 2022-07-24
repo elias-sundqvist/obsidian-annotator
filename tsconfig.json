@@ -10,6 +10,7 @@
     "moduleResolution": "node",
     "esModuleInterop":true,
     "importHelpers": true,
+    "noEmit": true,
     "allowSyntheticDefaultImports": true,
     "lib": [
       "dom",

@@ -12,7 +12,8 @@
     "build": "npm run build-hypothesis && npm run quick-build",
     "build-hypothesis": "rimraf resources/cdn.hypothes.is/hypothesis/build && cd submodules/hypothesis-client-annotator-fork && make build && cd ../.. && move-file submodules/hypothesis-client-annotator-fork/build resources/cdn.hypothes.is/hypothesis/build",
     "win-build": "npm run win-build-hypothesis && npm run quick-build",
-    "win-build-hypothesis": "rimraf resources/cdn.hypothes.is/hypothesis/build && cd submodules/hypothesis-client-annotator-fork && npm i --force && npm run build && cd ../.. && move-file submodules/hypothesis-client-annotator-fork/build resources/cdn.hypothes.is/hypothesis/build"
+    "win-build-hypothesis": "rimraf resources/cdn.hypothes.is/hypothesis/build && cd submodules/hypothesis-client-annotator-fork && npm i --force && npm run build && cd ../.. && move-file submodules/hypothesis-client-annotator-fork/build resources/cdn.hypothes.is/hypothesis/build",
+    "betterer": "betterer"
   },
   "keywords": [],
   "author": "",
@@ -57,7 +58,9 @@
     "rollup-plugin-terser": "^7.0.2",
     "ts-jest": "^27.0.5",
     "tslib": "^2.4.0",
-    "typescript": "^4.7.0"
+    "typescript": "^4.7.0",
+    "@betterer/cli": "^5.3.6",
+    "@betterer/typescript": "^5.3.6"
   },
   "dependencies": {
     "@types/react": "^17.0.4",
