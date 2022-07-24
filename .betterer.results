@@ -263,19 +263,13 @@ exports[`stricter ts`] = {
   }`
 };
 
-exports[`eslint recommended`] = {
+exports[`eslint recommended rules`] = {
   value: `{
     "src/annotatorView.tsx:3745909917": [
       [49, 20, 21, "Unsafe usage of ReturnStatement.", "227716023"],
-      [163, 20, 7, "\'console\' is not defined.", "3716900434"],
-      [167, 12, 10, "\'setTimeout\' is not defined.", "3982003132"],
       [174, 20, 2, "Empty block statement.", "5861859"],
       [182, 20, 2, "Empty block statement.", "5861859"],
       [253, 24, 60, "Unexpected lexical declaration in case block.", "2618948978"],
-      [303, 20, 10, "\'setTimeout\' is not defined.", "3982003132"],
-      [307, 20, 10, "\'setTimeout\' is not defined.", "3982003132"],
-      [309, 20, 7, "\'console\' is not defined.", "3716900434"],
-      [315, 12, 10, "\'setTimeout\' is not defined.", "3982003132"],
       [318, 20, 2, "Empty block statement.", "5861859"],
       [321, 20, 2, "Empty block statement.", "5861859"]
     ],
@@ -297,33 +291,16 @@ exports[`eslint recommended`] = {
       [44, 65, 26, "\'props\' is defined but never used.", "3027674394"],
       [44, 93, 10, "\'vault\' is defined but never used.", "540454131"],
       [82, 40, 6, "\'_\' is defined but never used.", "3390964374"],
-      [98, 12, 21, "\'requestAnimationFrame\' is not defined.", "3529894943"],
-      [103, 12, 7, "\'history\' is not defined.", "502375463"],
-      [217, 8, 8, "\'document\' is not defined.", "257747018"],
       [224, 22, 1, "\'_\' is defined but never used.", "177658"],
       [232, 22, 1, "\'_\' is defined but never used.", "177658"]
     ],
     "src/defineGenericAnnotation.tsx:3869445575": [
       [22, 29, 25, "\'iframe\' is defined but never used.", "3579356060"],
-      [38, 88, 6, "\'window\' is not defined.", "2016265097"],
       [46, 42, 5, "\'Proxy\' is not defined.", "231940265"],
-      [61, 12, 16, "\'addEventListener\' is not defined.", "1663469078"],
-      [62, 25, 19, "\'removeEventListener\' is not defined.", "2229065745"],
-      [108, 36, 7, "\'console\' is not defined.", "3716900434"],
       [219, 44, 6, "\'Buffer\' is not defined.", "2686813381"],
-      [232, 28, 7, "\'console\' is not defined.", "3716900434"],
-      [263, 28, 7, "\'console\' is not defined.", "3716900434"],
-      [278, 28, 7, "\'console\' is not defined.", "3716900434"],
-      [286, 33, 6, "\'window\' is not defined.", "2016265097"],
-      [301, 28, 7, "\'console\' is not defined.", "3716900434"],
-      [329, 28, 7, "\'console\' is not defined.", "3716900434"],
-      [497, 41, 6, "\'window\' is not defined.", "2016265097"],
       [506, 20, 2, "Empty block statement.", "5861859"],
       [532, 40, 173, "Unexpected lexical declaration in case block.", "1677356781"],
-      [590, 8, 7, "\'console\' is not defined.", "3716900434"],
-      [591, 8, 9, "Unexpected \'debugger\' statement.", "3201740415"],
-      [625, 12, 7, "\'console\' is not defined.", "3716900434"],
-      [638, 12, 7, "\'console\' is not defined.", "3716900434"]
+      [591, 8, 9, "Unexpected \'debugger\' statement.", "3201740415"]
     ],
     "src/main.tsx:2169256632": [
       [35, 20, 25, "\'props\' is defined but never used.", "2326264458"],
@@ -340,9 +317,7 @@ exports[`eslint recommended`] = {
       [42, 55, 13, "\'ev\' is defined but never used.", "2640909808"],
       [95, 46, 10, "\'CodeMirror\' is not defined.", "3330975153"],
       [129, 20, 2, "Empty block statement.", "5861859"],
-      [180, 28, 2, "Empty block statement.", "5861859"],
-      [391, 12, 7, "\'console\' is not defined.", "3716900434"],
-      [396, 22, 7, "\'console\' is not defined.", "3716900434"]
+      [180, 28, 2, "Empty block statement.", "5861859"]
     ],
     "src/types.tsx:1997290449": [
       [117, 13, 25, "\'iframe\' is defined but never used.", "3579356060"],
@@ -356,17 +331,7 @@ exports[`eslint recommended`] = {
       [155, 31, 12, "\'html\' is defined but never used.", "457162647"]
     ],
     "src/utils.tsx:674725236": [
-      [6, 65, 5, "\'fetch\' is not defined.", "171106201"],
-      [21, 21, 5, "\'fetch\' is not defined.", "171106201"],
-      [25, 49, 10, "\'setTimeout\' is not defined.", "3982003132"],
-      [41, 11, 6, "\'window\' is not defined.", "2016265097"],
-      [45, 37, 6, "\'window\' is not defined.", "2016265097"],
-      [53, 19, 6, "\'NodeJS\' is not defined.", "2826257852"],
-      [56, 12, 12, "\'clearTimeout\' is not defined.", "3884069703"],
-      [59, 20, 10, "\'setTimeout\' is not defined.", "3982003132"]
-    ],
-    "src/youtube-captions-scraper.tsx:1122952690": [
-      [6, 24, 5, "\'fetch\' is not defined.", "171106201"]
+      [53, 19, 6, "\'NodeJS\' is not defined.", "2826257852"]
     ],
     "src/youtube-metadata-scraper.tsx:4281419102": [
       [25, 23, 5, "Promise executor functions should not be async.", "170543907"],
@@ -375,7 +340,7 @@ exports[`eslint recommended`] = {
   }`
 };
 
-exports[`eslint ts strict type checking`] = {
+exports[`eslint ts stricter type checking`] = {
   value: `{
     "src/annotationFileUtils.tsx:2299920553": [
       [23, 8, 49, "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the \`void\` operator.", "3534246567"],

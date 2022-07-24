@@ -28,6 +28,7 @@
     "@babel/preset-env": "^7.15.6",
     "@babel/preset-typescript": "^7.15.0",
     "@betterer/cli": "^5.3.6",
+    "@betterer/eslint": "^5.3.6",
     "@betterer/typescript": "^5.3.6",
     "@codemirror/commands": "^0.20.0",
     "@codemirror/language": "^0.20.0",
