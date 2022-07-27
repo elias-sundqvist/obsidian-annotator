@@ -1,10 +1,12 @@
 import defineGenericAnnotation from 'defineGenericAnnotation';
 import React from 'react';
+import { Vault } from 'obsidian';
+import AnnotatorPlugin from 'main';
 import { wait } from 'utils';
 import { PdfAnnotationProps } from './types';
 
-export default ({ vault, plugin }) => {
-    const GenericAnnotationPdf = defineGenericAnnotation({ vault, plugin });
+export default (vault: Vault, plugin: AnnotatorPlugin) => {
+    const GenericAnnotationPdf = defineGenericAnnotation(vault, plugin);
     const PdfAnnotation = ({ onload, ...props }: PdfAnnotationProps) => {
         return (
             <GenericAnnotationPdf

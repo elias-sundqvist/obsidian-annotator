@@ -1,5 +1,7 @@
 import * as genericAnnotation from 'defineGenericAnnotation';
 import React from 'react';
+import { Vault } from 'obsidian';
+import AnnotatorPlugin from 'main';
 
 import { AnnotatorSettings } from 'settings';
 import { EpubAnnotationProps } from './types';
@@ -12,8 +14,8 @@ import Navigation from 'epubjs/types/navigation';
 import { wait } from 'utils';
 import { SAMPLE_EPUB_URL } from './constants';
 
-export default ({ vault, plugin }) => {
-    const GenericAnnotationEpub = genericAnnotation.default({ vault, plugin });
+export default (vault: Vault, plugin: AnnotatorPlugin) => {
+    const GenericAnnotationEpub = genericAnnotation.default(vault, plugin);
     const EpubAnnotation = ({ ...props }: EpubAnnotationProps) => {
         return (
             <GenericAnnotationEpub

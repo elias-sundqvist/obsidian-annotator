@@ -7,7 +7,7 @@ import { deleteAnnotation, loadAnnotations, writeAnnotation } from 'annotationFi
 import { Annotation } from './types';
 import AnnotatorPlugin from 'main';
 import { checkPseudoAnnotationEquality, getAnnotationHighlightTextData } from 'annotationUtils';
-import { MarkdownRenderer, normalizePath, TFile } from 'obsidian';
+import { MarkdownRenderer, normalizePath, TFile, TAbstractFile, Vault } from 'obsidian';
 import { DarkReaderType } from 'darkreader';
 import { getSubtitles } from 'youtube-captions-scraper';
 import getYouTubeMetaData from 'youtube-metadata-scraper';
@@ -16,7 +16,8 @@ import { awaitResourceLoading, resourcesZip, resourceUrls } from 'resourcesFolde
 
 const urlToPathMap = new Map();
 const proxiedHosts = new Set(['cdn.hypothes.is', 'via.hypothes.is', 'hypothes.is', 'annotate.tv']);
-export default ({ vault, plugin }) => {
+
+export default (vault: Vault, plugin: AnnotatorPlugin) => {
     const GenericAnnotation = (
         props: SpecificAnnotationProps & {
             baseSrc: string;
@@ -409,7 +410,7 @@ export default ({ vault, plugin }) => {
                             if (matchingAnnotations.length > 0) {
                                 const annotation = matchingAnnotations[0];
                                 const { exact } = getAnnotationHighlightTextData(annotation);
-                                (plugin as AnnotatorPlugin).dragData = {
+                                plugin.dragData = {
                                     annotationFilePath: props.annotationFile,
                                     annotationId: annotation.id,
                                     annotationText: exact
@@ -494,7 +495,7 @@ export default ({ vault, plugin }) => {
     return GenericAnnotation;
 };
 
-function patchSidebarMarkdownRendering(iframe: HTMLIFrameElement, filePath: string, plugin: AnnotatorPlugin) {
+function patchSidebarMarkdownRendering(iframe: HTMLIFrameElement, filePath: string, plugin: AnnotatorPlugin): void {
     type HTMLElementConstructor = typeof window.HTMLElement;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const IframeElement = (iframe.contentWindow as any).Element;
@@ -578,7 +579,7 @@ function patchSidebarMarkdownRendering(iframe: HTMLIFrameElement, filePath: stri
     };
 }
 
-export const getProxiedUrl = (url: URL | string, props, vault): string => {
+export const getProxiedUrl = (url: URL | string, props: SpecificAnnotationProps, vault: Vault): string => {
     const proxiedUrl = proxy(url, props);
 
     if (proxiedUrl.protocol == 'vault:') {
@@ -594,7 +595,7 @@ export const getProxiedUrl = (url: URL | string, props, vault): string => {
     return proxiedUrl.toString();
 };
 
-function patchIframeEventBubbling(iframe: HTMLIFrameElement, container: HTMLElement) {
+function patchIframeEventBubbling(iframe: HTMLIFrameElement, container: HTMLElement): void {
     const events = [];
     for (const property in container) {
         const match = property.match(/^on(.*)/);
@@ -610,7 +611,7 @@ function patchIframeEventBubbling(iframe: HTMLIFrameElement, container: HTMLElem
     }
 }
 
-function proxy(url: URL | string, props): URL {
+function proxy(url: URL | string, props: SpecificAnnotationProps): URL {
     const href = typeof url == 'string' ? url : url.href;
 
     if (
@@ -680,27 +681,26 @@ function proxy(url: URL | string, props): URL {
     }
 }
 
-function getAbstractFileByPath(path, vault) {
-    let p;
+function getAbstractFileByPath(path: string, vault: Vault): TFile {
+    let p: TAbstractFile | null;
+
     if (
         (p = vault.getAbstractFileByPath(path)) instanceof TFile ||
         (p = vault.getAbstractFileByPath(`${path}.html`)) instanceof TFile
     ) {
         return p;
     }
+
+    throw "Failed to get file from vault"
 }
 
-async function readAbstractFile(abstractFile, vault) {
+async function readFromVaultPath(path: string, vault: Vault): Promise<ArrayBuffer> {
+    const abstractFile = getAbstractFileByPath(path, vault);
     return await vault.readBinary(abstractFile);
 }
 
-async function readFromVaultPath(path, vault) {
-    const abstractFile = getAbstractFileByPath(path, vault);
-    return await readAbstractFile(abstractFile, vault);
-}
-
-function getVaultPathResourceUrl(vaultPath, vault) {
-    function tryGetResourceUrl(vaultPath, vault) {
+function getVaultPathResourceUrl(vaultPath: string, vault: Vault): string {
+    function tryGetResourceUrl(vaultPath: string, vault: Vault) {
         const abstractFile = getAbstractFileByPath(vaultPath, vault);
         const resourcePath = vault.getResourcePath(abstractFile);
         urlToPathMap.set(resourcePath, vaultPath);

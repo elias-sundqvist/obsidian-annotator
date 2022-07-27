@@ -74,22 +74,10 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         this.registerView(VIEW_TYPE_PDF_ANNOTATOR, leaf => new AnnotatorView(leaf, this));
         await this.loadResources();
         this.codeMirrorInstances = new Set();
-        this.PdfAnnotation = definePdfAnnotation({
-            vault: this.app.vault,
-            plugin: this
-        });
-        this.EpubAnnotation = defineEpubAnnotation({
-            vault: this.app.vault,
-            plugin: this
-        });
-        this.VideoAnnotation = defineVideoAnnotation({
-            vault: this.app.vault,
-            plugin: this
-        });
-        this.WebAnnotation = defineWebAnnotation({
-            vault: this.app.vault,
-            plugin: this
-        });
+        this.PdfAnnotation = definePdfAnnotation(this.app.vault, this);
+        this.EpubAnnotation = defineEpubAnnotation(this.app.vault, this);
+        this.VideoAnnotation = defineVideoAnnotation(this.app.vault, this);
+        this.WebAnnotation = defineWebAnnotation(this.app.vault, this);
         this.addMarkdownPostProcessor();
         this.registerMonkeyPatches();
         this.registerSettingsTab();

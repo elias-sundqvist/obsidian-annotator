@@ -1,9 +1,11 @@
 import defineGenericAnnotation from 'defineGenericAnnotation';
 import React from 'react';
+import { Vault } from 'obsidian';
+import AnnotatorPlugin from 'main';
 import { VideoAnnotationProps } from './types';
 
-export default ({ vault, plugin }) => {
-    const GenericAnnotationEpub = defineGenericAnnotation({ vault, plugin });
+export default (vault: Vault, plugin: AnnotatorPlugin) => {
+    const GenericAnnotationEpub = defineGenericAnnotation(vault, plugin);
     const EpubAnnotation = ({ ...props }: VideoAnnotationProps) => {
         return (
             <GenericAnnotationEpub
