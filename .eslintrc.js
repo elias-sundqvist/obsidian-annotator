@@ -33,6 +33,7 @@ module.exports = {
         // e.g. "@typescript-eslint/explicit-function-return-type": "off",
         "@typescript-eslint/explicit-module-boundary-types": "off",
         "@typescript-eslint/no-this-alias": "off",
+        "@typescript-eslint/ban-ts-comment": "off",
         "no-console": ["error", { allow: ["warn", "error"] }],
     },
 };

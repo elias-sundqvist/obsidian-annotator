@@ -19,7 +19,7 @@ import { around } from 'monkey-around';
 import { VIEW_TYPE_PDF_ANNOTATOR, ICON_NAME, ANNOTATION_TARGET_PROPERTY } from './constants';
 import defineEpubAnnotation from './defineEpubAnnotation';
 import defineVideoAnnotation from './defineVideoAnnotation';
-import { PdfAnnotationProps, EpubAnnotationProps, VideoAnnotationProps, WebAnnotationProps } from './types';
+import { Annotation, PdfAnnotationProps, EpubAnnotationProps, VideoAnnotationProps, WebAnnotationProps } from './types';
 import { EditorState } from '@codemirror/state';
 import AnnotatorSettingsTab, { AnnotatorSettings, DEFAULT_SETTINGS, IHasAnnotatorSettings } from 'settings';
 import AnnotatorView from 'annotatorView';
@@ -30,17 +30,31 @@ import stringEncodedResourcesFolder from './resources!zipStringEncoded';
 import * as jszip from 'jszip';
 
 export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSettings {
+    // @ts-ignore: initialized by loadSettings() in onloadImpl()
     settings: AnnotatorSettings;
+    views: Set<AnnotatorView> = new Set();
+
     public pdfAnnotatorFileModes: { [file: string]: string } = {};
     private _loaded = false;
+
+    // All these initialized in onloadImpl(), instead of constructor
+    // @ts-ignore
     PdfAnnotation: (props: PdfAnnotationProps) => JSX.Element;
+    // @ts-ignore
     EpubAnnotation: (props: EpubAnnotationProps) => JSX.Element;
+    // @ts-ignore
     VideoAnnotation: (props: VideoAnnotationProps) => JSX.Element;
+    // @ts-ignore
     WebAnnotation: (props: WebAnnotationProps) => JSX.Element;
-    views: Set<AnnotatorView> = new Set();
-    dragData: { annotationFilePath: string; annotationId: string; annotationText: string };
+    // @ts-ignore
     codeMirrorInstances: Set<WeakRef<CodeMirror.Editor>>;
+    // @ts-ignore
     codeMirrorDropHandler: (editor: CodeMirror.Editor, ev: DragEvent) => void;
+
+    // @ts-ignore codeMirror initializes this
+    dragData: null | { annotationFilePath: string; annotationId: string; annotationText: string };
+
+    // @ts-ignore initialized in onload()
     setupPromise: Promise<void>;
 
     async onload() {
@@ -141,6 +155,9 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         return EditorState.transactionFilter.of(transaction => {
             if (transaction.isUserEvent('input.drop')) {
                 try {
+                    // It's possible that these code block doesn't work at all
+                    // obsidian updated to CodeMirror 6 and it doesn't have `inserted` method on transtaction changes
+
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     const droppedText = (transaction.changes as any).inserted.map(x => x.text.join('')).join('');
 
@@ -193,9 +210,9 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         this.views.forEach(v => v.onDarkReadersUpdated());
     }
 
-    public async openAnnotationTarget(annotationTargetFile: TFile, onNewPane: boolean, annotationId: string) {
+    public async openAnnotationTarget(annotationTargetFile: TFile, onNewPane: boolean, annotationId: string | null) {
         const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_PDF_ANNOTATOR);
-        let leaf: WorkspaceLeaf = null;
+        let leaf: WorkspaceLeaf | null = null;
 
         if (leaves?.length > 0) {
             leaf = leaves[0];
@@ -220,7 +237,7 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         this.scrollToAnnotation(annotationId);
     }
 
-    public scrollToAnnotation(annotationid) {
+    public scrollToAnnotation(annotationid: Annotation['id'] | null) {
         for (const view of this.views) {
             view.scrollToAnnotation(annotationid);
         }
@@ -233,7 +250,7 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         }
     }
 
-    getPropertyValue(propertyName: string, file: TFile) {
+    getPropertyValue(propertyName: string, file: TFile | null) {
         if (!file) {
             return null;
         }
@@ -307,10 +324,10 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         this.register(
             around(MarkdownView.prototype, {
                 onMoreOptionsMenu(next) {
-                    return function (menu: Menu) {
-                        const file = this.file;
+                    return function (menu: Menu): any {
+                        const file = (this as MarkdownView).file;
                         if (!file || !self.getPropertyValue(ANNOTATION_TARGET_PROPERTY, file)) {
-                            return next.call(this, menu);
+                            return next.call((this as MarkdownView), menu);
                         }
 
                         menu.addItem(item => {
@@ -348,18 +365,18 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         );
     }
 
-    isAnnotationFile(f: TFile) {
+    isAnnotationFile(f: TFile | null) {
         return !!this.getPropertyValue(ANNOTATION_TARGET_PROPERTY, f);
     }
 
     private addMarkdownPostProcessor() {
         const markdownPostProcessor = async (el: HTMLElement, ctx: MarkdownPostProcessorContext) => {
             for (const link of el.getElementsByClassName('internal-link') as HTMLCollectionOf<HTMLAnchorElement>) {
-                const href = link.getAttribute('href');
-                const parsedLink = parseLinktext(href);
+                const parsedLink = parseLinktext(link.href);
                 const annotationid = parsedLink.subpath.startsWith('#^') ? parsedLink.subpath.substr(2) : null;
-                const file = this.app.metadataCache.getFirstLinkpathDest(parsedLink.path, ctx.sourcePath);
-                if (this.isAnnotationFile(file)) {
+                const file: TFile = this.app.metadataCache.getFirstLinkpathDest(parsedLink.path, ctx.sourcePath);
+
+                if (!this.isAnnotationFile(file)) {
                     link.addEventListener('click', ev => {
                         ev.preventDefault();
                         ev.stopPropagation();

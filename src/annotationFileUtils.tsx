@@ -8,7 +8,7 @@ import {
     writeAnnotationToAnnotationFileString
 } from 'annotationUtils';
 
-export async function getAnnotation(annotationId: string, file: TFile, vault: Vault): Promise<Annotation> {
+export async function getAnnotation(annotationId: string, file: TFile, vault: Vault): Promise<Annotation|null> {
     const text = await vault.read(file);
     return getAnnotationFromFileContent(annotationId, text);
 }

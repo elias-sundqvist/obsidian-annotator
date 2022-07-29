@@ -2,6 +2,7 @@ import { getAnnotation } from 'annotationFileUtils';
 import { ANNOTATION_TARGET_PROPERTY, ANNOTATION_TARGET_TYPE_PROPERTY, VIEW_TYPE_PDF_ANNOTATOR } from './constants';
 import { DarkReaderType } from 'darkreader';
 import AnnotatorPlugin from 'main';
+import { Annotation } from './types';
 import { FileView, Menu, TFile, WorkspaceLeaf } from 'obsidian';
 import React from 'react';
 import ReactDOM from 'react-dom';
@@ -204,7 +205,7 @@ export default class AnnotatorView extends FileView {
         super.onMoreOptionsMenu(menu);
     }
 
-    async scrollToAnnotation(annotationId) {
+    async scrollToAnnotation(annotationId: Annotation['id'] | null) {
         const annotation = await getAnnotation(annotationId, this.file, this.app.vault);
         if (!annotation) return;
         let yoffset = -10000;
@@ -288,13 +289,13 @@ export default class AnnotatorView extends FileView {
                         case 'epub':
                             // Use the "real" hypothes.is code.
                             (
-                                sidebarIframe.contentDocument.getElementById(annotationId).firstChild as HTMLElement
+                                sidebarIframe.contentDocument.getElementById(annotation.id).firstChild as HTMLElement
                             ).click();
                             break;
                     }
                     guest._sidebarRPC.channelListeners.focusAnnotations(matchingAnchors.map(x => x.annotation.$tag));
                     (
-                        sidebarIframe.contentDocument.getElementById(annotationId).firstChild as HTMLElement
+                        sidebarIframe.contentDocument.getElementById(annotation.id).firstChild as HTMLElement
                     ).dispatchEvent(new Event('mouseenter'));
                 }
 
