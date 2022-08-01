@@ -9,7 +9,6 @@ import {
     TFile,
     MarkdownPostProcessorContext,
     parseLinktext,
-    MarkdownPreviewView,
     Notice
 } from 'obsidian';
 
@@ -20,7 +19,7 @@ import { VIEW_TYPE_PDF_ANNOTATOR, ICON_NAME, ANNOTATION_TARGET_PROPERTY } from '
 import defineEpubAnnotation from './defineEpubAnnotation';
 import defineVideoAnnotation from './defineVideoAnnotation';
 import { Annotation, PdfAnnotationProps, EpubAnnotationProps, VideoAnnotationProps, WebAnnotationProps } from './types';
-import { EditorState } from '@codemirror/state';
+import * as codeMirror from '@codemirror/state';
 import AnnotatorSettingsTab, { AnnotatorSettings, DEFAULT_SETTINGS, IHasAnnotatorSettings } from 'settings';
 import AnnotatorView from 'annotatorView';
 import { fetchUrl, wait } from 'utils';
@@ -46,13 +45,9 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
     VideoAnnotation: (props: VideoAnnotationProps) => JSX.Element;
     // @ts-ignore
     WebAnnotation: (props: WebAnnotationProps) => JSX.Element;
-    // @ts-ignore
-    codeMirrorInstances: Set<WeakRef<CodeMirror.Editor>>;
-    // @ts-ignore
-    codeMirrorDropHandler: (editor: CodeMirror.Editor, ev: DragEvent) => void;
 
-    // @ts-ignore codeMirror initializes this
-    dragData: null | { annotationFilePath: string; annotationId: string; annotationText: string };
+    // Used to store text of hypothesis highlight during drag-and-drop event
+    dragData: null | { annotationFilePath: string; annotationId: string; annotationText: string } = null;
 
     // @ts-ignore initialized in onload()
     setupPromise: Promise<void>;
@@ -87,7 +82,6 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         await this.loadSettings();
         this.registerView(VIEW_TYPE_PDF_ANNOTATOR, leaf => new AnnotatorView(leaf, this));
         await this.loadResources();
-        this.codeMirrorInstances = new Set();
         this.PdfAnnotation = definePdfAnnotation(this.app.vault, this);
         this.EpubAnnotation = defineEpubAnnotation(this.app.vault, this);
         this.VideoAnnotation = defineVideoAnnotation(this.app.vault, this);
@@ -95,41 +89,8 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         this.addMarkdownPostProcessor();
         this.registerMonkeyPatches();
         this.registerSettingsTab();
-        this.codeMirrorDropHandler = (editor: CodeMirror.Editor, ev: DragEvent) => {
-            if (this.dragData !== null && ev.dataTransfer.getData('text/plain') == 'drag-event::hypothesis-highlight') {
-                ev.preventDefault();
-                const el = editor.getWrapperElement();
-                const targetFilePath = this.app.workspace
-                    .getLeavesOfType('markdown')
-                    .filter(x => (x as WorkspaceLeaf & (MarkdownPreviewView | null))?.containerEl?.contains(el))?.[0]
-                    ?.getViewState().state.file;
-                const annotationFile = this.app.vault.getAbstractFileByPath(this.dragData.annotationFilePath);
-                const targetFile = this.app.vault.getAbstractFileByPath(targetFilePath);
-                const doc = editor.getDoc();
-                editor.focus();
-                editor.setCursor(editor.coordsChar({ left: ev.pageX, top: ev.pageY }));
-                const newpos = editor.getCursor();
-                if (annotationFile instanceof TFile && targetFile instanceof TFile) {
-                    const linkString = this.app.fileManager.generateMarkdownLink(
-                        annotationFile,
-                        targetFile.path,
-                        `#^${this.dragData.annotationId}`,
-                        this.dragData.annotationText
-                    );
-                    doc.replaceRange(linkString, newpos);
-                }
-                this.dragData = null;
-            }
-        };
-        this.registerCodeMirror(cm => {
-            this.codeMirrorInstances.add(new WeakRef(cm));
-            cm.on('drop', this.codeMirrorDropHandler);
-        });
 
-        try {
-            const ext = this.getDropExtension();
-            this.registerEditorExtension(ext);
-        } catch (e) {}
+        this.registerEditorExtension(this.getDropExtension());
 
         this.addCommand({
             id: 'toggle-annotation-mode',
@@ -151,15 +112,16 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         });
     }
 
+    /*
+     * Converts hypothesis-highlight to obsidian link when drag-and-drop
+     */
     getDropExtension() {
-        return EditorState.transactionFilter.of(transaction => {
+        return codeMirror.EditorState.transactionFilter.of((transaction: codeMirror.Transaction): codeMirror.TransactionSpec => {
             if (transaction.isUserEvent('input.drop')) {
                 try {
-                    // It's possible that these code block doesn't work at all
-                    // obsidian updated to CodeMirror 6 and it doesn't have `inserted` method on transtaction changes
-
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    const droppedText = (transaction.changes as any).inserted.map(x => x.text.join('')).join('');
+                    // changes.inserted used like this because ChangeSet doesn't have typed attributes for that
+                    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-explicit-any
+                    const droppedText = (transaction.changes as any).inserted.map((x: any) => x.text.join('')).join('');
 
                     if (this.dragData !== null && droppedText == 'drag-event::hypothesis-highlight') {
                         const startPos = transaction.selection.ranges[0].from;
@@ -183,7 +145,10 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
                             return { changes: { from: startPos, insert: linkString }, selection: { anchor: startPos } };
                         }
                     }
-                } catch (e) {}
+                }
+                catch (e) {
+                    this.log('Failed to handle hypothesis drag-and-drop annotation event: ', e);
+                }
             }
             return transaction;
         });
@@ -195,10 +160,6 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
 
     onunload() {
         this.unloadResources();
-        for (const instanceRef of this.codeMirrorInstances) {
-            instanceRef.deref()?.off('drop', this.codeMirrorDropHandler);
-        }
-        this.codeMirrorInstances = new Set();
     }
 
     async loadSettings() {
@@ -324,6 +285,7 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         this.register(
             around(MarkdownView.prototype, {
                 onMoreOptionsMenu(next) {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     return function (menu: Menu): any {
                         const file = (this as MarkdownView).file;
                         if (!file || !self.getPropertyValue(ANNOTATION_TARGET_PROPERTY, file)) {
