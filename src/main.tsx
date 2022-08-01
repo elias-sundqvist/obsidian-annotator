@@ -2,7 +2,6 @@ import 'core-js';
 import {
     FileView,
     MarkdownView,
-    Menu,
     Plugin,
     ViewState,
     WorkspaceLeaf,
@@ -110,6 +109,30 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
                 }
             }
         });
+
+        this.registerEvent(
+            this.app.workspace.on('file-menu', (menu, file, source, leaf) => {
+                if (
+                    leaf?.view instanceof MarkdownView &&
+                    file instanceof TFile &&
+                    source === 'pane-more-options' &&
+                    this.getPropertyValue(ANNOTATION_TARGET_PROPERTY, file)
+                ) {
+                    // any because item doesn't have .setSection() in the type
+                    // eslint-disable-next-line
+                    menu.addItem((item: any): void => item
+                        .setTitle('Annotate')
+                        .setIcon(ICON_NAME)
+                        .setSection('pane')
+                        .onClick(async () => {
+                            // any because leaf doesn't have id in type
+                            // eslint-disable-next-line
+                            this.pdfAnnotatorFileModes[(leaf as any).id || file.path] = VIEW_TYPE_PDF_ANNOTATOR;
+                            await this.setAnnotatorView(leaf);
+                        }));
+                }
+            })
+        );
     }
 
     /*
@@ -282,33 +305,9 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
             })
         );
 
-        this.register(
-            around(MarkdownView.prototype, {
-                onMoreOptionsMenu(next) {
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    return function (menu: Menu): any {
-                        const file = (this as MarkdownView).file;
-                        if (!file || !self.getPropertyValue(ANNOTATION_TARGET_PROPERTY, file)) {
-                            return next.call((this as MarkdownView), menu);
-                        }
-
-                        menu.addItem(item => {
-                            item.setTitle('Annotate')
-                                .setIcon(ICON_NAME)
-                                .onClick(() => {
-                                    self.pdfAnnotatorFileModes[this.leaf.id || file.path] = VIEW_TYPE_PDF_ANNOTATOR;
-                                    self.setAnnotatorView(this.leaf);
-                                });
-                        }).addSeparator();
-
-                        return next.call(this, menu);
-                    };
-                }
-            })
-        );
     }
 
-    private async setAnnotatorView(leaf: WorkspaceLeaf) {
+    public async setAnnotatorView(leaf: WorkspaceLeaf) {
         await leaf.setViewState({
             type: VIEW_TYPE_PDF_ANNOTATOR,
             state: leaf.view.getState(),
