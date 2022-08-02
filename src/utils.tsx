@@ -9,7 +9,7 @@ export async function fetchUrl(requestInfo: RequestInfo, requestInit?: RequestIn
     try {
         const response = await requestUrl({
             url: requestInfo instanceof Request ? requestInfo.url : requestInfo,
-            method: requestInit.method
+            method: requestInit?.method
         });
 
         return new Response(response.arrayBuffer, {

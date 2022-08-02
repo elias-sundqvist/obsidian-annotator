@@ -22,18 +22,18 @@ type YoutubeMetaData = {
     };
 };
 
-export default function getYouTubeMetaData(fetch, youtube): Promise<YoutubeMetaData> {
+export default function getYouTubeMetaData(fetchFunc: (url: string) => Promise<Response>, youtube: string): Promise<YoutubeMetaData> {
     return new Promise(async (ok, erro) => {
         if (/((http|https):\/\/)?(www\.)?((youtube\.com)|(youtu\.be))(\/)?([a-zA-Z0-9\-\.]+)\/?/.test(youtube)) {
             try {
-                const body = await (await fetch(youtube)).text(),
+                const body = await (await fetchFunc(youtube)).text(),
                     $ = cheerio.load(body),
                     title = $(`meta[name="title"]`).attr('content'),
                     description = $(`meta[name="description"]`).attr('content'),
                     keywords = $(`meta[name="keywords"]`).attr('content'),
                     shortlinkUrl = $(`link[rel="shortlinkUrl"]`).attr('href'),
                     ur = $(`link[type="application/json+oembed"]`).attr('href');
-                const iem = ur && ur != '' ? await (await fetch(ur.replace('http:', 'https:'))).text() : undefined;
+                const iem = ur && ur != '' ? await (await fetchFunc(ur.replace('http:', 'https:'))).text() : undefined;
                 const embedinfo = ur ? (iem ? JSON.parse(iem) : null) : null;
                 ok({ title, description, keywords, shortlinkUrl, embedinfo });
             } catch (e) {

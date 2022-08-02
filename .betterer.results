@@ -167,8 +167,7 @@ exports[`stricter ts`] = {
     "src/settings.tsx:2431851143": [
       [229, 30, 34, "Argument of type \'string | undefined\' is not assignable to parameter of type \'string\'.\\n  Type \'undefined\' is not assignable to type \'string\'.", "3704152578"]
     ],
-    "src/utils.tsx:674725236": [
-      [11, 20, 11, "Object is possibly \'undefined\'.", "2008546382"],
+    "src/utils.tsx:4111464203": [
       [25, 20, 2, "Parameter \'ms\' implicitly has an \'any\' type.", "5861051"],
       [27, 34, 3, "Parameter \'url\' implicitly has an \'any\' type.", "193422222"],
       [40, 28, 3, "Parameter \'str\' implicitly has an \'any\' type.", "193432912"],
@@ -204,9 +203,7 @@ exports[`stricter ts`] = {
       [24, 10, 7, "Type \'RegExpExecArray | null\' must have a \'[Symbol.iterator]()\' method that returns an iterator.", "4196045296"],
       [34, 31, 5, "Binding element \'vssId\' implicitly has an \'any\' type.", "189160062"]
     ],
-    "src/youtube-metadata-scraper.tsx:4281419102": [
-      [24, 43, 5, "Parameter \'fetch\' implicitly has an \'any\' type.", "171106201"],
-      [24, 50, 7, "Parameter \'youtube\' implicitly has an \'any\' type.", "869703840"],
+    "src/youtube-metadata-scraper.tsx:187011661": [
       [37, 21, 5, "Type \'string | undefined\' is not assignable to type \'string\'.\\n  Type \'undefined\' is not assignable to type \'string\'.", "183222373"],
       [37, 28, 11, "Type \'string | undefined\' is not assignable to type \'string\'.\\n  Type \'undefined\' is not assignable to type \'string\'.", "1848305091"],
       [37, 41, 8, "Type \'string | undefined\' is not assignable to type \'string\'.\\n  Type \'undefined\' is not assignable to type \'string\'.", "121053167"],
@@ -268,10 +265,11 @@ exports[`eslint recommended rules`] = {
       [153, 15, 12, "\'href\' is defined but never used.", "1285147027"],
       [155, 31, 12, "\'html\' is defined but never used.", "457162647"]
     ],
-    "src/utils.tsx:674725236": [
+    "src/utils.tsx:4111464203": [
       [53, 19, 6, "\'NodeJS\' is not defined.", "2826257852"]
     ],
-    "src/youtube-metadata-scraper.tsx:4281419102": [
+    "src/youtube-metadata-scraper.tsx:187011661": [
+      [24, 55, 11, "\'url\' is defined but never used.", "1884124129"],
       [25, 23, 5, "Promise executor functions should not be async.", "170543907"],
       [26, 87, 1, "Unnecessary escape character: \\\\..", "177657"]
     ]
@@ -601,7 +599,7 @@ exports[`eslint ts stricter type checking`] = {
     "src/settings.tsx:2431851143": [
       [232, 24, 35, "Unexpected \`await\` of a non-Promise (non-\\"Thenable\\") value.", "1335892741"]
     ],
-    "src/utils.tsx:674725236": [
+    "src/utils.tsx:4111464203": [
       [25, 69, 2, "Unsafe argument of type \`any\` assigned to a parameter of type \`number\`.", "5861051"],
       [28, 4, 52, "Unsafe return of an \`any\` typed value.", "1769490320"],
       [28, 11, 42, "Unsafe member access .trim on an \`any\` value.", "1287435904"],
@@ -654,20 +652,9 @@ exports[`eslint ts stricter type checking`] = {
       [57, 32, 9, "Unsafe call of an \`any\` typed value.", "166549642"],
       [58, 35, 11, "Unsafe argument of type \`any\` assigned to a parameter of type \`string\`.", "4182976336"]
     ],
-    "src/youtube-metadata-scraper.tsx:4281419102": [
-      [25, 23, 1135, "Promise returned in function argument where a void return was expected.", "835346829"],
-      [26, 102, 7, "Unsafe argument of type \`any\` assigned to a parameter of type \`string\`.", "869703840"],
-      [28, 22, 42, "Unsafe assignment of an \`any\` value.", "4006036451"],
-      [28, 35, 27, "Unsafe member access .text on an \`any\` value.", "1879182245"],
-      [28, 35, 27, "Unsafe call of an \`any\` typed value.", "1879182245"],
-      [28, 42, 5, "Unsafe call of an \`any\` typed value.", "171106201"],
-      [29, 37, 4, "Unsafe argument of type \`any\` assigned to a parameter of type \`string | Buffer | AnyNode | AnyNode[]\`.", "2087730517"],
-      [35, 22, 92, "Unsafe assignment of an \`any\` value.", "511411151"],
-      [35, 51, 49, "Unsafe member access .text on an \`any\` value.", "385497947"],
-      [35, 51, 49, "Unsafe call of an \`any\` typed value.", "385497947"],
-      [35, 58, 5, "Unsafe call of an \`any\` typed value.", "171106201"],
+    "src/youtube-metadata-scraper.tsx:187011661": [
+      [25, 23, 1143, "Promise returned in function argument where a void return was expected.", "1856601037"],
       [36, 22, 54, "Unsafe assignment of an \`any\` value.", "1302595641"],
-      [36, 57, 3, "Unsafe argument of type \`any\` assigned to a parameter of type \`string\`.", "193418276"],
       [37, 65, 9, "Unsafe assignment of an \`any\` value.", "2215098592"],
       [39, 55, 9, "Unsafe assignment of an \`any\` value.", "146325010"]
     ]
