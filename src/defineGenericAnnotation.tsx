@@ -215,9 +215,21 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
                             defaultLocale: 'en-US',
                             scriptLoader: []
                         };
-                        res = `<!DOCTYPE html><html lang="en-US"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width"/><meta name="next-head-count" content="2"/><link rel="preload" href="/_next/static/css/6ecf6918cbb4c1161966.css" as="style"/><link rel="stylesheet" href="/_next/static/css/6ecf6918cbb4c1161966.css" data-n-g=""/><noscript data-n-css=""></noscript><script defer="" nomodule="" src="/_next/static/chunks/polyfills-f35e5aaa8964e930bb93.js"></script><script src="/_next/static/chunks/webpack-2cf3f46015d5cb72bffe.js" defer=""></script><script src="/_next/static/chunks/framework-281e90899ec90e7c48e8.js" defer=""></script><script src="/_next/static/chunks/main-f2958fa1c43570a638b9.js" defer=""></script><script src="/_next/static/chunks/pages/_app-29f2c5e3af36e3818334.js" defer=""></script><script src="/_next/static/chunks/f057a831-80b285c8b241af667dc5.js" defer=""></script><script src="/_next/static/chunks/210e6083-b60d9f84e428e38795c0.js" defer=""></script><script src="/_next/static/chunks/f9fff01a-bd49c52cc4c0f92b2ff2.js" defer=""></script><script src="/_next/static/chunks/84c042bb-4da4e215e634a7601ea2.js" defer=""></script><script src="/_next/static/chunks/420-7a83248dc7b2632b47d1.js" defer=""></script><script src="/_next/static/chunks/555-ab82c0f2bbb3d3371e76.js" defer=""></script><script src="/_next/static/chunks/570-9d744d6eeeb86b1dae1c.js" defer=""></script><script src="/_next/static/chunks/pages/videos/%5Bid%5D-5626b26dd8fea94c76b7.js" defer=""></script><script src="/_next/static/kuDd0N4Bv73cMnqLZZKCW/_buildManifest.js" defer=""></script><script src="/_next/static/kuDd0N4Bv73cMnqLZZKCW/_ssgManifest.js" defer=""></script></head><body><div id="__next"></div><script id="__NEXT_DATA__" type="application/json">${JSON.stringify(
+                        await awaitResourceLoading;
+                        const folder = resourcesZip;
+                        const videoHtmlFile = folder.folder("annotate.tv/videos").filter(_=>true)?.[0];
+                        if(!videoHtmlFile) {
+                            console.error("No video annotation website found. Make sure that you have provided a valid zip file in the annotator config.");
+                            
+                            return new Response(Buffer.from(res, 'utf8'), {
+                                status: 404,
+                                statusText: 'File not found'
+                            });
+                        }
+                        const videoHtml = await videoHtmlFile.async("text");
+                        res = videoHtml.replace(/(__NEXT_DATA__.*?>)(.*?)(<\/script)/ig, (...args)=>`${args[1]}${JSON.stringify(
                             video_data
-                        )}</script></body></html>`;
+                        )}${args[3]}`);
                         return new Response(Buffer.from(res, 'utf8'), {
                             status: 200,
                             statusText: 'ok'
