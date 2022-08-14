@@ -2,14 +2,29 @@ import { requestUrl } from 'obsidian';
 
 // This fetch can be used to get internal(like blob) and external resources with CORS policies
 export async function fetchUrl(requestInfo: RequestInfo, requestInit?: RequestInit): Promise<Response> {
-
     // Use regular fetch for blobs, because obsidian.requestUrl can't access files by path
     if (requestInfo.toString().startsWith('blob:')) return await fetch(requestInfo, requestInit);
 
+    const requestHeaders = new Headers(requestInit?.headers);
+    const requestBody = ((): string | undefined => {
+        if (!requestInit?.body) return undefined;
+
+        if (typeof requestInit.body === 'string') {
+            return requestInit.body;
+        } else {
+            console.log('Request Body nor string or null: ', requestInit.body);
+            return undefined;
+        }
+    })();
+
     try {
         const response = await requestUrl({
-            url: requestInfo instanceof Request ? requestInfo.url : requestInfo,
-            method: requestInit?.method
+            url: typeof requestInfo === 'string' ? requestInfo : requestInfo.url,
+            method: requestInit?.method,
+            body: requestBody,
+            contentType: requestHeaders.get('Content-Type'),
+            headers: Object.fromEntries(requestHeaders?.entries()),
+            throw: false
         });
 
         return new Response(response.arrayBuffer, {
@@ -18,7 +33,6 @@ export async function fetchUrl(requestInfo: RequestInfo, requestInit?: RequestIn
             headers: new Headers(response.headers)
         });
     } catch (e) {
-        // fallback to regular fetch, because requestUrl sometimes fails on iPad
         return await fetch(requestInfo, requestInit);
     }
 }

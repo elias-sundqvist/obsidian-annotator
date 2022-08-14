@@ -1,14 +1,20 @@
 import defineGenericAnnotation from 'defineGenericAnnotation';
 import React from 'react';
-import { Vault } from 'obsidian';
+import { Vault, Platform } from 'obsidian';
 import AnnotatorPlugin from 'main';
 import { VideoAnnotationProps } from './types';
 
 export default (vault: Vault, plugin: AnnotatorPlugin) => {
-    const GenericAnnotationEpub = defineGenericAnnotation(vault, plugin);
-    const EpubAnnotation = ({ ...props }: VideoAnnotationProps) => {
+    const GenericAnnotationVideo = defineGenericAnnotation(vault, plugin);
+    const VideoAnnotation = ({ ...props }: VideoAnnotationProps) => {
+        if (Platform.isMobile) {
+            return (
+                <h2>obsidian-annotator plugin doesn&apos;t support video annotation on mobile</h2>
+            );
+        }
+
         return (
-            <GenericAnnotationEpub
+            <GenericAnnotationVideo
                 baseSrc="https://annotate.tv/videos/620d5a42b9ab630009bf3e31.html"
                 {...props}
                 onload={async iframe => {
@@ -17,5 +23,6 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
             />
         );
     };
-    return EpubAnnotation;
+
+    return VideoAnnotation;
 };
