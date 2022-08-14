@@ -2,7 +2,6 @@ import { requestUrl } from 'obsidian';
 
 // This fetch can be used to get internal(like blob) and external resources with CORS policies
 export async function fetchUrl(requestInfo: RequestInfo, requestInit?: RequestInit): Promise<Response> {
-    console.log("fetching", requestInfo, requestInit);
     // Use regular fetch for blobs, because obsidian.requestUrl can't access files by path
     if (requestInfo.toString().startsWith('blob:')) return await fetch(requestInfo, requestInit);
 
