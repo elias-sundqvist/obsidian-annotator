@@ -8,7 +8,8 @@ import {
     TFile,
     MarkdownPostProcessorContext,
     parseLinktext,
-    Notice
+    Notice,
+    Platform
 } from 'obsidian';
 
 import definePdfAnnotation from './definePdfAnnotation';
@@ -58,7 +59,7 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
 
     async loadResources() {
         await loadResourcesZip(jszip.loadAsync(stringEncodedResourcesFolder));
-        if (this.settings.annotateTvUrl) {
+        if (this.settings.annotateTvUrl && Platform.isDesktop) {
             try {
                 const response = await fetchUrl(this.settings.annotateTvUrl);
                 if (response.ok) {
