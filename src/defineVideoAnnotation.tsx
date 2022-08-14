@@ -9,7 +9,7 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
     const VideoAnnotation = ({ ...props }: VideoAnnotationProps) => {
         if (Platform.isMobile) {
             return (
-                <h2>obsidian-annotator plugin doesn't support video annotation on mobile</h2>
+                <h2>obsidian-annotator plugin doesn&apos;t support video annotation on mobile</h2>
             );
         }
 

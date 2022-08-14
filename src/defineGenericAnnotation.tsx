@@ -217,6 +217,7 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
                         };
                         await awaitResourceLoading;
                         const folder = resourcesZip;
+                        // eslint-disable-next-line
                         const videoHtmlFile = folder.folder("annotate.tv/videos").filter(_=>true)?.[0];
                         if(!videoHtmlFile) {
                             console.error("No video annotation website found. Make sure that you have provided a valid zip file in the annotator config.");

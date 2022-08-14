@@ -6,14 +6,14 @@ export async function fetchUrl(requestInfo: RequestInfo, requestInit?: RequestIn
     if (requestInfo.toString().startsWith('blob:')) return await fetch(requestInfo, requestInit);
 
     const requestHeaders = new Headers(requestInit?.headers);
-    const requestBody = ((): string | null => {
-        if (!requestInit?.body) return null;
+    const requestBody = ((): string | undefined => {
+        if (!requestInit?.body) return undefined;
 
         if (typeof requestInit.body === 'string') {
             return requestInit.body;
         } else {
-            this.plugin.log('Request Body nor string or null: ', requestInit.body);
-            return null;
+            console.log('Request Body nor string or null: ', requestInit.body);
+            return undefined;
         }
     })();
 

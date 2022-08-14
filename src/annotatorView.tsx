@@ -207,8 +207,6 @@ export default class AnnotatorView extends FileView {
                 this.useDarkMode = !this.useDarkMode;
                 await this.onDarkReadersUpdated();
             }));
-
-        super.onMoreOptionsMenu(menu);
     }
 
     async scrollToAnnotation(annotationId: Annotation['id'] | null) {
