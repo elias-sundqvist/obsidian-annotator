@@ -69,6 +69,17 @@ You can make a [pull request](https://github.com/elias-sundqvist/obsidian-annota
 
 ## Changelog
 
+### 0.2.5 (2022-08-14)
+* Move buttons 'Annotate', 'Toggle Dark Mode', 'Open as Markdown' to top of options menu
+* Video annotation
+  * fix [Video not found error](https://github.com/elias-sundqvist/obsidian-annotator/issues/198)
+  * Temporary disable video annotation on mobile devices
+
+* Internal changes
+  * CodeMirror updated to v6
+  * obsidian-api updated to 0.15.9
+  * betterer was installed with strict typing settings to make plugin more stable and reliable in a future
+
 ### 0.2.4 (2022-07-23)
 * Fix [plugin fails to start on iPad](https://github.com/elias-sundqvist/obsidian-annotator/issues/176)
 
