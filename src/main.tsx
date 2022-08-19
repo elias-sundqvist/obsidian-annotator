@@ -235,7 +235,7 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         }
     }
 
-    getPropertyValue(propertyName: string, file: TFile | null) {
+    getPropertyValue(propertyName: string, file: TFile | null): string | null {
         if (!file) {
             return null;
         }
@@ -327,8 +327,8 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         );
     }
 
-    isAnnotationFile(f: TFile | null) {
-        return !!this.getPropertyValue(ANNOTATION_TARGET_PROPERTY, f);
+    isAnnotationFile(f: TFile | null): boolean {
+        return(typeof this.getPropertyValue(ANNOTATION_TARGET_PROPERTY, f) === 'string');
     }
 
     private addMarkdownPostProcessor() {
@@ -336,9 +336,9 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
             for (const link of el.getElementsByClassName('internal-link') as HTMLCollectionOf<HTMLAnchorElement>) {
                 const parsedLink = parseLinktext(link.href);
                 const annotationid = parsedLink.subpath.startsWith('#^') ? parsedLink.subpath.substr(2) : null;
-                const file: TFile = this.app.metadataCache.getFirstLinkpathDest(parsedLink.path, ctx.sourcePath);
+                const file: TFile | null = this.app.metadataCache.getFirstLinkpathDest(parsedLink.path, ctx.sourcePath);
 
-                if (!this.isAnnotationFile(file)) {
+                if (this.isAnnotationFile(file)) {
                     link.addEventListener('click', ev => {
                         ev.preventDefault();
                         ev.stopPropagation();
