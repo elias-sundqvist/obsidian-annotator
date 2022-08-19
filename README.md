@@ -69,6 +69,12 @@ You can make a [pull request](https://github.com/elias-sundqvist/obsidian-annota
 
 ## Changelog
 
+### 0.2.6 (2022-08-19)
+* Fix bug #208 introduced in 0.2.5 It was impossible to open an internal link because of the plugin
+
+* Internal changes
+  * Use dataview package to communicate with dataview plugin
+
 ### 0.2.5 (2022-08-14)
 * Move buttons 'Annotate', 'Toggle Dark Mode', 'Open as Markdown' to top of options menu
 * Video annotation
