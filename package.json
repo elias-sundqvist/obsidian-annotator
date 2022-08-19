@@ -47,6 +47,7 @@
     "minify": "^7.0.2",
     "move-file-cli": "^3.0.0",
     "obsidian": "latest",
+    "obsidian-dataview": "^0.5.41",
     "prettier": "^2.3.2",
     "rimraf": "^3.0.2",
     "rollup": "^2.32.1",
