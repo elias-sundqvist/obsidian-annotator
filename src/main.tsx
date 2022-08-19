@@ -11,6 +11,7 @@ import {
     Notice,
     Platform
 } from 'obsidian';
+import { getAPI as getDataviewApi } from 'obsidian-dataview';
 
 import definePdfAnnotation from './definePdfAnnotation';
 import { around } from 'monkey-around';
@@ -235,15 +236,14 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         }
     }
 
-    getPropertyValue(propertyName: string, file: TFile | null): string | null {
+    getPropertyValue(propertyName: string, file: TFile | null): any | null {
         if (!file) {
             return null;
         }
-        const dataview = (this.app as any)?.plugins?.getPlugin('dataview'); // eslint-disable-line
-        const dataviewApi = dataview?.api;
-        const dataviewPage = dataviewApi?.page(file.path);
-        const dataViewPropertyValue = dataviewPage?.[propertyName];
-        this.log({ dataview, loaded: dataview?._loaded, dataviewApi, dataviewPage, dataViewPropertyValue });
+
+        // eslint-disable-next-line
+        const dataViewPropertyValue: any | undefined = getDataviewApi()?.page(file.path)?.[propertyName];
+
         if (dataViewPropertyValue) {
             if (dataViewPropertyValue.path) {
                 return this.app.metadataCache.getFirstLinkpathDest(dataViewPropertyValue.path, file.path)?.path;
@@ -328,7 +328,7 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
     }
 
     isAnnotationFile(f: TFile | null): boolean {
-        return(typeof this.getPropertyValue(ANNOTATION_TARGET_PROPERTY, f) === 'string');
+        return(!(this.getPropertyValue(ANNOTATION_TARGET_PROPERTY, f) == null));
     }
 
     private addMarkdownPostProcessor() {
