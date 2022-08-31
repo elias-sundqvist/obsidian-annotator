@@ -98,7 +98,7 @@ export default class AnnotatorSettingsTab extends PluginSettingTab {
 
         const epubFontSize = new Setting(containerEl)
             .setName('Font Size')
-            .setDesc(`Base fron size in percents. Current: ${this.plugin.settings.epubSettings.fontSize}%`);
+            .setDesc(`Base font size in percents. Current: ${this.plugin.settings.epubSettings.fontSize}%`);
 
         epubFontSize.addSlider(slider =>
             slider
@@ -107,7 +107,7 @@ export default class AnnotatorSettingsTab extends PluginSettingTab {
                 .onChange(async value => {
                     this.plugin.settings.epubSettings.fontSize = value;
                     epubFontSize.setDesc(
-                        `Base fron size in percents. Current: ${this.plugin.settings.epubSettings.fontSize}%`
+                        `Base font size in percents. Current: ${this.plugin.settings.epubSettings.fontSize}%`
                     );
                     slider.setDynamicTooltip();
                     await this.plugin.saveSettings();
