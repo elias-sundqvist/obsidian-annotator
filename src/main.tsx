@@ -356,7 +356,7 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
     private addMarkdownPostProcessor() {
         const markdownPostProcessor = async (el: HTMLElement, ctx: MarkdownPostProcessorContext) => {
             for (const link of el.getElementsByClassName('internal-link') as HTMLCollectionOf<HTMLAnchorElement>) {
-                const parsedLink = parseLinktext(link.href);
+                const parsedLink = parseLinktext(link.getAttribute("data-href"));
                 const annotationid = parsedLink.subpath.startsWith('#^') ? parsedLink.subpath.substr(2) : null;
                 const file: TFile | null = this.app.metadataCache.getFirstLinkpathDest(parsedLink.path, ctx.sourcePath);
 
