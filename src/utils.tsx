@@ -1,3 +1,4 @@
+import AnnotatorPlugin from 'main';
 import { requestUrl } from 'obsidian';
 
 // This fetch can be used to get internal(like blob) and external resources with CORS policies
@@ -12,7 +13,7 @@ export async function fetchUrl(requestInfo: RequestInfo, requestInit?: RequestIn
         if (typeof requestInit.body === 'string') {
             return requestInit.body;
         } else {
-            console.log('Request Body nor string or null: ', requestInit.body);
+            AnnotatorPlugin.instance.log('Request Body nor string or null: ', requestInit.body);
             return undefined;
         }
     })();

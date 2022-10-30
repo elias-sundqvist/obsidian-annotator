@@ -22,7 +22,10 @@ type YoutubeMetaData = {
     };
 };
 
-export default function getYouTubeMetaData(fetchFunc: (url: string) => Promise<Response>, youtube: string): Promise<YoutubeMetaData> {
+export default function getYouTubeMetaData(
+    fetchFunc: (url: string) => Promise<Response>,
+    youtube: string
+): Promise<YoutubeMetaData> {
     return new Promise(async (ok, erro) => {
         if (/((http|https):\/\/)?(www\.)?((youtube\.com)|(youtu\.be))(\/)?([a-zA-Z0-9\-\.]+)\/?/.test(youtube)) {
             try {

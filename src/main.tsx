@@ -11,6 +11,8 @@ import {
     Notice,
     Platform
 } from 'obsidian';
+
+import StyleObserver from 'styleObserver';
 import { getAPI as getDataviewApi } from 'obsidian-dataview';
 
 import definePdfAnnotation from './definePdfAnnotation';
@@ -30,6 +32,7 @@ import stringEncodedResourcesFolder from './resources!zipStringEncoded';
 import * as jszip from 'jszip';
 
 export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSettings {
+    static instance: AnnotatorPlugin = null;
     // @ts-ignore: initialized by loadSettings() in onloadImpl()
     settings: AnnotatorSettings;
     views: Set<AnnotatorView> = new Set();
@@ -52,8 +55,10 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
 
     // @ts-ignore initialized in onload()
     setupPromise: Promise<void>;
+    styleObserver: StyleObserver;
 
     async onload() {
+        AnnotatorPlugin.instance = this;
         this.setupPromise = this.onloadImpl();
         await this.setupPromise;
     }
@@ -81,6 +86,8 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
 
     async onloadImpl() {
         await this.loadSettings();
+        this.styleObserver = new StyleObserver();
+        this.styleObserver.watch();
         this.registerView(VIEW_TYPE_PDF_ANNOTATOR, leaf => new AnnotatorView(leaf, this));
         await this.loadResources();
         this.PdfAnnotation = definePdfAnnotation(this.app.vault, this);
@@ -122,16 +129,18 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
                 ) {
                     // any because item doesn't have .setSection() in the type
                     // eslint-disable-next-line
-                    menu.addItem((item: any): void => item
-                        .setTitle('Annotate')
-                        .setIcon(ICON_NAME)
-                        .setSection('pane')
-                        .onClick(async () => {
-                            // any because leaf doesn't have id in type
-                            // eslint-disable-next-line
-                            this.pdfAnnotatorFileModes[(leaf as any).id || file.path] = VIEW_TYPE_PDF_ANNOTATOR;
-                            await this.setAnnotatorView(leaf);
-                        }));
+                    menu.addItem((item: any): void =>
+                        item
+                            .setTitle('Annotate')
+                            .setIcon(ICON_NAME)
+                            .setSection('pane')
+                            .onClick(async () => {
+                                // any because leaf doesn't have id in type
+                                // eslint-disable-next-line
+                                this.pdfAnnotatorFileModes[(leaf as any).id || file.path] = VIEW_TYPE_PDF_ANNOTATOR;
+                                await this.setAnnotatorView(leaf);
+                            })
+                    );
                 }
             })
         );
@@ -141,42 +150,51 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
      * Converts hypothesis-highlight to obsidian link when drag-and-drop
      */
     getDropExtension() {
-        return codeMirror.EditorState.transactionFilter.of((transaction: codeMirror.Transaction): codeMirror.TransactionSpec => {
-            if (transaction.isUserEvent('input.drop')) {
-                try {
-                    // changes.inserted used like this because ChangeSet doesn't have typed attributes for that
-                    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-explicit-any
-                    const droppedText = (transaction.changes as any).inserted.map((x: any) => x.text.join('')).join('');
-
-                    if (this.dragData !== null && droppedText == 'drag-event::hypothesis-highlight') {
-                        const startPos = transaction.selection.ranges[0].from;
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        const leaf: FileView = Object.keys((transaction.state as any).config.address)
+        return codeMirror.EditorState.transactionFilter.of(
+            (transaction: codeMirror.Transaction): codeMirror.TransactionSpec => {
+                if (transaction.isUserEvent('input.drop')) {
+                    try {
+                        // changes.inserted used like this because ChangeSet doesn't have typed attributes for that
+                        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-explicit-any
+                        const droppedText = (transaction.changes as any).inserted
                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            .map(x => (transaction.state as any).field({ id: x }))
-                            .filter(x => x?.file)[0];
+                            .map((x: any) => x.text.join(''))
+                            .join('');
 
-                        const targetFile = leaf.file;
+                        if (this.dragData !== null && droppedText == 'drag-event::hypothesis-highlight') {
+                            const startPos = transaction.selection.ranges[0].from;
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            const leaf: FileView = Object.keys((transaction.state as any).config.address)
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                .map(x => (transaction.state as any).field({ id: x }))
+                                .filter(x => x?.file)[0];
 
-                        const annotationFile = this.app.vault.getAbstractFileByPath(this.dragData.annotationFilePath);
-                        if (annotationFile instanceof TFile && targetFile instanceof TFile) {
-                            const linkString = this.app.fileManager.generateMarkdownLink(
-                                annotationFile,
-                                targetFile.path,
-                                `#^${this.dragData.annotationId}`,
-                                this.dragData.annotationText
+                            const targetFile = leaf.file;
+
+                            const annotationFile = this.app.vault.getAbstractFileByPath(
+                                this.dragData.annotationFilePath
                             );
-                            this.dragData = null;
-                            return { changes: { from: startPos, insert: linkString }, selection: { anchor: startPos } };
+                            if (annotationFile instanceof TFile && targetFile instanceof TFile) {
+                                const linkString = this.app.fileManager.generateMarkdownLink(
+                                    annotationFile,
+                                    targetFile.path,
+                                    `#^${this.dragData.annotationId}`,
+                                    this.dragData.annotationText
+                                );
+                                this.dragData = null;
+                                return {
+                                    changes: { from: startPos, insert: linkString },
+                                    selection: { anchor: startPos }
+                                };
+                            }
                         }
+                    } catch (e) {
+                        this.log('Failed to handle hypothesis drag-and-drop annotation event: ', e);
                     }
                 }
-                catch (e) {
-                    this.log('Failed to handle hypothesis drag-and-drop annotation event: ', e);
-                }
+                return transaction;
             }
-            return transaction;
-        });
+        );
     }
 
     registerSettingsTab() {
@@ -185,6 +203,10 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
 
     onunload() {
         this.unloadResources();
+        this.styleObserver.unwatch();
+        this.styleObserver.listerners = null;
+        this.styleObserver = null;
+        AnnotatorPlugin.instance = null;
     }
 
     async loadSettings() {
@@ -236,6 +258,7 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         }
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     getPropertyValue(propertyName: string, file: TFile | null): any | null {
         if (!file) {
             return null;
@@ -305,7 +328,6 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
                 }
             })
         );
-
     }
 
     public async setAnnotatorView(leaf: WorkspaceLeaf) {
@@ -328,7 +350,7 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
     }
 
     isAnnotationFile(f: TFile | null): boolean {
-        return(!(this.getPropertyValue(ANNOTATION_TARGET_PROPERTY, f) == null));
+        return !(this.getPropertyValue(ANNOTATION_TARGET_PROPERTY, f) == null);
     }
 
     private addMarkdownPostProcessor() {

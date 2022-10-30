@@ -8,9 +8,7 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
     const GenericAnnotationVideo = defineGenericAnnotation(vault, plugin);
     const VideoAnnotation = ({ ...props }: VideoAnnotationProps) => {
         if (Platform.isMobile) {
-            return (
-                <h2>obsidian-annotator plugin doesn&apos;t support video annotation on mobile</h2>
-            );
+            return <h2>obsidian-annotator plugin doesn&apos;t support video annotation on mobile</h2>;
         }
 
         return (

@@ -188,25 +188,29 @@ export default class AnnotatorView extends FileView {
     onMoreOptionsMenu(menu: Menu) {
         // any because item doesn't have .setSection() in the type
         // eslint-disable-next-line
-        menu.addItem((item: any): void => item
-            .setTitle('Open as Markdown')
-            .setIcon('document')
-            .setSection('pane')
-            .onClick(async () => {
-                this.plugin.pdfAnnotatorFileModes[(this.leaf as any).id || this.file.path] = 'markdown'; // eslint-disable-line
-                this.plugin.setMarkdownView(this.leaf);
-            }));
+        menu.addItem((item: any): void =>
+            item
+                .setTitle('Open as Markdown')
+                .setIcon('document')
+                .setSection('pane')
+                .onClick(async () => {
+                    this.plugin.pdfAnnotatorFileModes[(this.leaf as any).id || this.file.path] = 'markdown'; // eslint-disable-line
+                    this.plugin.setMarkdownView(this.leaf);
+                })
+        );
 
         // any because item doesn't have .setSection() in the type
         // eslint-disable-next-line
-        menu.addItem((item: any): void => item
-            .setTitle('Annotator Toggle Dark Mode')
-            .setIcon('switch')
-            .setSection('pane')
-            .onClick(async () => {
-                this.useDarkMode = !this.useDarkMode;
-                await this.onDarkReadersUpdated();
-            }));
+        menu.addItem((item: any): void =>
+            item
+                .setTitle('Annotator Toggle Dark Mode')
+                .setIcon('switch')
+                .setSection('pane')
+                .onClick(async () => {
+                    this.useDarkMode = !this.useDarkMode;
+                    await this.onDarkReadersUpdated();
+                })
+        );
     }
 
     async scrollToAnnotation(annotationId: Annotation['id'] | null) {

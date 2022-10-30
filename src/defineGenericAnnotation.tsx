@@ -218,19 +218,22 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
                         await awaitResourceLoading;
                         const folder = resourcesZip;
                         // eslint-disable-next-line
-                        const videoHtmlFile = folder.folder("annotate.tv/videos").filter(_=>true)?.[0];
-                        if(!videoHtmlFile) {
-                            console.error("No video annotation website found. Make sure that you have provided a valid zip file in the annotator config.");
-                            
+                        const videoHtmlFile = folder.folder('annotate.tv/videos').filter(_ => true)?.[0];
+                        if (!videoHtmlFile) {
+                            console.error(
+                                'No video annotation website found. Make sure that you have provided a valid zip file in the annotator config.'
+                            );
+
                             return new Response(Buffer.from(res, 'utf8'), {
                                 status: 404,
                                 statusText: 'File not found'
                             });
                         }
-                        const videoHtml = await videoHtmlFile.async("text");
-                        res = videoHtml.replace(/(__NEXT_DATA__.*?>)(.*?)(<\/script)/ig, (...args)=>`${args[1]}${JSON.stringify(
-                            video_data
-                        )}${args[3]}`);
+                        const videoHtml = await videoHtmlFile.async('text');
+                        res = videoHtml.replace(
+                            /(__NEXT_DATA__.*?>)(.*?)(<\/script)/gi,
+                            (...args) => `${args[1]}${JSON.stringify(video_data)}${args[3]}`
+                        );
                         return new Response(Buffer.from(res, 'utf8'), {
                             status: 200,
                             statusText: 'ok'
@@ -704,7 +707,7 @@ function getAbstractFileByPath(path: string, vault: Vault): TFile {
         return p;
     }
 
-    throw "Failed to get file from vault"
+    throw 'Failed to get file from vault';
 }
 
 async function readFromVaultPath(path: string, vault: Vault): Promise<ArrayBuffer> {

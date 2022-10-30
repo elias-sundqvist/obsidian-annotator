@@ -37,12 +37,12 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
 };
 
 interface readerWindow extends Window {
-    rendition?: epubjs.Rendition
+    rendition?: epubjs.Rendition;
 }
 
 // hypothes.is custom event
 interface ScrollToRange extends Event {
-    detail?: Range
+    detail?: Range;
 }
 
 class EpubReader {
@@ -78,7 +78,7 @@ class EpubReader {
 
     initBook(id: Document, iw: readerWindow): epubjs.Book {
         const book = new epubjs.Book(this.bookUrl, {
-            requestMethod: async function(url) {
+            requestMethod: async function (url) {
                 return await (await iw.fetch(url)).arrayBuffer();
             },
             canonical: function (path) {
@@ -131,30 +131,34 @@ class EpubReader {
 
     addBookMetaToUI(book: epubjs.Book, iframe: HTMLIFrameElement) {
         // add chapters to table of contents
-        book.loaded.navigation.then((nav: Navigation): void => {
-            const toc = iframe.contentDocument.getElementById('toc'),
-                docfrag = iframe.contentDocument.createDocumentFragment();
+        book.loaded.navigation
+            .then((nav: Navigation): void => {
+                const toc = iframe.contentDocument.getElementById('toc'),
+                    docfrag = iframe.contentDocument.createDocumentFragment();
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            nav.forEach((chapter: epubjs.NavItem): any => {
-                const item = iframe.contentDocument.createElement('li');
-                const link = iframe.contentDocument.createElement('a');
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                nav.forEach((chapter: epubjs.NavItem): any => {
+                    const item = iframe.contentDocument.createElement('li');
+                    const link = iframe.contentDocument.createElement('a');
 
-                link.id = 'chap-' + chapter.id;
-                link.textContent = chapter.label;
-                link.href = chapter.href;
-                item.appendChild(link);
-                docfrag.appendChild(item);
+                    link.id = 'chap-' + chapter.id;
+                    link.textContent = chapter.label;
+                    link.href = chapter.href;
+                    item.appendChild(link);
+                    docfrag.appendChild(item);
 
-                link.onclick = () => {
-                    const url = link.getAttribute('href');
-                    book.rendition.display(url);
-                    return false;
-                };
+                    link.onclick = () => {
+                        const url = link.getAttribute('href');
+                        book.rendition.display(url);
+                        return false;
+                    };
+                });
+
+                toc.appendChild(docfrag);
+            })
+            .catch(() => {
+                throw 'Failed to load book navigation';
             });
-
-            toc.appendChild(docfrag);
-        }).catch(() => { throw 'Failed to load book navigation' });
 
         // add title and author to table of contents
         book.loaded.metadata.then(function (meta: PackagingMetadataObject) {
