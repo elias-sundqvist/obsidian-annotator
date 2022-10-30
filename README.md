@@ -69,6 +69,11 @@ You can make a [pull request](https://github.com/elias-sundqvist/obsidian-annota
 
 ## Changelog
 
+### 0.2.7 (2022-10-31)
+* Fixed issue with Latex Equations not rendering in annotations (See issue #228)
+* Removed "sign-in/log-in" buttons (See issue #241)
+* CSS Snippets can now be used to style the hypothesis sidebar
+
 ### 0.2.6 (2022-08-19)
 * Fix bug #208 introduced in 0.2.5 It was impossible to open an internal link because of the plugin
 
