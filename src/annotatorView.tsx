@@ -217,6 +217,7 @@ export default class AnnotatorView extends FileView {
         const annotation = await getAnnotation(annotationId, this.file, this.app.vault);
         if (!annotation) return;
         let yoffset = -10000;
+        let done = false;
         let newYOffset;
         const isPageNote = !annotation.target?.length;
         const selectors = new Set(isPageNote ? [] : annotation.target[0].selector.map(x => JSON.stringify(x)));
@@ -277,7 +278,6 @@ export default class AnnotatorView extends FileView {
                         'showAnnotations',
                         matchingAnchors.map(x => x.annotation.$tag)
                     );
-                    let done = false;
                     switch (annotationTargetType) {
                         case 'pdf':
                             for (const anchor of matchingAnchors) {
