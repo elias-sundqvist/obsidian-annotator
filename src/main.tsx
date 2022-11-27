@@ -124,7 +124,7 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
                 if (
                     leaf?.view instanceof MarkdownView &&
                     file instanceof TFile &&
-                    source === 'pane-more-options' &&
+                    source === 'more-options' &&
                     this.getPropertyValue(ANNOTATION_TARGET_PROPERTY, file)
                 ) {
                     // any because item doesn't have .setSection() in the type

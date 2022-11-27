@@ -3,7 +3,7 @@ import { ANNOTATION_TARGET_PROPERTY, ANNOTATION_TARGET_TYPE_PROPERTY, VIEW_TYPE_
 import { DarkReaderType } from 'darkreader';
 import AnnotatorPlugin from 'main';
 import { Annotation } from './types';
-import { FileView, Menu, TFile, WorkspaceLeaf } from 'obsidian';
+import { FileView, Menu, MenuItem, TFile, WorkspaceLeaf } from 'obsidian';
 import React from 'react';
 import ReactDOM from 'react-dom';
 import { isUrl, get_url_extension } from 'utils';
@@ -185,23 +185,25 @@ export default class AnnotatorView extends FileView {
         await super.onUnloadFile(file);
     }
 
-    onMoreOptionsMenu(menu: Menu) {
+    onPaneMenu(menu: Menu, source: 'more-options' | 'tab-header' | string) {
+        super.onPaneMenu(menu, source);
+
         // any because item doesn't have .setSection() in the type
         // eslint-disable-next-line
-        menu.addItem((item: any): void =>
+        menu.addItem((item: MenuItem): MenuItem =>
             item
                 .setTitle('Open as Markdown')
                 .setIcon('document')
                 .setSection('pane')
                 .onClick(async () => {
                     this.plugin.pdfAnnotatorFileModes[(this.leaf as any).id || this.file.path] = 'markdown'; // eslint-disable-line
-                    this.plugin.setMarkdownView(this.leaf);
+                    await this.plugin.setMarkdownView(this.leaf);
                 })
         );
 
         // any because item doesn't have .setSection() in the type
         // eslint-disable-next-line
-        menu.addItem((item: any): void =>
+        menu.addItem((item: MenuItem): MenuItem =>
             item
                 .setTitle('Annotator Toggle Dark Mode')
                 .setIcon('switch')
