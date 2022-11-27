@@ -9,7 +9,8 @@ import {
     MarkdownPostProcessorContext,
     parseLinktext,
     Notice,
-    Platform
+    Platform,
+    MenuItem
 } from 'obsidian';
 
 import StyleObserver from 'styleObserver';
@@ -129,17 +130,18 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
                 ) {
                     // any because item doesn't have .setSection() in the type
                     // eslint-disable-next-line
-                    menu.addItem((item: any): void =>
-                        item
-                            .setTitle('Annotate')
-                            .setIcon(ICON_NAME)
-                            .setSection('pane')
-                            .onClick(async () => {
-                                // any because leaf doesn't have id in type
-                                // eslint-disable-next-line
-                                this.pdfAnnotatorFileModes[(leaf as any).id || file.path] = VIEW_TYPE_PDF_ANNOTATOR;
-                                await this.setAnnotatorView(leaf);
-                            })
+                    menu.addItem(
+                        (item: MenuItem): MenuItem =>
+                            item
+                                .setTitle('Annotate')
+                                .setIcon(ICON_NAME)
+                                .setSection('pane')
+                                .onClick(async () => {
+                                    // any because leaf doesn't have id in type
+                                    // eslint-disable-next-line
+                                    this.pdfAnnotatorFileModes[(leaf as any).id || file.path] = VIEW_TYPE_PDF_ANNOTATOR;
+                                    await this.setAnnotatorView(leaf);
+                                })
                     );
                 }
             })
@@ -356,11 +358,15 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
     private addMarkdownPostProcessor() {
         const markdownPostProcessor = async (el: HTMLElement, ctx: MarkdownPostProcessorContext) => {
             for (const link of el.getElementsByClassName('internal-link') as HTMLCollectionOf<HTMLAnchorElement>) {
-                const parsedLink = parseLinktext(link.getAttribute("data-href"));
+                const linkHref = link.getAttribute('data-href');
+                if (linkHref === null) {
+                    continue;
+                }
+                const parsedLink = parseLinktext(linkHref);
                 const annotationid = parsedLink.subpath.startsWith('#^') ? parsedLink.subpath.substr(2) : null;
                 const file: TFile | null = this.app.metadataCache.getFirstLinkpathDest(parsedLink.path, ctx.sourcePath);
 
-                if (this.isAnnotationFile(file)) {
+                if (file !== null && this.isAnnotationFile(file)) {
                     link.addEventListener('click', ev => {
                         ev.preventDefault();
                         ev.stopPropagation();

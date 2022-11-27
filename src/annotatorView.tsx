@@ -190,28 +190,30 @@ export default class AnnotatorView extends FileView {
 
         // any because item doesn't have .setSection() in the type
         // eslint-disable-next-line
-        menu.addItem((item: MenuItem): MenuItem =>
-            item
-                .setTitle('Open as Markdown')
-                .setIcon('document')
-                .setSection('pane')
-                .onClick(async () => {
-                    this.plugin.pdfAnnotatorFileModes[(this.leaf as any).id || this.file.path] = 'markdown'; // eslint-disable-line
-                    await this.plugin.setMarkdownView(this.leaf);
-                })
+        menu.addItem(
+            (item: MenuItem): MenuItem =>
+                item
+                    .setTitle('Open as Markdown')
+                    .setIcon('document')
+                    .setSection('pane')
+                    .onClick(async () => {
+                        this.plugin.pdfAnnotatorFileModes[(this.leaf as any).id || this.file.path] = 'markdown'; // eslint-disable-line
+                        await this.plugin.setMarkdownView(this.leaf);
+                    })
         );
 
         // any because item doesn't have .setSection() in the type
         // eslint-disable-next-line
-        menu.addItem((item: MenuItem): MenuItem =>
-            item
-                .setTitle('Annotator Toggle Dark Mode')
-                .setIcon('switch')
-                .setSection('pane')
-                .onClick(async () => {
-                    this.useDarkMode = !this.useDarkMode;
-                    await this.onDarkReadersUpdated();
-                })
+        menu.addItem(
+            (item: MenuItem): MenuItem =>
+                item
+                    .setTitle('Annotator Toggle Dark Mode')
+                    .setIcon('switch')
+                    .setSection('pane')
+                    .onClick(async () => {
+                        this.useDarkMode = !this.useDarkMode;
+                        await this.onDarkReadersUpdated();
+                    })
         );
     }
 
