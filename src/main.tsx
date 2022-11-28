@@ -39,14 +39,10 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
     // @ts-ignore: initialized by loadSettings() in onloadImpl()
     settings: AnnotatorSettings;
     views: Set<AnnotatorView> = new Set();
-    // observer: MutationObserver;
-    // targetClassNameSet: Set<string> = new Set();
 
     public pdfAnnotatorFileModes: { [file: string]: string } = {};
     private _loaded = false;
     private eventRefs: EventRef[] = [];
-    // tmpLinkInfos: {linkText: string; count: number}[] = [];
-    // tmpTargetIndex = -1;
 
     // All these initialized in onloadImpl(), instead of constructor
     // @ts-ignore
