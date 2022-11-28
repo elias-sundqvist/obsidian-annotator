@@ -10,7 +10,8 @@ import {
     parseLinktext,
     Notice,
     Platform,
-    EventRef
+    EventRef,
+    MenuItem
 } from 'obsidian';
 
 import StyleObserver from 'styleObserver';
@@ -132,22 +133,23 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
             if (
                 leaf?.view instanceof MarkdownView &&
                 file instanceof TFile &&
-                source === 'pane-more-options' &&
+                source === 'more-options' &&
                 this.getPropertyValue(ANNOTATION_TARGET_PROPERTY, file)
             ) {
                 // any because item doesn't have .setSection() in the type
                 // eslint-disable-next-line
-                menu.addItem((item: any): void =>
-                    item
-                        .setTitle('Annotate')
-                        .setIcon(ICON_NAME)
-                        .setSection('pane')
-                        .onClick(async () => {
-                            // any because leaf doesn't have id in type
-                            // eslint-disable-next-line
-                            this.pdfAnnotatorFileModes[(leaf as any).id || file.path] = VIEW_TYPE_PDF_ANNOTATOR;
-                            await this.setAnnotatorView(leaf);
-                        })
+                menu.addItem(
+                    (item: MenuItem): MenuItem =>
+                        item
+                            .setTitle('Annotate')
+                            .setIcon(ICON_NAME)
+                            .setSection('pane')
+                            .onClick(async () => {
+                                // any because leaf doesn't have id in type
+                                // eslint-disable-next-line
+                                this.pdfAnnotatorFileModes[(leaf as any).id || file.path] = VIEW_TYPE_PDF_ANNOTATOR;
+                                await this.setAnnotatorView(leaf);
+                            })
                 );
             }
         });
@@ -389,11 +391,15 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
     private addMarkdownPostProcessor() {
         const markdownPostProcessor = async (el: HTMLElement, ctx: MarkdownPostProcessorContext) => {
             for (const link of el.getElementsByClassName('internal-link') as HTMLCollectionOf<HTMLAnchorElement>) {
-                const parsedLink = parseLinktext(link.getAttribute("href"));
-                const annotationid = parsedLink.subpath.startsWith('#^') ? parsedLink.subpath.substring(2) : null;
+                const linkHref = link.getAttribute('href');
+                if (linkHref === null) {
+                    continue;
+                }
+                const parsedLink = parseLinktext(linkHref);
+                const annotationid = parsedLink.subpath.startsWith('#^') ? parsedLink.subpath.substr(2) : null;
                 const file: TFile | null = this.app.metadataCache.getFirstLinkpathDest(parsedLink.path, ctx.sourcePath);
 
-                if (this.isAnnotationFile(file)) {
+                if (file !== null && this.isAnnotationFile(file)) {
                     this.addClickListener(link, annotationid, file, true);
                 }
             }

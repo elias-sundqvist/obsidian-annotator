@@ -69,6 +69,11 @@ You can make a [pull request](https://github.com/elias-sundqvist/obsidian-annota
 
 ## Changelog
 
+### 0.2.8 (2022-11-27)
+* Fixed issue with "Annotate" button not appearing (See issue #253)
+* Fixed issue with scroll getting stuck after clicking annotation link (See PR #259, Thanks to @HardwayLinka for the contribution)
+* Partially fixed issue with annotation links not working (See PR #231, Thanks to @XSAM for the contribution)
+
 ### 0.2.7 (2022-10-31)
 * Fixed issue with Latex Equations not rendering in annotations (See issue #228)
 * Removed "sign-in/log-in" buttons (See issue #241)
