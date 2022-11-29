@@ -42,7 +42,6 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
 
     public pdfAnnotatorFileModes: { [file: string]: string } = {};
     private _loaded = false;
-    private eventRefs: EventRef[] = [];
 
     // All these initialized in onloadImpl(), instead of constructor
     // @ts-ignore
@@ -127,47 +126,47 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
             }
         });
 
-        let eventRef = this.app.workspace.on('file-menu', (menu, file, source, leaf) => {
-            if (
-                leaf?.view instanceof MarkdownView &&
-                file instanceof TFile &&
-                source === 'more-options' &&
-                this.getPropertyValue(ANNOTATION_TARGET_PROPERTY, file)
-            ) {
-                // any because item doesn't have .setSection() in the type
-                // eslint-disable-next-line
-                menu.addItem(
-                    (item: MenuItem): MenuItem =>
-                        item
-                            .setTitle('Annotate')
-                            .setIcon(ICON_NAME)
-                            .setSection('pane')
-                            .onClick(async () => {
-                                // any because leaf doesn't have id in type
-                                // eslint-disable-next-line
-                                this.pdfAnnotatorFileModes[(leaf as any).id || file.path] = VIEW_TYPE_PDF_ANNOTATOR;
-                                await this.setAnnotatorView(leaf);
-                            })
-                );
-            }
-        });
-        this.registerEvent(eventRef);
-        this.eventRefs.push(eventRef);
-
-        eventRef = this.app.workspace.on('file-open', (file) => {
-            if (file) {
-                this.log("file opened");
-                if (this.sourceViewObserver.getObserver()) {
-                    this.sourceViewObserver.resetTmpLinkInfo();
-                    this.sourceViewObserver.getObserver().disconnect();
-                } else {
-                    this.sourceViewObserver.initObserver();
+        this.registerEvent(
+            this.app.workspace.on('file-menu', (menu, file, source, leaf) => {
+                if (
+                    leaf?.view instanceof MarkdownView &&
+                    file instanceof TFile &&
+                    source === 'more-options' &&
+                    this.getPropertyValue(ANNOTATION_TARGET_PROPERTY, file)
+                ) {
+                    // any because item doesn't have .setSection() in the type
+                    // eslint-disable-next-line
+                    menu.addItem(
+                        (item: MenuItem): MenuItem =>
+                            item
+                                .setTitle('Annotate')
+                                .setIcon(ICON_NAME)
+                                .setSection('pane')
+                                .onClick(async () => {
+                                    // any because leaf doesn't have id in type
+                                    // eslint-disable-next-line
+                                    this.pdfAnnotatorFileModes[(leaf as any).id || file.path] = VIEW_TYPE_PDF_ANNOTATOR;
+                                    await this.setAnnotatorView(leaf);
+                                })
+                    );
                 }
-                this.sourceViewObserver.watch();
-            }
-        });
-        this.registerEvent(eventRef);
-        this.eventRefs.push(eventRef);
+            })
+        );
+
+        this.registerEvent(
+            this.app.workspace.on('file-open', (file) => {
+                if (file) {
+                    this.log("file opened");
+                    if (this.sourceViewObserver.getObserver()) {
+                        this.sourceViewObserver.resetTmpLinkInfo();
+                        this.sourceViewObserver.getObserver().disconnect();
+                    } else {
+                        this.sourceViewObserver.initObserver();
+                    }
+                    this.sourceViewObserver.watch();
+                }
+            })
+        );
     }
 
     /*
@@ -231,10 +230,6 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         this.styleObserver.listerners = null;
         this.styleObserver = null;
         AnnotatorPlugin.instance = null;
-
-        for (const eventRef of this.eventRefs) {
-            this.app.workspace.offref(eventRef);
-        }
 
         if (this.sourceViewObserver.getObserver()) {
             this.sourceViewObserver.getObserver().disconnect();
