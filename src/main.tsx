@@ -10,7 +10,6 @@ import {
     parseLinktext,
     Notice,
     Platform,
-    EventRef,
     MenuItem
 } from 'obsidian';
 
