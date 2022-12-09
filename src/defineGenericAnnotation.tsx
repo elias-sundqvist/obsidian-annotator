@@ -425,7 +425,8 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
                             );
                             if (matchingAnnotations.length > 0) {
                                 const annotation = matchingAnnotations[0];
-                                const { exact } = getAnnotationHighlightTextData(annotation);
+                                let { exact } = getAnnotationHighlightTextData(annotation);
+                                exact = exact.replace(/[\r\n]/g, ' ');
                                 plugin.dragData = {
                                     annotationFilePath: props.annotationFile,
                                     annotationId: annotation.id,
