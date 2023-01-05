@@ -60,12 +60,7 @@ If the file is already open in a pane, then the link will cause the existing pan
 
 ## Contributing
 
-Feel free to contribute.
-
-You can create an [issue](https://github.com/elias-sundqvist/obsidian-annotator/issues) to report a bug, suggest an improvement for this plugin, ask a question, etc.
-
-You can make a [pull request](https://github.com/elias-sundqvist/obsidian-annotator/pulls) to contribute to this plugin development.
-
+Visit [CONTRIBUTING.md](./CONTRIBUTING.md) for information on building from source or contribution improvements. To report a bug, ask a question or suggest an improvement for this plugin, you can create an [issue](https://github.com/elias-sundqvist/obsidian-annotator/issues).
 
 ## Changelog
 
