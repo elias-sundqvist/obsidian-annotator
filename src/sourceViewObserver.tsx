@@ -10,6 +10,8 @@ export default class SourceViewObserver {
     private tmpLinkInfos: {linkText: string; count: number}[] = [];
     private tmpTargetIndex = -1;
     private targetClassNameSet: Set<string> = new Set();
+
+    // @ts-ignore initializes in initObserver() when active view is MarkdownView
     private observer: MutationObserver;
 
     constructor(plugin: AnnotatorPlugin) {
@@ -40,12 +42,12 @@ export default class SourceViewObserver {
 
     initObserver() {
         const activeLeaf = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
-        if (!activeLeaf) return;
+        const filePath = this.plugin.app.workspace.getActiveFile()?.path;
+        if (!activeLeaf || filePath === undefined) return;
     
         const that = this;
         const observedClassName = 'cm-hmd-internal-link cm-link-has-alias';
         const targetClassName = 'cm-hmd-internal-link cm-link-alias';
-        const filePath = this.plugin.app.workspace.getActiveFile().path;
         const observeCallback = function(mutations: MutationRecord[]) {
             that.plugin.log('-----------------------------');
             for (const mutation of mutations) {
@@ -59,7 +61,7 @@ export default class SourceViewObserver {
                     for (const removedNode of mutation.removedNodes) {
                         const removedElement = removedNode as Element;
                         if (removedElement.className && removedElement.className.indexOf(observedClassName) >= 0) {
-                            const removedLinkText = removedElement.textContent;
+                            const removedLinkText = removedElement.textContent ? removedElement.textContent : '';
                             that.plugin.log('remove');
                             that.linkOnBlur(mutation.target as Element, removedLinkText, filePath, targetClassName);
                         }
@@ -85,10 +87,10 @@ export default class SourceViewObserver {
 
     watch() {
         const activeLeaf = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
-        if (!activeLeaf) return;
+        const filePath = this.plugin.app.workspace.getActiveFile()?.path;
+        if (!activeLeaf || filePath === undefined) return;
     
-        const regex2Find = /(?<=[\[]{2})[^\]]*(?=[\]]{2})/gm;
-        const filePath = this.plugin.app.workspace.getActiveFile().path;
+        const regex2Find = /(?<=[[]{2})[^\]]*(?=[\]]{2})/gm;
         const view = activeLeaf.leaf.view.containerEl;
         const editor = activeLeaf.editor;
         const oldText = editor.getValue();
@@ -97,7 +99,7 @@ export default class SourceViewObserver {
         
         const tempSourceLinks = view.getElementsByClassName('cm-hmd-internal-link cm-link-alias') as HTMLCollectionOf<HTMLAnchorElement>;
         const length = tempSourceLinks.length;
-        const sourceLinks = [];
+        const sourceLinks = new Array<HTMLAnchorElement>();
         if (length > 1) {
             let prev = tempSourceLinks[0];
             for (let i = 1; i < length; i++) {
@@ -132,9 +134,9 @@ export default class SourceViewObserver {
             const annotationid = parsedLink.subpath.startsWith('#^') ? parsedLink.subpath.substring(2) : null;
             const file: TFile | null = this.plugin.app.metadataCache.getFirstLinkpathDest(parsedLink.path, filePath);
     
-            if (this.plugin.isAnnotationFile(file)) {
+            if (file && this.plugin.isAnnotationFile(file) && annotationid) {
                 this.addClickListener(sourceLinks[i], annotationid, file, false);
-                this.observer.observe(sourceLinks[i].parentNode, observeConfig);
+                this.observer.observe(sourceLinks[i].parentNode as Node, observeConfig);
             }
         }
     }
@@ -148,7 +150,7 @@ export default class SourceViewObserver {
                 ev.stopPropagation();
                 ev.stopImmediatePropagation();
                 const inNewPane = ev.metaKey || ev.ctrlKey || ev.button == 1;
-                this.plugin.openAnnotationTarget(file, inNewPane, annotationid);
+                void this.plugin.openAnnotationTarget(file, inNewPane, annotationid);
             });
         }
     }
@@ -175,10 +177,10 @@ export default class SourceViewObserver {
         const targets = node.getElementsByClassName(className) as HTMLCollectionOf<HTMLAnchorElement>;
         const uniqueTarget = targets[linkIndex];
         this.plugin.log(
-            'linkText: ' + link.path + 
-            ' tarIndex: ' + this.tmpTargetIndex + 
-            ' linkIndex: ' + linkIndex + 
-            ' size: ' + this.tmpLinkInfos.length
+            'linkText: ' + link.path +
+            ' tarIndex: ' + this.tmpTargetIndex.toString() +
+            ' linkIndex: ' + linkIndex.toString() +
+            ' size: ' + this.tmpLinkInfos.length.toString()
         );
         this.plugin.log(uniqueTarget);
     

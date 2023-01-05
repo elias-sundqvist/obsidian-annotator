@@ -55,10 +55,11 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
     // Used to store text of hypothesis highlight during drag-and-drop event
     dragData: null | { annotationFilePath: string; annotationId: string; annotationText: string } = null;
 
-    // @ts-ignore initialized in onload()
+    // @ts-ignore initializes in onload()
     setupPromise: Promise<void>;
     styleObserver: StyleObserver;
 
+    // @ts-ignore initializes in onloadImpl()
     sourceViewObserver: SourceViewObserver;
 
     async onload() {
@@ -232,7 +233,6 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
 
         if (this.sourceViewObserver.getObserver()) {
             this.sourceViewObserver.getObserver().disconnect();
-            this.sourceViewObserver.setObserver(null);
         }
     }
 
@@ -245,7 +245,7 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         this.views.forEach(v => v.onDarkReadersUpdated());
     }
 
-    public async openAnnotationTarget(annotationTargetFile: TFile, onNewPane: boolean, annotationId: string | null) {
+    public async openAnnotationTarget(annotationTargetFile: TFile, onNewPane: boolean, annotationId: string | null): Promise<void> {
         const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_PDF_ANNOTATOR);
         let leaf: WorkspaceLeaf | null = null;
 
@@ -391,7 +391,7 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
                 const annotationid = parsedLink.subpath.startsWith('#^') ? parsedLink.subpath.substr(2) : null;
                 const file: TFile | null = this.app.metadataCache.getFirstLinkpathDest(parsedLink.path, ctx.sourcePath);
 
-                if (file !== null && this.isAnnotationFile(file)) {
+                if (file !== null && annotationid != null && this.isAnnotationFile(file)) {
                     this.sourceViewObserver.addClickListener(link, annotationid, file, true);
                 }
             }
