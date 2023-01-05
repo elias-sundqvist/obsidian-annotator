@@ -31,6 +31,7 @@ import defineWebAnnotation from 'defineWebAnnotation';
 import { awaitResourceLoading, loadResourcesZip, unloadResources } from 'resourcesFolder';
 import stringEncodedResourcesFolder from './resources!zipStringEncoded';
 import * as jszip from 'jszip';
+import SourceViewObserver from 'sourceViewObserver';
 
 export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSettings {
     static instance: AnnotatorPlugin = null;
@@ -57,6 +58,8 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
     // @ts-ignore initialized in onload()
     setupPromise: Promise<void>;
     styleObserver: StyleObserver;
+
+    sourceViewObserver: SourceViewObserver;
 
     async onload() {
         AnnotatorPlugin.instance = this;
@@ -98,6 +101,8 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         this.addMarkdownPostProcessor();
         this.registerMonkeyPatches();
         this.registerSettingsTab();
+        this.sourceViewObserver = new SourceViewObserver(this);
+        this.sourceViewObserver.watch();
 
         this.registerEditorExtension(this.getDropExtension());
 
@@ -143,6 +148,21 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
                                     await this.setAnnotatorView(leaf);
                                 })
                     );
+                }
+            })
+        );
+
+        this.registerEvent(
+            this.app.workspace.on('file-open', (file) => {
+                if (file) {
+                    this.log("file opened");
+                    if (this.sourceViewObserver.getObserver()) {
+                        this.sourceViewObserver.resetTmpLinkInfo();
+                        this.sourceViewObserver.getObserver().disconnect();
+                    } else {
+                        this.sourceViewObserver.initObserver();
+                    }
+                    this.sourceViewObserver.watch();
                 }
             })
         );
@@ -209,6 +229,11 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         this.styleObserver.listerners = null;
         this.styleObserver = null;
         AnnotatorPlugin.instance = null;
+
+        if (this.sourceViewObserver.getObserver()) {
+            this.sourceViewObserver.getObserver().disconnect();
+            this.sourceViewObserver.setObserver(null);
+        }
     }
 
     async loadSettings() {
@@ -358,7 +383,7 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
     private addMarkdownPostProcessor() {
         const markdownPostProcessor = async (el: HTMLElement, ctx: MarkdownPostProcessorContext) => {
             for (const link of el.getElementsByClassName('internal-link') as HTMLCollectionOf<HTMLAnchorElement>) {
-                const linkHref = link.getAttribute('data-href');
+                const linkHref = link.getAttribute('href');
                 if (linkHref === null) {
                     continue;
                 }
@@ -367,13 +392,7 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
                 const file: TFile | null = this.app.metadataCache.getFirstLinkpathDest(parsedLink.path, ctx.sourcePath);
 
                 if (file !== null && this.isAnnotationFile(file)) {
-                    link.addEventListener('click', ev => {
-                        ev.preventDefault();
-                        ev.stopPropagation();
-                        ev.stopImmediatePropagation();
-                        const inNewPane = ev.metaKey || ev.ctrlKey || ev.button == 1;
-                        this.openAnnotationTarget(file, inNewPane, annotationid);
-                    });
+                    this.sourceViewObserver.addClickListener(link, annotationid, file, true);
                 }
             }
         };
