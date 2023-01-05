@@ -64,7 +64,8 @@ Visit [CONTRIBUTING.md](./CONTRIBUTING.md) for information on building from sour
 
 ## Changelog
 
-### 0.2.9 ( ... )
+### 0.2.9 (2023-01-05)
+* Click on annotation link in markdown causes an immediate jump to annotation in PDF (Thanks to @HardwayLinka)
 * Fix broken drag-and-dropped link to highlight caused by line breaks. (See issue #267, Thanks to @HardwayLinka)
 
 ### 0.2.8 (2022-11-27)
