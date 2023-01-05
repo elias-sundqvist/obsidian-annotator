@@ -64,6 +64,9 @@ Visit [CONTRIBUTING.md](./CONTRIBUTING.md) for information on building from sour
 
 ## Changelog
 
+### 0.2.9 ( ... )
+* Fix broken drag-and-dropped link to highlight caused by line breaks. (See issue #267, Thanks to @HardwayLinka)
+
 ### 0.2.8 (2022-11-27)
 * Fixed issue with "Annotate" button not appearing (See issue #253)
 * Fixed issue with scroll getting stuck after clicking annotation link (See PR #259, Thanks to @HardwayLinka for the contribution)
