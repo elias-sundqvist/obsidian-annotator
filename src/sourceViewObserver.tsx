@@ -90,11 +90,11 @@ export default class SourceViewObserver {
         const filePath = this.plugin.app.workspace.getActiveFile()?.path;
         if (!activeLeaf || filePath === undefined) return;
     
-        const regex2Find = /(?<=[[]{2})[^\]]*(?=[\]]{2})/gm;
+        const regex2FindLinks = /[[]{2}[^\]]*(?=[\]]{2})/gm;
         const view = activeLeaf.leaf.view.containerEl;
         const editor = activeLeaf.editor;
         const oldText = editor.getValue();
-        const linkHref = oldText.match(regex2Find);
+        const linkHref = oldText.match(regex2FindLinks)
         if(!linkHref || linkHref.length == 0) return;
         
         const tempSourceLinks = view.getElementsByClassName('cm-hmd-internal-link cm-link-alias') as HTMLCollectionOf<HTMLAnchorElement>;
@@ -130,7 +130,10 @@ export default class SourceViewObserver {
         for (let i = 0; i < sourceLinks.length; i++) {
             const tempLink = linkHref[i];
             if (typeof tempLink != 'string') continue;
-            const parsedLink = parseLinktext(tempLink.split('|')[0]);
+
+            // substring used remove [[ from internal link
+            // because iOS doesn't support positive lookback regex
+            const parsedLink = parseLinktext(tempLink.substring(2).split('|')[0]);
             const annotationid = parsedLink.subpath.startsWith('#^') ? parsedLink.subpath.substring(2) : null;
             const file: TFile | null = this.plugin.app.metadataCache.getFirstLinkpathDest(parsedLink.path, filePath);
     
