@@ -64,6 +64,9 @@ Visit [CONTRIBUTING.md](./CONTRIBUTING.md) for information on building from sour
 
 ## Changelog
 
+### 0.2.10 (2023-01-09)
+* Fix bug #284 Plugin didn't start on iOS
+
 ### 0.2.9 (2023-01-05)
 * Click on annotation link in markdown causes an immediate jump to annotation in PDF (Thanks to @HardwayLinka)
 * Fix broken drag-and-dropped link to highlight caused by line breaks. (See issue #267, Thanks to @HardwayLinka)

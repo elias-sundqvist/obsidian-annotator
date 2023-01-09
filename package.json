@@ -1,6 +1,6 @@
 {
   "name": "obsidian-annotator",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "description": "This is a sample plugin for Obsidian (https://obsidian.md)",
   "main": "main.js",
   "scripts": {
