@@ -17,6 +17,11 @@ annotation-target: https://arxiv.org/pdf/2104.13478.pdf
 ---
 ```
 
+## Known issues
+
+1. Plugin doesn't work on iOS 16.3 or higher. Follow [#289](https://github.com/elias-sundqvist/obsidian-annotator/issues/289) issue state up to date.
+2. Reader doesn't show annotations if they were changed on different platforms.
+
 ## Getting Started 
 
 Add the property `annotation-target` to the frontmatter of your obsidian note, with a value corresponding to the location of the EPUB/PDF file.
