@@ -11,6 +11,7 @@ export default class StyleObserver {
 
     watch() {
         this.interval = setInterval(() => {
+            if (this.listerners.size === 0) return;
             // @ts-ignore
             const newStyle = [...top.document.getElementsByTagName('style')]
                 .flatMap(x => [...x.sheet.rules].map(x => x.cssText))
