@@ -35,6 +35,6 @@ export default class StyleObserver {
     }
 
     unwatch() {
-        clearInterval(this.interval);
+        if (this.interval) clearInterval(this.interval);
     }
 }

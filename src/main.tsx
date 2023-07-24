@@ -92,7 +92,7 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
     async onloadImpl() {
         await this.loadSettings();
         this.styleObserver = new StyleObserver();
-        this.styleObserver.watch();
+        if (this.settings.matchAppStyle) this.styleObserver.watch();
         this.registerView(VIEW_TYPE_PDF_ANNOTATOR, leaf => new AnnotatorView(leaf, this));
         await this.loadResources();
         this.PdfAnnotation = definePdfAnnotation(this.app.vault, this);
