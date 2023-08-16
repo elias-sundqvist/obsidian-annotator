@@ -53,6 +53,21 @@ export function isUrl(potentialUrl: string) {
     }
 }
 
+/**
+ * If the given string is a wikilink, return the link content, otherwise return null
+ * Ex: "[[Some File]]", returns "Some File"
+ */
+export function getWikilink(potentialWikilink: string): string | null {
+    if (!potentialWikilink) {
+        return null;
+    }
+    const match = potentialWikilink.match(/^\[\[(.*)\]\]$/);
+    if (!match) {
+        return null;
+    }
+    return match[1];
+}
+
 export function utf8_to_b64(str) {
     return window.btoa(unescape(encodeURIComponent(str)));
 }
