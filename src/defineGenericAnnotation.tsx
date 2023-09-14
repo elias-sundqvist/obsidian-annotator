@@ -504,7 +504,7 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
                 outerIframeProps={{
                     height: '100%',
                     width: '100%',
-                    sandbox: 'allow-same-origin allow-scripts allow-presentation'
+                    sandbox: 'allow-same-origin allow-scripts allow-presentation allow-modals'
                 }}
             />
         );
