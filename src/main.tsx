@@ -131,7 +131,6 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
                 if (
                     leaf?.view instanceof MarkdownView &&
                     file instanceof TFile &&
-                    source === 'more-options' &&
                     this.getPropertyValue(ANNOTATION_TARGET_PROPERTY, file)
                 ) {
                     // any because item doesn't have .setSection() in the type
@@ -141,7 +140,6 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
                             item
                                 .setTitle('Annotate')
                                 .setIcon(ICON_NAME)
-                                .setSection('pane')
                                 .onClick(async () => {
                                     // any because leaf doesn't have id in type
                                     // eslint-disable-next-line
