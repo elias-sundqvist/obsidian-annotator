@@ -69,6 +69,9 @@ Visit [CONTRIBUTING.md](./CONTRIBUTING.md) for information on building from sour
 
 ## Changelog
 
+### 0.2.11 (2024-01-06)
+* Fix issue with rendering annotator in Obsidian 1.5.3 and later (See issue #356)
+
 ### 0.2.10 (2023-01-09)
 * Fix bug #284 Plugin didn't start on iOS
 
