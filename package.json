@@ -1,6 +1,6 @@
 {
   "name": "obsidian-annotator",
-  "version": "0.2.10",
+  "version": "0.2.11",
   "description": "This is a sample plugin for Obsidian (https://obsidian.md)",
   "main": "main.js",
   "scripts": {
@@ -67,14 +67,14 @@
     "cheerio": "^1.0.0-rc.10",
     "core-js": "^3.17.2",
     "epubjs": "^0.3.93",
+    "he": "^1.1.1",
     "jszip": "^3.7.1",
+    "lodash": "^4.17.4",
     "mime": "^3.0.0",
     "monkey-around": "^2.2.0",
     "react": "^17.0.2",
     "react-dom": "^17.0.2",
-    "react-offline-iframe": "^0.3.9",
-    "striptags": "^3.2.0",
-    "he": "^1.1.1",
-    "lodash": "^4.17.4"
+    "react-offline-iframe": "^0.5.0",
+    "striptags": "^3.2.0"
   }
 }
