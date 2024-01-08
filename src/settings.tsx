@@ -22,6 +22,7 @@ export interface AnnotatorSettings {
     };
     annotateTvUrl?: string;
     debugLogging: boolean;
+    matchAppStyle: boolean;
 }
 
 export const DEFAULT_SETTINGS: AnnotatorSettings = {
@@ -42,7 +43,8 @@ export const DEFAULT_SETTINGS: AnnotatorSettings = {
         includePrefix: true,
         highlightHighlightedText: true,
         includePostfix: true
-    }
+    },
+    matchAppStyle: true
 };
 
 export interface IHasAnnotatorSettings {
@@ -217,6 +219,16 @@ export default class AnnotatorSettingsTab extends PluginSettingTab {
                         this.plugin.settings.darkReaderSettings.brightness = value;
                         await this.plugin.saveSettings();
                     })
+            );
+
+        new Setting(containerEl)
+            .setName('Match App Style')
+            .setDesc('If this is enabled, the contents of the Obsidian style will be watched.  This can in some cases result in lag, if the styles are extremely large or contain embedded resources. (Requires restart.)')
+            .addToggle(toggle =>
+                toggle.setValue(this.plugin.settings.matchAppStyle).onChange(async value => {
+                    this.plugin.settings.matchAppStyle = value;
+                    await this.plugin.saveSettings();
+                })
             );
 
         containerEl.createEl('h3', { text: 'Annotate.TV settings' });
