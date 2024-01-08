@@ -363,9 +363,9 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
                 postMessagePatchStrategy={'video' in props ? 'top' : null}
                 tagPatchStrategy={'video' in props ? 'createEl' : 'prototype'}
                 onAttributeSet={(el: HTMLElement, attr, value, patchedValue) => {
-                    if (resourceUrlToPlainText.has(patchedValue)) {    
-                        const style = el.ownerDocument.createElement("style")
-                        style.textContent = resourceUrlToPlainText.get(patchedValue);
+                    if (resourceUrlToPlainText.has(patchedValue)) {
+                        const style = el.ownerDocument.createElement('style');
+                        style.textContent = resourceUrlToPlainText.get(patchedValue) || null;
                         el.append(style);
                     }
                 }}

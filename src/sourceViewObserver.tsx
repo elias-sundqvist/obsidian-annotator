@@ -1,13 +1,9 @@
-import {
-    MarkdownView,
-    TFile,
-    parseLinktext
-} from 'obsidian';
+import { MarkdownView, TFile, parseLinktext } from 'obsidian';
 import AnnotatorPlugin from 'main';
 
 export default class SourceViewObserver {
     private plugin: AnnotatorPlugin;
-    private tmpLinkInfos: {linkText: string; count: number}[] = [];
+    private tmpLinkInfos: { linkText: string; count: number }[] = [];
     private tmpTargetIndex = -1;
     private targetClassNameSet: Set<string> = new Set();
 
@@ -22,14 +18,22 @@ export default class SourceViewObserver {
 
     initClassNameSet() {
         const prefixObservedClassName = [
-            'cm-highlight ', 'cm-em ',
-            'cm-header cm-header-1 ', 'cm-header cm-header-2 ', 'cm-header cm-header-3 ', 
-            'cm-header cm-header-4 ', 'cm-header cm-header-5 ', 'cm-header cm-header-6 '
+            'cm-highlight ',
+            'cm-em ',
+            'cm-header cm-header-1 ',
+            'cm-header cm-header-2 ',
+            'cm-header cm-header-3 ',
+            'cm-header cm-header-4 ',
+            'cm-header cm-header-5 ',
+            'cm-header cm-header-6 '
         ];
         const suffixObservedClassName = [
             '',
-            ' cm-list-1', ' cm-list-2', ' cm-list-3', 
-            ' cm-quote cm-quote-1', ' cm-strong'
+            ' cm-list-1',
+            ' cm-list-2',
+            ' cm-list-3',
+            ' cm-quote cm-quote-1',
+            ' cm-strong'
         ];
         const baseTargetClassName = 'cm-hmd-internal-link cm-link-alias';
         for (const className of prefixObservedClassName) {
@@ -44,11 +48,11 @@ export default class SourceViewObserver {
         const activeLeaf = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
         const filePath = this.plugin.app.workspace.getActiveFile()?.path;
         if (!activeLeaf || filePath === undefined) return;
-    
+
         const that = this;
         const observedClassName = 'cm-hmd-internal-link cm-link-has-alias';
         const targetClassName = 'cm-hmd-internal-link cm-link-alias';
-        const observeCallback = function(mutations: MutationRecord[]) {
+        const observeCallback = function (mutations: MutationRecord[]) {
             that.plugin.log('-----------------------------');
             for (const mutation of mutations) {
                 if (mutation.type == 'childList') {
@@ -73,7 +77,7 @@ export default class SourceViewObserver {
                     }
                 }
             }
-        }
+        };
         this.observer = new MutationObserver(observeCallback);
     }
 
@@ -89,15 +93,17 @@ export default class SourceViewObserver {
         const activeLeaf = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
         const filePath = this.plugin.app.workspace.getActiveFile()?.path;
         if (!activeLeaf || filePath === undefined) return;
-    
+
         const regex2FindLinks = /[[]{2}[^\]]*(?=[\]]{2})/gm;
         const view = activeLeaf.leaf.view.containerEl;
         const editor = activeLeaf.editor;
         const oldText = editor.getValue();
-        const linkHref = oldText.match(regex2FindLinks)
-        if(!linkHref || linkHref.length == 0) return;
-        
-        const tempSourceLinks = view.getElementsByClassName('cm-hmd-internal-link cm-link-alias') as HTMLCollectionOf<HTMLAnchorElement>;
+        const linkHref = oldText.match(regex2FindLinks);
+        if (!linkHref || linkHref.length == 0) return;
+
+        const tempSourceLinks = view.getElementsByClassName(
+            'cm-hmd-internal-link cm-link-alias'
+        ) as HTMLCollectionOf<HTMLAnchorElement>;
         const length = tempSourceLinks.length;
         const sourceLinks = new Array<HTMLAnchorElement>();
         if (length > 1) {
@@ -110,23 +116,23 @@ export default class SourceViewObserver {
                         sourceLinks.push(tempSourceLinks[i]);
                     }
                 } else if (i == length - 1) {
-                        sourceLinks.push(prev);
+                    sourceLinks.push(prev);
                 }
             }
         } else {
             sourceLinks.push(tempSourceLinks[0]);
         }
-    
+
         const observeConfig = {
             attributeFilter: ['class'],
-            attributes: true, 
+            attributes: true,
             characterData: true,
             characterDataOldValue: true,
-            childList: true, 
-            attributeOldValue: true, 
+            childList: true,
+            attributeOldValue: true,
             subtree: true
         };
-    
+
         for (let i = 0; i < sourceLinks.length; i++) {
             const tempLink = linkHref[i];
             if (typeof tempLink != 'string') continue;
@@ -136,7 +142,7 @@ export default class SourceViewObserver {
             const parsedLink = parseLinktext(tempLink.substring(2).split('|')[0]);
             const annotationid = parsedLink.subpath.startsWith('#^') ? parsedLink.subpath.substring(2) : null;
             const file: TFile | null = this.plugin.app.metadataCache.getFirstLinkpathDest(parsedLink.path, filePath);
-    
+
             if (file && this.plugin.isAnnotationFile(file) && annotationid) {
                 this.addClickListener(sourceLinks[i], annotationid, file, false);
                 this.observer.observe(sourceLinks[i].parentNode as Node, observeConfig);
@@ -146,7 +152,7 @@ export default class SourceViewObserver {
 
     addClickListener(element: HTMLAnchorElement, annotationid: string, file: TFile, isReadingView: boolean) {
         const childs = element.children;
-        if (isReadingView || childs && childs.length == 1) {
+        if (isReadingView || (childs && childs.length == 1)) {
             element.addEventListener('click', ev => {
                 this.plugin.log(annotationid);
                 ev.preventDefault();
@@ -161,36 +167,40 @@ export default class SourceViewObserver {
     linkOnFocus(element: Element) {
         let count = 0;
         const linkText = element.textContent;
-        while(element.className && element.className.indexOf('cm-formatting-link cm-formatting-link-end') == -1) {
+        while (element.className && element.className.indexOf('cm-formatting-link cm-formatting-link-end') == -1) {
             if (this.targetClassNameSet.has(element.className)) count++;
             element = element.nextElementSibling;
         }
-        this.tmpLinkInfos.push({linkText: linkText, count: count});
+        this.tmpLinkInfos.push({ linkText: linkText, count: count });
     }
 
     linkOnBlur(node: Element, rawLinkText: string, filePath: string, className: string) {
         const linkIndex = this.tmpTargetIndex + 1;
         if (this.tmpLinkInfos.length == 0) return;
         const linkInfo = this.tmpLinkInfos[0];
-    
+
         const link = parseLinktext(rawLinkText == '' ? linkInfo.linkText : rawLinkText);
         const annotationid = link.subpath.startsWith('#^') ? link.subpath.substring(2) : null;
         const file: TFile | null = this.plugin.app.metadataCache.getFirstLinkpathDest(link.path, filePath);
-        
+
         const targets = node.getElementsByClassName(className) as HTMLCollectionOf<HTMLAnchorElement>;
         const uniqueTarget = targets[linkIndex];
         this.plugin.log(
-            'linkText: ' + link.path +
-            ' tarIndex: ' + this.tmpTargetIndex.toString() +
-            ' linkIndex: ' + linkIndex.toString() +
-            ' size: ' + this.tmpLinkInfos.length.toString()
+            'linkText: ' +
+                link.path +
+                ' tarIndex: ' +
+                this.tmpTargetIndex.toString() +
+                ' linkIndex: ' +
+                linkIndex.toString() +
+                ' size: ' +
+                this.tmpLinkInfos.length.toString()
         );
         this.plugin.log(uniqueTarget);
-    
+
         this.tmpTargetIndex += linkInfo.count;
-    
+
         this.addClickListener(uniqueTarget, annotationid, file, false);
-    
+
         this.tmpLinkInfos.splice(0, 1);
         if (this.tmpLinkInfos.length == 0) this.resetTmpLinkInfo();
     }

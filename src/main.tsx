@@ -152,9 +152,9 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         );
 
         this.registerEvent(
-            this.app.workspace.on('file-open', (file) => {
+            this.app.workspace.on('file-open', file => {
                 if (file) {
-                    this.log("file opened");
+                    this.log('file opened');
                     if (this.sourceViewObserver.getObserver()) {
                         this.sourceViewObserver.resetTmpLinkInfo();
                         this.sourceViewObserver.getObserver().disconnect();
@@ -243,7 +243,11 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         this.views.forEach(v => v.onDarkReadersUpdated());
     }
 
-    public async openAnnotationTarget(annotationTargetFile: TFile, onNewPane: boolean, annotationId: string | null): Promise<void> {
+    public async openAnnotationTarget(
+        annotationTargetFile: TFile,
+        onNewPane: boolean,
+        annotationId: string | null
+    ): Promise<void> {
         const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_PDF_ANNOTATOR);
         let leaf: WorkspaceLeaf | null = null;
 
