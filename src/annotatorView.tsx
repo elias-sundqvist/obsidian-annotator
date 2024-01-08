@@ -3,10 +3,10 @@ import { ANNOTATION_TARGET_PROPERTY, ANNOTATION_TARGET_TYPE_PROPERTY, VIEW_TYPE_
 import { DarkReaderType } from 'darkreader';
 import AnnotatorPlugin from 'main';
 import { Annotation } from './types';
-import { FileView, Menu, MenuItem, TFile, WorkspaceLeaf } from 'obsidian';
+import { FileView, Menu, MenuItem, TFile, WorkspaceLeaf, getLinkPath } from 'obsidian';
 import React from 'react';
 import ReactDOM from 'react-dom';
-import { isUrl, get_url_extension } from 'utils';
+import { isUrl, get_url_extension, getWikilink } from 'utils';
 
 export default class AnnotatorView extends FileView {
     plugin: AnnotatorPlugin;
@@ -45,6 +45,10 @@ export default class AnnotatorView extends FileView {
             }
             let destFile: TFile;
             try {
+                const wikilink = getWikilink(target);
+                if (wikilink) {
+                    target = getLinkPath(target);
+                }
                 destFile = this.app.metadataCache.getFirstLinkpathDest(target, file?.path || '');
             } finally {
                 if (destFile) {
