@@ -5,6 +5,12 @@ import mime from 'mime';
 
 export const resourcesZip = new JSZip();
 export const resourceUrls = new Map<string, string>();
+export const resourceUrlToPlainText = new Map<string, string>();
+
+function bufferToBlobUrl(buffer: ArrayBuffer, type: string) {
+    const blob = new Blob([buffer], { type });
+    return URL.createObjectURL(blob);
+}
 
 async function _loadResourcesZip(zipObject: JSZip | Promise<JSZip>): Promise<JSZip> {
     const zip = await zipObject;
@@ -12,8 +18,15 @@ async function _loadResourcesZip(zipObject: JSZip | Promise<JSZip>): Promise<JSZ
         const file = zip.file(filePath);
         if (!file || file.dir) continue;
         const buf = await file.async('arraybuffer');
-        const blob = new Blob([buf], { type: mime.getType(get_url_extension(filePath)) });
-        resourceUrls.set(filePath, URL.createObjectURL(blob));
+        const type = mime.getType(get_url_extension(filePath))
+        const url = bufferToBlobUrl(buf, type);
+        resourceUrls.set(filePath, url);
+
+        // Check if the file is of a text type and save its content as plain text
+        if (type && type.startsWith('text/')) {
+            const textContent = new TextDecoder().decode(buf);
+            resourceUrlToPlainText.set(url, textContent);
+        }
     }
 
     return await resourcesZip.loadAsync(await zip.generateAsync({ type: 'blob' }), { createFolders: true });

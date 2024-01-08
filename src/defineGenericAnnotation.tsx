@@ -12,7 +12,7 @@ import { DarkReaderType } from 'darkreader';
 import { getSubtitles } from 'youtube-captions-scraper';
 import getYouTubeMetaData from 'youtube-metadata-scraper';
 import { deleteVideoAnnotation, loadVideoAnnotations, writeVideoAnnotation } from 'videoAnnotationFileUtils';
-import { awaitResourceLoading, resourcesZip, resourceUrls } from 'resourcesFolder';
+import { awaitResourceLoading, resourcesZip, resourceUrls, resourceUrlToPlainText } from 'resourcesFolder';
 
 const urlToPathMap = new Map();
 const proxiedHosts = new Set(['cdn.hypothes.is', 'via.hypothes.is', 'hypothes.is', 'annotate.tv']);
@@ -362,6 +362,13 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
                 }}
                 postMessagePatchStrategy={'video' in props ? 'top' : null}
                 tagPatchStrategy={'video' in props ? 'createEl' : 'prototype'}
+                onAttributeSet={(el: HTMLElement, attr, value, patchedValue) => {
+                    if (resourceUrlToPlainText.has(patchedValue)) {    
+                        const style = el.ownerDocument.createElement("style")
+                        style.textContent = resourceUrlToPlainText.get(patchedValue);
+                        el.append(style);
+                    }
+                }}
                 onMessagePatchStrategy={'video' in props ? null : null}
                 onIframePatch={async iframe => {
                     subFrames.add(new WeakRef(iframe.contentWindow));
