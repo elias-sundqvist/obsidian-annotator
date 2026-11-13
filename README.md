@@ -88,6 +88,10 @@ note, and search
 (`tag:idea`, `text:…`, `quote:…`, `since:7day` narrow it). The strip at its top
 shows where the annotations fall in the source and where you are.
 
+To search every annotation in the vault at once, run **Search all
+annotations…**: type a few letters of a quote, a note, a `#tag` or a source's
+title, and choosing a result opens its source at the passage.
+
 ## PDFs
 
 The reader works on Obsidian's built-in PDF view. Three buttons are added to
@@ -285,6 +289,19 @@ first time, the reader asks, then downloads or copies it once into
 `Annotator sources` in your vault and reads it from there. If that fails it
 says why, and nothing is left behind.
 
+A file on your computer is written as its full path, the way your system
+writes it, or as a `file:` address:
+
+| Written as | Example |
+| --- | --- |
+| A path on macOS or Linux | `annotation-target: /home/me/Papers/Attention.pdf` |
+| A path on Windows | `annotation-target: C:\Users\me\Papers\Attention.pdf` |
+| A file address | `annotation-target: file:///C:/Users/me/Papers/Attention.pdf` |
+
+The key is `annotation-target`, spelled exactly so and without a colon of its
+own: in Obsidian's Properties editor, type the name alone and the path as its
+value.
+
 ## Reading progress
 
 With **Keep reading progress in the note** on (settings; off by default),
@@ -426,6 +443,8 @@ and the PDF export is read back with two independent PDF readers. See
 - A frame of a paused YouTube video includes the player's own controls; take
   it while the video plays.
 - Text in scanned PDFs is not recognised (no OCR).
+- A PDF placed on a Canvas is shown without its highlights; open it in a tab
+  to see and make them.
 - Drawing is for PDFs; books have highlights, notes and picture notes, videos
   have notes and frame notes.
 - A picture note in a book is not shown by Annotator 0.2 (it has no passage

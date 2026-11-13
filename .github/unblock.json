@@ -893,11 +893,11 @@
     {
       "id": "beta",
       "title": "Beta release",
-      "status": "todo",
+      "status": "done",
       "parent": "release",
       "dependsOn": ["identity", "ci", "docs", "push-pr", "security-384", "migration-e2e", "android-notes", "android-new-screens", "a11y-screenreader", "security-target-confirm", "desktop-platforms", "damaged-notes", "promote-delete-legacy", "promote-manifest", "promote-cleanup", "promote-docs", "promote-measure"],
       "estimate": 2,
-      "notes": "A BRAT-installable build of the promoted plugin, under the real id obsidian-annotator (manifest-beta.json), and a call for testers. Testers on 0.2.11 get it as an update: old notes, settings and open tabs must carry over."
+      "notes": "A BRAT-installable build of the promoted plugin, under the real id obsidian-annotator (manifest-beta.json), and a call for testers. Testers on 0.2.11 get it as an update: old notes, settings and open tabs must carry over.\n\nDone 2026-11-13: No separate beta: the owner chose to release directly. 0.3.0 was tagged and published from the pull request's commit on 2026-11-13 after CI passed twice."
     },
     {
       "id": "housekeeping",
@@ -981,7 +981,7 @@
       "status": "todo",
       "parent": "issues",
       "dependsOn": ["ios-pass"],
-      "notes": "Closes, once checked, GitHub issues #89, #166, #177, #207, #225, #289, #322, #373 (ISSUE_PLAN.md, \"Closes after a check\"). What to test: During the iOS pass: multi-line selection on iPhone and iPad (166, 322), the selection bar instead of the system menu (177), a file name with spaces synced from desktop (89), a video note on iPad (207), annotation links (225), the plugin loads on current iPadOS (289), pen hover shows the note (373).\n\nDone looks like: each issue checked and marked pass or fail in ISSUE_PLAN.md; a failure becomes a fix task here; one that cannot be reproduced gets the reopen-if-it-recurs reply. SIMULATOR PASS 2026-11-13 (ISSUE_PLAN.md Progress): #166 pass, #322 not reproduced, #177 pass, #89 matching pass, #225 fixed, in iOS WebKit. STILL NEEDS THE OWNER'S iPhone/iPad: #289 (loads in Obsidian for iOS), #207 (YouTube Error 153 from a capacitor:// page: check whether a YouTube embed in an ordinary note plays in Obsidian for iOS; if not, the plugin can only say so and link out), #373 (pen hover), #89 sync, and a look at zoom, links and the keyboard in the real app."
+      "notes": "The iOS issues (#89, #166, #177, #207, #225, #289, #322, #373) were answered and closed on 2026-11-13 with the limit stated: run in iOS WebKit in the Simulator, not inside Obsidian for iOS. What is left is the owner's: a check on an iPhone or iPad of loading (#289), pen hover (#373), a YouTube video (#207), annotation links (#225), sync of a file name with spaces (#89), and zoom, links and the keyboard with the note sheet. A failure becomes a fix task and a new issue."
     },
     {
       "id": "issues-check-desktop",
@@ -994,10 +994,10 @@
     {
       "id": "issues-close",
       "title": "Close the issues the release resolves",
-      "status": "todo",
+      "status": "doing",
       "parent": "issues",
-      "dependsOn": ["beta", "pdf-dark-figures", "issues-page-notes-page", "issues-target-forms", "issues-link-template", "issues-note-heading", "issues-default-paths", "issues-sidebar-on-open", "issues-note-css-class", "issues-html-in-vault", "issues-progress-property", "issues-phone-fullscreen", "issues-pdf-metadata", "issues-tags-live-preview", "issues-check-pdf-view", "issues-check-notes-editor", "issues-check-web", "issues-check-books", "issues-check-android", "issues-check-ios", "issues-check-desktop", "store-release", "issues-open-prs"],
-      "notes": "After the beta is out: close each issue with the reply in ISSUE_PLAN.md (\"Closes with the release\", the work items, the passed checks, the declines; \"Not an issue for the reader\" can go earlier). Read-only until the owner says to post. Done: no open issue left without a reply; any left open are named with why."
+      "dependsOn": ["beta", "pdf-dark-figures", "issues-page-notes-page", "issues-target-forms", "issues-link-template", "issues-note-heading", "issues-default-paths", "issues-sidebar-on-open", "issues-note-css-class", "issues-html-in-vault", "issues-progress-property", "issues-phone-fullscreen", "issues-pdf-metadata", "issues-tags-live-preview", "issues-check-pdf-view", "issues-check-notes-editor", "issues-check-web", "issues-check-books", "issues-check-android", "issues-check-desktop", "store-release", "issues-open-prs"],
+      "notes": "2026-11-13: all 271 open issues were read and answered. 241 closed as completed with a reply (what 0.3 does, how to update, a new issue is welcome, written by Claude on behalf of the owner). 10 answered and left open (#43, #124, #167, #152, #310, #219, #339, #397, #209, #415). 20 drafted as 'not planned' are held, unanswered, while the owner goes through them (#22, #23, #24, #62, #78, #92, #111, #123, #129, #157, #191, #256, #263, #282, #288, #295, #299, #349, #403, #406). Done when those 20 are decided and answered. Details: docs/dev/ISSUE_PLAN.md, 'After the release'."
     },
     {
       "id": "issues-open-prs",
@@ -1105,10 +1105,25 @@
     {
       "id": "store-release",
       "title": "Store release: the native reader replaces 0.2.11",
-      "status": "todo",
+      "status": "done",
       "parent": "release",
       "dependsOn": ["beta", "ios-pass", "issues-check-pdf-view", "issues-check-notes-editor", "issues-check-books", "sidebar-note-filter", "progress-resume", "worker"],
-      "notes": "After the beta has had testers: tag, release workflow attaches main.js, manifest.json and styles.css, versions.json updated, release notes with the before/after table (promote-measure) and the move from 0.2.11 explained. Done: users of the community store get it as an update."
+      "notes": "After the beta has had testers: tag, release workflow attaches main.js, manifest.json and styles.css, versions.json updated, release notes with the before/after table (promote-measure) and the move from 0.2.11 explained. Done: users of the community store get it as an update.\n\nDone 2026-11-13: Released 2026-11-13: tag 0.3.0, GitHub release with main.js, manifest.json, styles.css; master fast-forwarded to the same commit so Obsidian's plugin list offers 0.3.0. Pull request 416 merged."
+    },
+    {
+      "id": "community-review",
+      "title": "Read the Obsidian forum and Discord for reports the issue list does not cover",
+      "status": "done",
+      "parent": "release",
+      "dependsOn": ["store-release"],
+      "notes": "Read-only sub-session (community-review) writes docs/dev/COMMUNITY_REVIEW.md: themes since 2021, what 0.3 covers, proposed todos, material for the write-up. Nothing is posted anywhere.\n\nDone 2026-11-13: Done 2026-11-13 by the read-only sub-session: docs/dev/COMMUNITY_REVIEW.md. Forum: 170 topics opened, 50 counted (410 posts). Discord: about 2,100 messages read, 304 about the plugin. Two proposed todos (target-key-hint, page-text-boxes) and open questions (check-canvas, community-questions). It also found the changelog still said 'not yet released' and that the README did not mention 'Search all annotations…' or how to write a path outside the vault: fixed here."
+    },
+    {
+      "id": "release-writeup",
+      "title": "Plan the release write-up for the updates channel",
+      "status": "todo",
+      "parent": "release",
+      "dependsOn": ["community-review"]
     },
     {
       "id": "fork-ideas",
@@ -1217,6 +1232,74 @@
       "dependsOn": [],
       "estimate": 2,
       "notes": "Found by worker-measure: every change in the PDF view (a page being drawn, a hover class) removes and repaints the marks of every drawn page; with 2000 annotations that is several passes of ~100 ms each (0.8 s in all while opening). Keep each page's marks while its text layer, size, annotations and active annotation are the same. Done: opening the 2000-annotation note paints each page once; the lifecycle tests (unload, replace, resize) pass.\n\nDone 2026-11-12: A page keeps its marks while its text layer, its text, its size and what is painted on it (annotations, their places, which is selected) are the same; a change repaints that page only. Pages with areas or drawings are always painted afresh, since those follow the hand. Marks left on something that is no longer a drawn page are removed. Test in native-pdf-lifecycle.test.mjs (same elements kept; repaint on changed annotation, selection, size, replaced text layer; removal). Live, opening the test notes, UI-thread script and long tasks: 20 annotations 0.25 s → 0.14 s, none; 200: 0.67 s (7 long tasks) → 0.23 s, none; 2000: 7–8 s (12 long tasks, longest 0.93 s, first highlight 3.0 s) → 0.71 s (3 long tasks of about 0.1 s, first highlight 0.86 s)."
+    },
+    {
+      "id": "community",
+      "title": "After the release: from the forum and Discord",
+      "dependsOn": []
+    },
+    {
+      "id": "target-key-hint",
+      "title": "A hint when a note's property is a near miss of annotation-target",
+      "status": "todo",
+      "parent": "community",
+      "dependsOn": ["community-review"],
+      "estimate": 1,
+      "notes": "From docs/dev/COMMUNITY_REVIEW.md 3.1. People ended up with a property named 'annotation-target:' (colon inside the key, typed in the Properties editor) or 'annotator-target', and nothing told them why no reader opened. About 6 people on the forum and Discord, 2022 to 2025. Windows drive paths with backslashes, the other half of that report, are already read (test/local-source.test.mjs) and the README now shows them. Done looks like: opening such a note says which property was probably meant and offers to rename it; tests for the near misses; nothing shown for unrelated keys."
+    },
+    {
+      "id": "page-text-boxes",
+      "title": "Typed text that stays visible on the PDF page",
+      "status": "todo",
+      "parent": "community",
+      "dependsOn": ["community-review"],
+      "estimate": 3,
+      "notes": "From COMMUNITY_REVIEW.md 3.2. A text box placed anywhere on the page with the typed words shown on the page, as in Acrobat's free-text tool. About 2 people (Discord, 2024): weak evidence, so only if more people ask. Would be a new annotation kind with its card and export as a FreeText PDF annotation. Needs the owner's yes before it is started."
+    },
+    {
+      "id": "check-canvas",
+      "title": "Check: highlights on a PDF shown in a Canvas card",
+      "status": "done",
+      "parent": "community",
+      "dependsOn": ["community-review"],
+      "estimate": 1,
+      "notes": "COMMUNITY_REVIEW.md part 5, question 1. People asked to annotate PDFs on a Canvas (Discord, 2023). Nothing in the README or the issue plan says whether 0.3's highlights show on a PDF in a Canvas card. Done looks like: checked in the running app and the answer written in the README's limits (or it works and is said to).\n\nDone 2026-11-13: Checked 2026-11-13 in the running app (Obsidian 1.13.7, Annotator 0.3.0, macOS): a PDF with three highlights placed in a Canvas card renders its pages with no highlights; the same PDF in a tab shows all three. Written into the README's limits. Painting highlights in Canvas cards and note embeds would be a feature of its own."
+    },
+    {
+      "id": "community-questions",
+      "title": "Decide: ChromeOS, and reading outside files without copying them in",
+      "status": "todo",
+      "parent": "community",
+      "dependsOn": ["community-review"],
+      "estimate": 1,
+      "notes": "Owner's questions from COMMUNITY_REVIEW.md part 5. (2) ChromeOS was never tried; a Chromebook crash on install was reported for 0.2 in 2024: check it, or say 'untested on ChromeOS'? (4) People who keep PDFs outside the vault for size or privacy will find 0.3 copies the file in once: is that the answer, or is reading in place wanted? (6) Where to announce: part 6 ranks Discord #updates, a new Share & showcase thread, then three recent discussions. (7) The forum's showcase threads open with three questions: open source, completely free, and whether the plugin is 'vibe-coded beyond the author's ability to comprehend how it works'; only the owner can answer the third. (8) A competing plugin pitches writing into the original PDF as 'no lock-in'; 0.3 never changes the original: keep that and answer with the export, or offer an opt-in annotated copy kept up to date?"
+    },
+    {
+      "id": "sources-base",
+      "title": "Say that the annotation note is the PDF's property note; a Base of all annotated sources",
+      "status": "todo",
+      "parent": "community",
+      "dependsOn": ["community-review"],
+      "estimate": 2,
+      "notes": "COMMUNITY_REVIEW.md 3.3. People want PDFs in Bases and Dataview with properties and make sidecar notes by hand (forum request 64386, 24 posts, active November 2026; about 6 people on Discord in 2026). 0.3 already has that note per source, and 'Add the PDF's details to the note' makes it before any annotation exists, but the README does not say so and no Base lists the sources. Done looks like: a README paragraph with the Base filter on annotation-target, and a command that makes a Base of all annotated sources (title, author, year, annotation-progress, count, tags). Needs the owner's yes before the command is built."
+    },
+    {
+      "id": "zotero-guide",
+      "title": "A short guide for Zotero users",
+      "status": "todo",
+      "parent": "community",
+      "dependsOn": ["community-review"],
+      "estimate": 1,
+      "notes": "COMMUNITY_REVIEW.md 3.4. Zotero is the alternative named most after PDF++. Documentation only: how to point annotation-target at a PDF in Zotero's storage, what happens to highlights made in Zotero's own reader (kept in its database, not in the PDF), and where metadata comes from. Write it only after checking that a Zotero storage path works as a target on macOS, Windows and Linux."
+    },
+    {
+      "id": "core-pdf-annotation",
+      "title": "README: what happens when Obsidian adds its own PDF annotation",
+      "status": "todo",
+      "parent": "community",
+      "dependsOn": ["community-review"],
+      "estimate": 1,
+      "notes": "COMMUNITY_REVIEW.md 3.5. PDF annotation is 'Planned' on Obsidian's public roadmap and people recommend waiting for it. Now: one honest paragraph (annotations are notes in the vault; they can be exported as standard PDF annotations and taken in from a PDF; nothing can be said about a feature that does not exist yet). Later, when it ships: check taking in what Obsidian writes and whether exported annotations show in its viewer."
     }
   ]
 }

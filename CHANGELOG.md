@@ -3,7 +3,7 @@
 What changed for someone using Annotator. How to use each thing is in
 [README.md](README.md).
 
-## 0.3.0 (not yet released)
+## 0.3.0 (2026-11-13)
 
 A new reader. Versions up to 0.2.11 showed the Hypothesis web client in a
 frame; this one is built on Obsidian's own PDF view and editor, with its own

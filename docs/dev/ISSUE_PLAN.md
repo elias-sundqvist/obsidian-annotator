@@ -4,7 +4,7 @@
 
 Source: `gh issue list --repo elias-sundqvist/obsidian-annotator --state open` on 2026-11-12. **271 open issues**, the same 271 numbers as the earlier triage: none opened, none closed, and none updated since 2026-11-10. Nothing was posted to GitHub.
 
-Everything below describes the native reader on branch `experiment/native-design`, which is not released. For users of the published 0.2.11 nothing has changed until it is.
+Everything below describes the native reader, which was released as 0.3.0 on 2026-11-13. The text was written before the release, so where it says "the branch" or "the release" it means 0.3.0. What was then done with the issues is in "After the release" at the end.
 
 ## Summary
 
@@ -687,3 +687,60 @@ Merged earlier and still relevant as checks: #268 (line breaks in a dragged high
 - Issue #415 (co-maintainer) and #209 (issue templates) are yours to answer.
 - Pull requests #336 and #330: close them with the release, using the replies in "Forks and open pull requests". Board: `issues-open-prs`.
 - annotator-plus (0shombh-d3v) is a maintained fork of the old reader, and the release replaces what it fixes. Do you want to tell its author about the release, or adopt its "highlights with a note" underline and filter after the release?
+
+## After the release
+
+0.3.0 was released on 2026-11-13. The same day every one of the 271 open issues was read again and answered. Each reply says what 0.3 does about the report, how to update, and that a new issue is welcome if the problem is still there; each ends with a line saying it was written by Claude on behalf of the owner. The replies state what was checked and what was not (for example: iOS only in the Simulator, Android on emulators, no HarmonyOS device, not the reporter's own file).
+
+| Outcome | Issues |
+| --- | ---: |
+| Answered and closed as completed | 241 |
+| Answered and left open: a specific request 0.3 does not do, or the owner's to answer | 10 |
+| Not yet answered: drafted as "not planned", held for the owner to go through | 20 |
+
+### Left open
+
+| Issue | What is asked, and why it stays open |
+| --- | --- |
+| #43 | Alt/Option-drag a selection to make a highlight and a link in one step. 0.3 needs two steps, and the drag of a selection belongs to Obsidian's PDF view. |
+| #124 | Choose where in an existing note new annotations are written. 0.3 only starts new notes from a heading or a template. |
+| #152 | Edit the quoted text of a highlight (OCR clean-up, page breaks). Not decided: the quote is kept as the source has it. |
+| #167 | Annotations written under a chosen heading. The same request as #124. |
+| #209 | An issue template for bugs. The owner's to answer. |
+| #219 | Limit an annotation note to a range of pages. Needs a new form of `annotation-target` and a page scope in every view. |
+| #310 | Edit the source quotation, for example to set a formula in LaTeX. The same decision as #152. |
+| #339 | HTTP Basic authentication for remote sources. Credentials in an address are refused on purpose; a prompt that does not store them is not built. |
+| #397 | Text recognition, so image-only PDFs can be searched. Board task `scan-text-recognition`, after the release. |
+| #415 | An offer to co-maintain. The owner's to answer. |
+
+### Held
+
+#22 #23 #24 #62 #78 #92 #111 #123 #129 #157 #191 #256 #263 #282 #288 #295 #299 #349 #403 #406.
+
+These were drafted as "close as not planned" (outside what the plugin does, or against the decision that the note format stays the original's). Nothing was posted on them; the owner is going through them one by one, since some could become small features instead.
+
+### Closed, with a part of the request not in 0.3
+
+The reply names the part and invites a new issue for it.
+
+| Issue | Not in 0.3 |
+| --- | --- |
+| #18 | no online lookup by DOI, and none for books |
+| #65 | no page field in a highlight's JSON, no grouping by the PDF's bookmarks |
+| #75 | no sign-in for private Drive files |
+| #87 | no import from an online Hypothesis account, only from an exported file |
+| #145 | no manual order or pinning of cards |
+| #150 | no paths relative to the vault such as `../papers/` |
+| #207 | on iPad, YouTube may refuse to play; the reader then links out |
+| #245 | no brightness or contrast controls for light pages |
+| #278 | no use of an online transcript service; captions are loaded or imported |
+| #287 | no Zotero reader or integration |
+| #331 | no underline style in books |
+| #346 | tags are renamed one source at a time, not across the vault |
+| #412 | no browser extension |
+
+### Still to do
+
+- A check inside Obsidian for iOS on an iPhone or iPad (#289 loading, #373 pen hover, #207 video, #225 links, the keyboard with the note sheet). The issues were closed with that said; board task `issues-check-ios`.
+- Pull requests #336 and #330 are still open; replies are drafted. Board: `issues-open-prs`.
+- What people wrote on the Obsidian forum and Discord, and the todos that came from it, are in [COMMUNITY_REVIEW.md](COMMUNITY_REVIEW.md).
