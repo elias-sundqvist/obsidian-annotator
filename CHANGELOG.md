@@ -3,7 +3,7 @@
 What changed for someone using Annotator. How to use each thing is in
 [README.md](README.md).
 
-## Unreleased
+## 0.3.1 (2026-11-13)
 
 - A note whose property is nearly `annotation-target` (the colon typed into
   its name, `annotator-target`, another spelling) opened no source and
