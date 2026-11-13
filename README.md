@@ -68,7 +68,12 @@ A PDF or a book cannot carry properties of its own, so the annotation note is
 where they go: tags, a status, an author, whatever you list your reading by.
 The note opens its source, and **Add the PDF's details to the note** makes
 the note (with the PDF's title, authors and year) even before the first
-highlight. A Base that lists everything you have annotated needs one filter:
+highlight. **Make a Base of everything annotated** writes
+`Annotated sources.base` at the top of your vault and opens it: a table of
+every annotation note with its source, progress, author, year and tags, and a
+second view of what you are in the middle of. It is yours to change; running
+the command again opens it and writes nothing. Made by hand, such a Base
+needs one filter:
 
 ```yaml
 filters:

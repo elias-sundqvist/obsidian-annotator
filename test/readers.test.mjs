@@ -197,6 +197,18 @@ test('a property that is nearly annotation-target is recognised, and one that on
  for(const value of [null,undefined,'text',3,[],[{'annotator-target':'a.pdf'}]])assert.equal(targetKeyNearMiss(value),null);
 });
 
+test('the Base of everything annotated asks for notes with a target and shows what such a note carries',async()=>{
+ const {sourcesBase}=await import('./.generated/readers/preferences.js');const base=sourcesBase(),lines=base.split('\n');
+ assert.ok(base.endsWith('\n'));for(const line of lines)assert.ok(!line.includes('\t')&&line===line.trimEnd(),JSON.stringify(line));
+ // One filter for the whole Base: a note is listed when it has a target. A hyphenated property is asked for by its name in brackets, and the line is quoted because it starts with "!".
+ assert.deepEqual(lines.slice(0,3),['filters:','  and:','    - \'!note["annotation-target"].isEmpty()\'']);
+ const views=base.split('\n  - type: table\n').slice(1);assert.deepEqual(views.map(view=>view.split('\n')[0].trim()),['name: Everything annotated','name: In progress']);
+ for(const column of ['file.name','note.annotation-target','note.annotation-progress','note.author','note.year','file.tags'])assert.ok(views[0].includes(`      - ${column}\n`),column);
+ assert.ok(views[1].includes('        - \'!note["annotation-progress"].isEmpty()\''));
+ // Every property given a name of its own is one a view shows.
+ for(const [,name] of base.matchAll(/^  ((?:note|file)\.[\w-]+):$/gm))assert.ok(views.some(view=>view.includes(`      - ${name}\n`)),name);
+});
+
 test('legacy target shapes and Markdown preferences are preserved when adopting native settings',async()=>{
  const {annotationTarget,markdownPreferences}=await import('./.generated/readers/preferences.js');
  for(const value of ['[[Folder/book.pdf|Book]]',[{path:'Folder/book.pdf'}],{path:'Folder/book.pdf'}])assert.equal(annotationTarget(value),'Folder/book.pdf');

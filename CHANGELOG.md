@@ -9,6 +9,9 @@ What changed for someone using Annotator. How to use each thing is in
   its name, `annotator-target`, another spelling) opened no source and
   nothing said why. Opening such a note now says which property was probably
   meant, with a button that renames it.
+- **Make a Base of everything annotated** writes a Base that lists every
+  annotation note with its source, progress, author, year and tags. One that
+  is already there is opened, not written over.
 
 ## 0.3.0 (2026-11-13)
 

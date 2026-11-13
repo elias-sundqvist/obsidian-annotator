@@ -99,6 +99,62 @@ export function annotationTarget(value: unknown): string | null {
     if (wiki) return wiki[1].split('|')[0].split('#')[0].trim() || null;
     return text.replace(/^\[\[/, '').replace(/\]\]$/, '').split('|')[0];
 }
+/**
+ * A Base that lists every annotation note in the vault, which is to say
+ * everything that has been annotated: a note is one when it has an
+ * `annotation-target`. The columns are the properties such a note may carry:
+ * what "Add the PDF's details" writes, and where the reader was.
+ */
+export function sourcesBase(): string {
+    return [
+        'filters:',
+        '  and:',
+        '    - \'!note["annotation-target"].isEmpty()\'',
+        'properties:',
+        '  file.name:',
+        '    displayName: Note',
+        '  note.annotation-target:',
+        '    displayName: Source',
+        '  note.annotation-progress:',
+        '    displayName: Progress',
+        '  note.author:',
+        '    displayName: Author',
+        '  note.year:',
+        '    displayName: Year',
+        '  file.tags:',
+        '    displayName: Tags',
+        '  file.mtime:',
+        '    displayName: Last changed',
+        'views:',
+        '  - type: table',
+        '    name: Everything annotated',
+        '    order:',
+        '      - file.name',
+        '      - note.annotation-target',
+        '      - note.annotation-progress',
+        '      - note.author',
+        '      - note.year',
+        '      - file.tags',
+        '      - file.mtime',
+        '    sort:',
+        '      - property: file.mtime',
+        '        direction: DESC',
+        '  - type: table',
+        '    name: In progress',
+        '    filters:',
+        '      and:',
+        '        - \'!note["annotation-progress"].isEmpty()\'',
+        '    order:',
+        '      - file.name',
+        '      - note.annotation-progress',
+        '      - note.annotation-target',
+        '      - file.mtime',
+        '    sort:',
+        '      - property: file.mtime',
+        '        direction: DESC',
+        ''
+    ].join('\n');
+}
 /** How many single letters must be added, dropped or changed to turn one word into the other. */
 function lettersApart(a: string, b: string): number {
     let row = Array.from({ length: b.length + 1 }, (_, at) => at);

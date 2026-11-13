@@ -801,6 +801,18 @@ test('a new annotation note starts as the reader set it: another heading, or a t
   await h.plugin.setDisplay({noteTemplate:'Templates/Gone.md'});await h.plugin.ensureNote('d.pdf');assert.equal(made.at(-1)[1],'---\nannotation-target: "d.pdf"\n---\n\n## Highlights\n');assert.equal(made.length,4);
  }finally{h.dispose();}
 });
+test('the Base of everything annotated is made once, opened, and never written over',async()=>{
+ const {Notice}=await import('./.generated/plugin-boundary.mjs');
+ const h=host();try{h.plugin.manifest={id:'obsidian-annotator'};const made=[],opened=[];
+  h.app.vault.create=async(path,text)=>{made.push(path);return h.add(path,text);};h.app.workspace.getLeaf=()=>({openFile:async file=>{opened.push(file.path);}});
+  await h.plugin.onload();const command=h.plugin.commands.find(item=>item.id==='make-sources-base');assert.equal(command.name,'Make a Base of everything annotated');
+  const before=Notice.messages.length;await h.plugin.makeSourcesBase();
+  assert.deepEqual(made,['Annotated sources.base']);assert.deepEqual(opened,['Annotated sources.base']);assert.match(h.contents.get('Annotated sources.base'),/^filters:\n  and:\n    - '!note\["annotation-target"\]\.isEmpty\(\)'\n/);assert.match(Notice.messages[before],/Annotated sources\.base made/);
+  // The reader's own changes to it stay: a second run opens it and writes nothing.
+  h.contents.set('Annotated sources.base','views: mine');await h.plugin.makeSourcesBase();
+  assert.deepEqual(made,['Annotated sources.base']);assert.deepEqual(opened,['Annotated sources.base','Annotated sources.base']);assert.equal(h.contents.get('Annotated sources.base'),'views: mine');assert.equal(Notice.messages.length,before+1);
+ }finally{h.dispose();}
+});
 test('a note whose property is nearly annotation-target is told so once, and the button renames the property',async()=>{
  const {Notice}=await import('./.generated/plugin-boundary.mjs');
  const h=host();try{const writes=[];h.app.fileManager={processFrontMatter:async(file,change)=>{const meta=h.metadata.get(file.path)||{frontmatter:{}};meta.frontmatter={...meta.frontmatter};change(meta.frontmatter);h.metadata.set(file.path,meta);writes.push(file.path);}};

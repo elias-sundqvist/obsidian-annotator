@@ -120,6 +120,7 @@ import {
     annotationReference,
     annotationTarget,
     targetKeyNearMiss,
+    sourcesBase,
     markdownPreferences,
     type ReaderPreferences,
     type ReadingPosition
@@ -750,6 +751,13 @@ export default class AnnotatorPlugin extends Plugin {
             callback: () => {
                 if (this.currentFile)
                     void this.exportAnnotationNotes(this.currentFile).catch(error => this.fail(error));
+            }
+        });
+        this.addCommand({
+            id: 'make-sources-base',
+            name: 'Make a Base of everything annotated',
+            callback: () => {
+                void this.makeSourcesBase().catch(error => this.fail(error));
             }
         });
         this.addCommand({
@@ -3903,6 +3911,20 @@ export default class AnnotatorPlugin extends Plugin {
         } catch {
             /* Bases may be disabled; the notes are still there. */
         }
+    }
+    /**
+     * A Base listing every annotation note, made once at the top of the vault and opened. One that is already
+     * there is the reader's own by now (moved columns, added views): it is opened and never written over.
+     */
+    async makeSourcesBase() {
+        const path = 'Annotated sources.base';
+        let base = this.app.vault.getAbstractFileByPath(path);
+        if (!base) {
+            base = await this.app.vault.create(path, sourcesBase());
+            new Notice(`${path} made. It lists every note that has an annotation-target.`, 8000);
+        }
+        if (!(base instanceof TFile)) throw new Error(`${path} is a folder; a Base cannot be made there.`);
+        await this.app.workspace.getLeaf('tab').openFile(base);
     }
     /**
      * The link to an annotation as it is copied, dragged and pasted. Plain by default; with a template of the reader's

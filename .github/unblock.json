@@ -1277,11 +1277,11 @@
     {
       "id": "sources-base",
       "title": "Say that the annotation note is the PDF's property note; a Base of all annotated sources",
-      "status": "todo",
+      "status": "done",
       "parent": "community",
       "dependsOn": ["community-review"],
       "estimate": 2,
-      "notes": "COMMUNITY_REVIEW.md 3.3. DONE 2026-11-13, the documentation half: README 'The note is the source's property sheet', with a Base that lists every annotated source (filter on annotation-target; checked in Obsidian 1.13.7, where it listed the 36 annotation notes of the test vault). OPEN, and needing the owner's yes: a command that makes that Base for you (title, author, year, annotation-progress, count, tags)."
+      "notes": "COMMUNITY_REVIEW.md 3.3. DONE 2026-11-13, the documentation half: README 'The note is the source's property sheet', with a Base that lists every annotated source (filter on annotation-target; checked in Obsidian 1.13.7, where it listed the 36 annotation notes of the test vault). OPEN, and needing the owner's yes: a command that makes that Base for you (title, author, year, annotation-progress, count, tags).\n\nDone 2026-11-13: Built 2026-11-13 on branch feature/target-key-hint with the hint (not merged, not released): README 'The note is the source's property sheet', and the command 'Make a Base of everything annotated' (sourcesBase in src/preferences.ts, makeSourcesBase in src/main.ts). It writes 'Annotated sources.base' at the top of the vault and opens it; one already there is opened and never written over. Tests in readers.test.mjs and plugin-boundary.test.mjs. Tried in the running app on Obsidian 1.13.7: the Base listed all 36 annotation notes of the test vault. No count of annotations: that would need a property written into every note."
     },
     {
       "id": "zotero-guide",
