@@ -1142,7 +1142,7 @@
     {
       "id": "scan-text-recognition",
       "title": "Scanned PDFs: recognise text so pages can be selected and searched",
-      "status": "todo",
+      "status": "doing",
       "parent": "fork-ideas",
       "dependsOn": ["store-release"],
       "notes": "Idea from this-scott's fork (tesseract.js, unfinished). Today scanned pages can only take area notes. Optional, on demand per document, fully offline, with the result cached beside the source rather than rewriting the PDF. Weigh the size of a recogniser and language data against the 1.3 MB bundle (download on first use?)."
