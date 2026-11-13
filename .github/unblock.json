@@ -1134,7 +1134,7 @@
     {
       "id": "pdf-citations-panel",
       "title": "PDF: citations on the current page, with a note per cited work",
-      "status": "todo",
+      "status": "doing",
       "parent": "fork-ideas",
       "dependsOn": ["store-release"],
       "notes": "Idea from sparthaje/obsidian-references: a panel that lists the references cited on the current PDF page, in order of appearance (numbered and author–year bibliographies), and can make or open a reference note per cited work with a backlink to the citing source. Needs bibliography parsing from the PDF text layer; design first."

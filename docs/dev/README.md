@@ -27,6 +27,8 @@ Where to start:
 - [PER_ANNOTATION_NOTES.md](PER_ANNOTATION_NOTES.md): one file per annotation
   (built as an export; as storage it was tried and not taken up).
 - [PDF_APPEARANCE.md](PDF_APPEARANCE.md): page colours and dark pages.
+- [CITATIONS_DESIGN.md](CITATIONS_DESIGN.md): a panel of the works cited on
+  the PDF page in view (a design, reviewed, not yet built).
 - [RELEASE_EVIDENCE_MATRIX.md](RELEASE_EVIDENCE_MATRIX.md) and
   [PARITY.md](PARITY.md): what was checked, version by version.
 
