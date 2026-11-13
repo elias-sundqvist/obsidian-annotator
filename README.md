@@ -328,6 +328,31 @@ The key is `annotation-target`, spelled exactly so and without a colon of its
 own: in Obsidian's Properties editor, type the name alone and the path as its
 value.
 
+## With Zotero
+
+Zotero can stay your library while you annotate in Obsidian.
+
+- **The PDF.** Zotero keeps each attachment in its data folder, under
+  `storage`, in a folder with an eight-character name (in Zotero, right-click
+  the PDF and choose **Show File**). Give that path as the note's
+  `annotation-target`, for example
+  `/Users/me/Zotero/storage/N7SMB24A/Attention.pdf`. The reader asks once,
+  copies the file into `Annotator sources` and reads the copy; Zotero's file
+  is never changed.
+- **Highlights made in Zotero's own reader** are kept in Zotero's database,
+  not in the PDF, so the file in `storage` does not carry them. Zotero can
+  export a copy that does (**File → Export PDF…**). Put that copy in your
+  vault and run **Take in the annotations this PDF already holds**.
+- **The other way**, **Export PDF with annotations** writes a copy with your
+  highlights as standard PDF annotations, which is the kind Zotero's reader
+  shows for a PDF that has them.
+- **Details.** **Add the PDF's details to the note** reads what the PDF
+  records about itself. Nothing is read from Zotero's database.
+
+The first point was tried on macOS with a folder laid out like Zotero's. The
+exchange of highlights rests on both programs following the PDF standard and
+has not been tried with Zotero itself.
+
 ## Reading progress
 
 With **Keep reading progress in the note** on (settings; off by default),

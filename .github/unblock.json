@@ -1286,11 +1286,11 @@
     {
       "id": "zotero-guide",
       "title": "A short guide for Zotero users",
-      "status": "todo",
+      "status": "done",
       "parent": "community",
       "dependsOn": ["community-review"],
       "estimate": 1,
-      "notes": "COMMUNITY_REVIEW.md 3.4. Zotero is the alternative named most after PDF++. Documentation only: how to point annotation-target at a PDF in Zotero's storage, what happens to highlights made in Zotero's own reader (kept in its database, not in the PDF), and where metadata comes from. Write it only after checking that a Zotero storage path works as a target on macOS, Windows and Linux."
+      "notes": "COMMUNITY_REVIEW.md 3.4. Zotero is the alternative named most after PDF++. Documentation only: how to point annotation-target at a PDF in Zotero's storage, what happens to highlights made in Zotero's own reader (kept in its database, not in the PDF), and where metadata comes from. Write it only after checking that a Zotero storage path works as a target on macOS, Windows and Linux.\n\nDone 2026-11-13: 2026-11-13: README 'With Zotero'. Zotero's side is taken from its documentation (data folder and storage layout; annotations kept in its database; File → Export PDF… embeds them; its reader shows embedded annotations). Tried: a PDF in a folder laid out like Zotero's storage, outside the vault, on macOS with Obsidian 1.13.7 and 0.3.0: the reader asked, copied it into Annotator sources and opened it. Not tried: a Zotero library itself, a PDF exported from Zotero, Windows and Linux (the path forms are covered by test/local-source.test.mjs). The README says so."
     },
     {
       "id": "core-pdf-annotation",
