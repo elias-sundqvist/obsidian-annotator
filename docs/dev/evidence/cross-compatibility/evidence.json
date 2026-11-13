@@ -1,0 +1,97 @@
+{
+  "testDatesLocal": [
+    "2026-10-30",
+    "2026-10-31"
+  ],
+  "timezone": "Europe/Stockholm",
+  "vault": "obsidian-annotator-native-test",
+  "screenshots": [
+    {
+      "file": "01-page-note-and-tags.png",
+      "version": "0.0.3",
+      "bytes": 561606,
+      "sha256": "bd5b13a29cc1bf5469d42c61f42098f4672e737833190bb17c03acb1c2f26b0d"
+    },
+    {
+      "file": "02-threaded-reply.png",
+      "version": "0.0.3",
+      "bytes": 544776,
+      "sha256": "5d2b3a1662b3e3b54dc6a40fec6d2b0decdb3f749604223432ab6bfc4c92857c"
+    },
+    {
+      "file": "03-imported-annotation-edited.png",
+      "version": "0.0.4",
+      "bytes": 551672,
+      "sha256": "e142e01f9b45cac64bf5c67e5e29070772f4ccce282305e03e03c803cb26a1d3"
+    },
+    {
+      "file": "04-self-import-no-duplicates.png",
+      "version": "0.0.4",
+      "bytes": 551789,
+      "sha256": "643c6a7063999579f9eab8b8ae46c62326d0101591cac5c214424a81096a2757"
+    },
+    {
+      "file": "05-parent-deletion-preserves-reply.png",
+      "version": "0.0.4",
+      "bytes": 559808,
+      "sha256": "e3e49c04a6ad7ef85250877f5ef7aaea763c9e7d38059b52bc46b7e9b43ea834"
+    },
+    {
+      "file": "06-stale-edit-refused.png",
+      "version": "0.0.4",
+      "bytes": 555630,
+      "sha256": "e06adc5f7eae2e0253eecb420801bd92ed85340605b115f196998e3e21c74698"
+    },
+    {
+      "file": "07-legacy-native-edit-cycle.png",
+      "version": "0.0.4",
+      "bytes": 542970,
+      "sha256": "1bfae3d90b20903223bc82556e7d3f58da405783ab2e5f090c3033b3a5a328f8"
+    },
+    {
+      "file": "08-final-live-batch-check.png",
+      "version": "0.0.5",
+      "bytes": 525835,
+      "sha256": "c45380d1d6a0632219fc8169b8d49f00c977911c80b477ea33bf1bd99aebedf2"
+    },
+    {
+      "file": "09-final-persistent-highlight.png",
+      "version": "0.0.5",
+      "bytes": 558371,
+      "sha256": "5ef54ba0d7d9b9f8c98c7cff11ef0d205a25887ee969c0cb879b7f95336c4887"
+    },
+    {
+      "file": "10-final-artifact-check.png",
+      "version": "0.0.5",
+      "bytes": 550444,
+      "sha256": "0a1c1c7b11b3201409785e30ff5c8d1f3fef1378a1146daad2b5dfd1dd6f5268"
+    }
+  ],
+  "finalBatchResults": [
+    {
+      "round": 0,
+      "wholeMarkdownUnchanged": true
+    },
+    {
+      "round": 1,
+      "wholeMarkdownUnchanged": true
+    }
+  ],
+  "fixtureIsSyntheticHypothesisExport": true,
+  "cloudServiceContacted": false,
+  "liveCheckedArtifact": {
+    "version": "0.0.5",
+    "wholeMarkdownUnchangedAfterThirdBatch": true,
+    "wholeMarkdownUnchangedAfterSelfImport": true,
+    "annotations": 2,
+    "highlightRectangles": 3,
+    "iframes": 0,
+    "sha256": "bcbf77ac31eeaf359e1a7539eb576b6db3b65e5c69f773167f54aea2f5c27b06"
+  },
+  "installedArtifact": {
+    "version": "0.0.5",
+    "sha256": "7e84779e6dc7f596bb5b84437437906bea92d5f86a711832eeb4712a251ef288",
+    "liveReloaded": false,
+    "pending": "Mac relocked before final numeric-projection helper refinement could be reloaded."
+  }
+}

@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Annotator: read and annotate in Obsidian, keep it as Markdown</title>
+<meta name="description" content="Annotator is a plugin for Obsidian. Read and annotate PDFs, EPUB books, web pages and videos inside Obsidian, and keep what you mark as Markdown in your vault.">
+<meta name="theme-color" content="#F5F2EA" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#151417" media="(prefers-color-scheme: dark)">
+<link rel="canonical" href="https://annotator.esh.sh/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Annotator">
+<meta property="og:title" content="Annotator for Obsidian">
+<meta property="og:description" content="Read and annotate PDFs, EPUB books, web pages and videos inside Obsidian, and keep what you mark as Markdown in your vault.">
+<meta property="og:url" content="https://annotator.esh.sh/">
+<meta property="og:image" content="https://annotator.esh.sh/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="750">
+<meta property="og:image:alt" content="A PDF open in Obsidian beside its annotation list, with highlights in several colours and notes on them">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28'%3E%3Crect width='28' height='28' rx='7' fill='%231B1A1E'/%3E%3Cpath d='M7 8.5h14M7 19.5h9' stroke='%23F5F2EA' stroke-width='1.8' stroke-linecap='round' opacity='.8'/%3E%3Crect x='6' y='11.4' width='16' height='5.2' rx='1.6' fill='%23E0AC00'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to the content</a>
+
+<header class="top wrap">
+  <a class="brand" href="/" aria-label="Annotator, home">
+    <svg viewBox="0 0 28 28" width="26" height="26" aria-hidden="true"><rect width="28" height="28" rx="7" class="brand__tile"/><path d="M7 8.5h14M7 19.5h9" class="brand__lines"/><rect x="6" y="11.4" width="16" height="5.2" rx="1.6" class="brand__mark"/></svg>
+    <span>Annotator</span>
+  </a>
+  <nav aria-label="Project">
+    <a href="https://github.com/elias-sundqvist/obsidian-annotator/blob/master/README.md">Guide</a>
+    <a href="https://github.com/elias-sundqvist/obsidian-annotator/blob/master/CHANGELOG.md">Changes</a>
+    <a href="https://github.com/elias-sundqvist/obsidian-annotator">GitHub</a>
+  </nav>
+</header>
+
+<main id="main">
+
+<!-- 1. Name, what it is, the main recording -->
+<section class="hero wrap" aria-labelledby="title">
+  <p class="eyebrow">A plugin for Obsidian</p>
+  <h1 id="title">Annotator</h1>
+
+  <div class="annotated">
+    <p class="lede">Read and annotate PDFs, EPUB books, web pages and videos inside Obsidian, and <mark class="ink-yellow">keep what you mark as Markdown</mark> in your vault.</p>
+    <div class="note ink-yellow" role="note" aria-label="A note on this sentence">
+      <p class="note__quote">keep what you mark as Markdown</p>
+      <p class="note__body">Every annotation is a block in an ordinary note, so it links, embeds, searches and syncs like the rest of your notes.</p>
+    </div>
+  </div>
+
+  <p class="actions">
+    <a class="btn btn--primary" href="obsidian://show-plugin?id=obsidian-annotator">Open in Obsidian</a>
+    <a class="btn" href="https://github.com/elias-sundqvist/obsidian-annotator">GitHub repository</a>
+  </p>
+  <figure class="shot shot--hero">
+    <img src="media/annotator.gif" width="1200" height="750" decoding="async" fetchpriority="high"
+         alt="A recording: a PDF open beside its annotation list. A passage is highlighted, a note is written on another in Obsidian’s own editor, and a card in the list takes the page to its highlight.">
+    <figcaption>A PDF beside its annotation list. A passage is highlighted, a note is written on another in Obsidian’s own editor, and a card in the list takes the page to its highlight.</figcaption>
+  </figure>
+</section>
+
+<!-- 3. What you can read and mark -->
+<section class="section wrap" aria-labelledby="read">
+  <header class="section__head">
+    <h2 id="read">What you can read and mark</h2>
+    <p>Select text. A small bar appears with six inks and <strong>Note</strong>. A colour highlights the passage; a note is written in Obsidian’s own editor, so links, tags, lists and formatting work as in any note.</p>
+    <ul class="inks" aria-label="The six inks">
+      <li class="ink-yellow"><i></i>yellow</li>
+      <li class="ink-orange"><i></i>orange</li>
+      <li class="ink-pink"><i></i>pink</li>
+      <li class="ink-purple"><i></i>purple</li>
+      <li class="ink-blue"><i></i>blue</li>
+      <li class="ink-green"><i></i>green</li>
+    </ul>
+    <p class="keys"><kbd>H</kbd> highlights in the last colour used, <kbd>1</kbd>–<kbd>6</kbd> pick a colour, <kbd>A</kbd> opens a note on the passage.</p>
+  </header>
+
+  <article class="spread" aria-labelledby="pdfs">
+    <div class="spread__text">
+      <h3 id="pdfs">PDFs</h3>
+      <p>The reader works on Obsidian’s built-in PDF view. A selection may run over a page break; it is one highlight.</p>
+      <p><strong>Mark an area</strong> keeps a picture of part of a page with a note: a figure, a table, an equation. <strong>Draw on the page</strong> is freehand: underline, circle, point, write in the margin.</p>
+      <p><mark class="ink-orange">Export PDF with annotations</mark> saves a copy that any PDF reader shows with the highlights in their colours and their notes as comments, areas as boxes and drawings as ink.</p>
+      <div class="note ink-orange" role="note" aria-label="A note on exporting">
+        <p class="note__quote">Export PDF with annotations</p>
+        <p class="note__body">The original file is never changed: the copy is the original with the annotations added after it.</p>
+      </div>
+    </div>
+    <div class="spread__media pair">
+      <figure class="shot shot--dark">
+        <img src="media/pdf-dark-area-drawing.jpg" width="1500" height="937" loading="lazy" decoding="async"
+             alt="A PDF page shown dark in Obsidian, with a marked area around a figure, the grips at its corners, and freehand strokes in pink and purple drawn over it. The list beside it shows the area’s picture.">
+        <figcaption>A dark page with a marked area, its grips, and a drawing.</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="media/exported-pdf.jpg" width="850" height="1100" loading="lazy" decoding="async"
+             alt="The same page in another PDF reader: the area is a purple box, the drawing is ink, and a sentence further down is highlighted in pink.">
+        <figcaption>The exported PDF opened in another PDF reader.</figcaption>
+      </figure>
+    </div>
+  </article>
+
+  <article class="spread" aria-labelledby="books">
+    <div class="spread__text">
+      <h3 id="books">Books</h3>
+      <p>EPUB books have a reader of their own, in the Scroll or the Pages layout. <strong>Contents</strong> lists the book’s own table of contents, with where you are and how many annotations each chapter holds. <strong>Find</strong> looks through the whole book and lists every match under its chapter.</p>
+      <p>A picture in the book can be kept with a note. <mark class="ink-pink">Reading controls</mark> change how the page looks.</p>
+      <div class="note ink-pink" role="note" aria-label="A note on the reading controls">
+        <p class="note__quote">Reading controls</p>
+        <p class="note__body">Page colour, text size, layout, typeface, line spacing, column width and justification. Fixed-layout books keep the publisher’s pages as they are.</p>
+      </div>
+    </div>
+    <div class="spread__media">
+      <figure class="shot">
+        <img src="media/book.gif" width="1200" height="750" loading="lazy" decoding="async"
+             alt="A recording: a book in the Pages layout. A page is turned, a sentence is highlighted, and the text is made larger from the reading controls.">
+        <figcaption>A book in the Pages layout: a page is turned, a sentence is highlighted, and the text is made larger from the reading controls.</figcaption>
+      </figure>
+    </div>
+  </article>
+
+  <article class="spread" aria-labelledby="web">
+    <div class="spread__text">
+      <h3 id="web">Web pages</h3>
+      <p>A web page is <mark class="ink-purple">annotated where it lives</mark>: the real page, in Obsidian’s own Web viewer (a core plugin; desktop). A highlight is painted in the page’s own text and found again by its words when the page has changed around it. Every picture on the page can be kept with a note.</p>
+      <div class="note ink-purple" role="note" aria-label="A note on live pages">
+        <p class="note__quote">annotated where it lives</p>
+        <p class="note__body">Nothing a page says is treated as an instruction. What is saved is shown in Obsidian’s own window first, and saving takes your click there. Your notes are never sent to the page.</p>
+      </div>
+      <p>Where there is no Web viewer (phones and tablets) or no network, a reading copy stands in: the page’s text as a note you can read and annotate anywhere.</p>
+      <p class="try"><a href="/demo/lighthouse-lens/">Try it on a sample article</a>. In Obsidian, run <strong>Open website in core Web viewer</strong> and give it this address: <code>https://annotator.esh.sh/demo/lighthouse-lens/</code></p>
+    </div>
+    <div class="spread__media">
+      <figure class="shot">
+        <img src="media/web-picture.gif?v=2" width="1200" height="750" loading="lazy" decoding="async"
+             alt="A recording: a web page in the Web viewer. The picture button makes its pictures offer themselves, one is clicked and kept, a note is written for it, and its card appears in the list with the picture.">
+        <figcaption>A web page in the Web viewer: its pictures offer themselves, one is kept, a note is written for it, and its card appears in the list with the picture.</figcaption>
+      </figure>
+    </div>
+  </article>
+
+  <article class="spread" aria-labelledby="video">
+    <div class="spread__text">
+      <h3 id="video">Video and audio</h3>
+      <p>A YouTube link, or a video or audio file in your vault, opens as a player with <mark class="ink-blue">timed notes</mark>. The timeline under the player has a marker for every note.</p>
+      <div class="note ink-blue" role="note" aria-label="A note on timed notes">
+        <p class="note__quote">timed notes</p>
+        <p class="note__body"><strong>Note at 0:12</strong> (or <kbd>N</kbd>) writes a note at the current moment. The video waits while you write.</p>
+      </div>
+      <p>A <strong>frame note</strong> freezes the frame; you keep all of it or drag over a part. Captions can be loaded or imported (VTT or SRT), and words in the transcript are highlighted or quoted in a note. An audio file gets a slim player and everything else the same.</p>
+    </div>
+    <div class="spread__media">
+      <figure class="shot shot--dark">
+        <img src="media/video-note.jpg" width="1500" height="937" loading="lazy" decoding="async"
+             alt="A video in Obsidian with a new note being written in a card under the player, and the transcript controls below it.">
+        <figcaption>A video with a new note being written under the player.</figcaption>
+      </figure>
+    </div>
+  </article>
+</section>
+
+<!-- 4. Your notes stay yours -->
+<section class="section wrap" aria-labelledby="notes">
+  <div class="spread spread--top">
+    <div class="spread__text">
+      <h2 id="notes">Your notes stay yours</h2>
+      <p>Each source has one annotation note: a Markdown note with an <code>annotation-target</code> property that names the source. The note is yours to move, rename and edit. Nothing is stored anywhere else.</p>
+      <p>Annotations are blocks in that note, so they link, embed, search and sync like any note.</p>
+      <p>Notes made by Annotator 0.2 keep working: they are read and written in <mark class="ink-green">the same format as before</mark>.</p>
+      <div class="note ink-green" role="note" aria-label="A note on coming from 0.2">
+        <p class="note__quote">the same format as before</p>
+        <p class="note__body">Your notes are not converted. Updating is all there is to do.</p>
+      </div>
+    </div>
+    <div class="spread__media">
+      <figure class="sheet">
+        <div class="sheet__name" aria-hidden="true">Attention Is All You Need.pdf.annotations.md</div>
+<pre class="sheet__body" aria-label="The Markdown of an annotation note"><code><span class="m">---</span>
+annotation-target: "Showcase/Attention Is All You Need.pdf"
+<span class="m">---</span>
+
+# Annotations
+
+<span class="m">&gt;%%</span>
+<span class="m">&gt;```annotation-json</span>
+<span class="m">&gt;{"text":"The thesis in one sentence. …","target":[…],"created":"2026-11-13T14:29:27.368Z",…}</span>
+<span class="m">&gt;```</span>
+<span class="m">&gt;%%</span>
+<span class="m">&gt;*%%PREFIX%%…%%HIGHLIGHT%%</span> <mark class="ink-yellow">==We propose a new simple network architecture, the Transformer,…==</mark> <span class="m">%%POSTFIX%%…*</span>
+<span class="m">&gt;%%LINK%%[[#^a0deb286…|show annotation]]</span>
+<span class="m">&gt;%%COMMENT%%</span>
+<span class="m">&gt;</span>The thesis in one sentence. Everything after this is evidence that attention alone is enough.
+<span class="m">&gt;%%TAGS%%</span>
+<span class="m">&gt;</span>#thesis
+<span class="m">^a0deb286…</span></code></pre>
+        <figcaption>The first card in the recording at the top of this page, as it is written in its note. Shortened where marked “…”.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- 5. On phones and tablets -->
+<section class="section wrap" aria-labelledby="phones">
+  <header class="section__head">
+    <h2 id="phones">On phones and tablets</h2>
+    <p>Long-press to select; the bar with the inks and Note sits above the navigation. A note is written in a sheet above the keyboard. Marking an area and drawing work by touch.</p>
+  </header>
+
+  <div class="phones" role="group" aria-label="Obsidian for Android on a phone, five screenshots" tabindex="0">
+    <figure class="shot shot--phone">
+      <img src="media/phone-pdf.jpg" width="720" height="1600" loading="lazy" decoding="async" alt="A PDF on a phone, with highlights in four colours.">
+      <figcaption>A PDF with its highlights</figcaption>
+    </figure>
+    <figure class="shot shot--phone">
+      <img src="media/phone-select.jpg" width="720" height="1600" loading="lazy" decoding="async" alt="Words selected by touch on a phone; the bar with the six inks and Note sits above the navigation.">
+      <figcaption>A selection with the bar</figcaption>
+    </figure>
+    <figure class="shot shot--phone">
+      <img src="media/phone-note.jpg" width="720" height="1600" loading="lazy" decoding="async" alt="A note being written on a phone, in a sheet at the bottom with the passage quoted on top.">
+      <figcaption>A note being written</figcaption>
+    </figure>
+    <figure class="shot shot--phone">
+      <img src="media/phone-list.jpg" width="720" height="1600" loading="lazy" decoding="async" alt="The annotation list in the right drawer of a phone, each card with its passage and note.">
+      <figcaption>The annotations in the right drawer</figcaption>
+    </figure>
+    <figure class="shot shot--phone">
+      <img src="media/phone-book.jpg" width="720" height="1600" loading="lazy" decoding="async" alt="A page of a book on a phone, with a highlighted sentence.">
+      <figcaption>A book</figcaption>
+    </figure>
+  </div>
+
+  <div class="spread spread--tablet">
+    <div class="spread__text">
+      <p>On a tablet there is room for both. The first time a source is opened with the tablet held wide, the right drawer is docked beside the page with the annotations in it. A note is written beside its passage, and two sources can be open side by side, each with its own annotations.</p>
+      <p class="aside">The screenshots are from Obsidian for Android. On iOS and iPadOS the reader has been tested in the iOS Simulator; a check on a real iPhone or iPad is still to come.</p>
+    </div>
+    <div class="spread__media">
+      <figure class="shot">
+        <img src="media/tablet.jpg" width="1280" height="800" loading="lazy" decoding="async"
+             alt="A PDF on a tablet held wide, with the annotation list docked beside the page.">
+        <figcaption>A PDF on a tablet held wide, with the annotation list docked beside the page.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- 6. Built carefully -->
+<section class="section wrap" aria-labelledby="built">
+  <header class="section__head">
+    <h2 id="built">Built carefully</h2>
+  </header>
+  <div class="facts">
+    <div class="fact">
+      <h3>Proved</h3>
+      <p>The rules that decide what is written into your notes are written in Bend and proved for every input: 182 laws, checked on every build, and a second time by Bend’s small kernel, which has its own proof in Lean. The rest is tested.</p>
+      <p><a href="https://github.com/elias-sundqvist/obsidian-annotator/blob/master/proofs/README.md">The proofs</a></p>
+    </div>
+    <div class="fact">
+      <h3>Kept to itself</h3>
+      <p>Annotations are in your notes and nowhere else. Nothing is loaded from the Hypothesis client any more, a PDF’s details are read from the file with nothing looked up online, and your notes are never sent to a web page.</p>
+      <p><a href="https://github.com/elias-sundqvist/obsidian-annotator/blob/master/docs/SECURITY.md">Security notes</a></p>
+    </div>
+    <div class="fact">
+      <h3>Small</h3>
+      <p>The plugin is three files, about 1.5 MB on disk; version 0.2 was 26.3 MB. Enabling it at each start takes 0.014 s on a desktop, where 0.2 took 1.1 s.</p>
+      <p><a href="https://github.com/elias-sundqvist/obsidian-annotator/blob/master/docs/MEASUREMENTS.md">How it was measured</a></p>
+    </div>
+  </div>
+</section>
+
+<!-- 7. Getting it -->
+<section class="section wrap" aria-labelledby="get">
+  <div class="get">
+    <div class="get__main">
+      <h2 id="get">Getting it</h2>
+      <p>In Obsidian: <strong>Settings → Community plugins → Browse</strong>, search for “Annotator”, install and enable it.</p>
+      <p>Version 0.3 needs Obsidian 1.11.4 or later and works on desktop (macOS, Windows, Linux) and Android. On iOS and iPadOS it has been tested in the iOS Simulator; a check inside Obsidian on an iPhone or iPad is still to come.</p>
+      <p class="actions">
+        <a class="btn btn--primary" href="obsidian://show-plugin?id=obsidian-annotator">Open in Obsidian</a>
+      </p>
+    </div>
+    <ul class="get__links">
+      <li><a href="https://github.com/elias-sundqvist/obsidian-annotator/blob/master/README.md">The guide</a><span>What you can do and how, in the README.</span></li>
+      <li><a href="https://github.com/elias-sundqvist/obsidian-annotator/blob/master/CHANGELOG.md">The changelog</a><span>What changed in each version.</span></li>
+      <li><a href="https://github.com/elias-sundqvist/obsidian-annotator/issues">The issue tracker</a><span>Bugs, questions and suggestions are welcome.</span></li>
+      <li><a href="https://github.com/elias-sundqvist/obsidian-annotator/blob/master/LICENSE.TXT">The licence</a><span>AGPL-3.0.</span></li>
+    </ul>
+  </div>
+</section>
+
+</main>
+
+<!-- 8. Footer -->
+<footer class="foot wrap">
+  <p class="foot__also"><span class="eyebrow">Also by the same author</span>
+    <a href="https://unblock.esh.sh/">Unblock</a>: a live map of your project, kept by your agents.</p>
+  <p class="foot__by">Annotator is made by <a href="https://github.com/elias-sundqvist">Elias Sundqvist</a>.</p>
+</footer>
+</body>
+</html>

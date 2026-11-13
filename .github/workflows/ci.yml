@@ -1,26 +1,89 @@
 name: CI
-on: push
-jobs:
-  linter:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout repository and submodules
-      uses: actions/checkout@v2
-      with:
-        submodules: recursive
-    - name: Lint
-      run: |
-        npm i
-        npm run lint -- --max-warnings 0
 
-  betterer:
+# Code style, the proofs (Bend) and the reader's test suite.
+# Nothing here is uploaded or released; it only says whether the branch is sound.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  proofs-and-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      # The checker never phones home from CI.
+      BEND_NO_TELEMETRY: '1'
+      # The toolchain changed under us once. The proofs are checked with this
+      # version and no other: a different one fails the job instead of quietly
+      # checking something else.
+      BEND_VERSION: '2.0.40'
+      BEND_SHA256_LINUX_X64: 'c9ff8d67bd903fb6ad9a26b43d8a62c01021de82a44d55ce4a3dcd4732113d6b'
+      # The proofs are checked a second time by Bend's kernel, which is built with this Lean.
+      # Here a missing Lean is a failure, not a skipped step.
+      LEAN_TOOLCHAIN: 'leanprover/lean4:v4.34.0'
+      BEND_VERDICT: '1'
     steps:
-    - name: Checkout repository and submodules
-      uses: actions/checkout@v2
-      with:
-        submodules: recursive
-    - name: Check if code became worse
-      run: |
-        npm i
-        npm run betterer ci
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 26
+
+      # The pinned release itself, not whatever the installer offers that day, and checked against its sha256:
+      # a new Bend must not break this job, or change what the proofs are checked with, by being published.
+      - name: Install Bend
+        run: |
+          name="bend-$BEND_VERSION-linux-x64.tar.gz"
+          curl --proto '=https' --tlsv1.2 -fsSL -o "$RUNNER_TEMP/$name" "https://github.com/bendlang/bend/releases/download/v$BEND_VERSION/$name"
+          echo "$BEND_SHA256_LINUX_X64  $RUNNER_TEMP/$name" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$name" -C "$RUNNER_TEMP"
+          mkdir -p "$HOME/.bend/bin"
+          mv "$RUNNER_TEMP/bend/bend2" "$RUNNER_TEMP/bend/guide" "$HOME/.bend/"
+          mv -f "$RUNNER_TEMP/bend/bin/bend" "$HOME/.bend/bin/bend"
+          echo "$HOME/.bend/bin" >> "$GITHUB_PATH"
+
+      - name: The Bend version is the pinned one
+        run: |
+          found="$(bend version)"
+          echo "$found"
+          test "$found" = "bend $BEND_VERSION" || { echo "::error::Expected bend $BEND_VERSION, found '$found'. Check the proofs with the new version locally, then update BEND_VERSION."; exit 1; }
+
+      - name: Keep Lean and the built kernel between runs
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.elan
+            ~/.bend/bendtt
+          key: lean-${{ runner.os }}-${{ env.LEAN_TOOLCHAIN }}-bend-${{ env.BEND_VERSION }}
+
+      - name: Install Lean (for the kernel check)
+        run: |
+          if [ ! -x "$HOME/.elan/bin/lean" ]; then
+            curl -fsSL https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --no-modify-path --default-toolchain "$LEAN_TOOLCHAIN"
+          fi
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/lean" --version
+
+      - name: Install packages
+        run: npm ci --no-audit --no-fund
+
+      - name: Code style (ESLint, with the browser-compatibility rules)
+        run: npm run lint
+
+      - name: Formatting (Prettier)
+        run: npm run format:check
+
+      - name: Proofs, negative controls and bridge tests
+        run: npm run proofs
+
+      - name: Build the plugin and run its tests
+        run: npm run test:reader

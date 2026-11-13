@@ -1,0 +1,11 @@
+{
+  "release": "0.2.11",
+  "releaseUrl": "https://github.com/elias-sundqvist/obsidian-annotator/releases/tag/0.2.11",
+  "pluginCommit": "3647dd92d0d803bae9a3f34a1aac19eacb2fd52d",
+  "clientCommit": "6e9f06ad6bd8b096a79614b16b0733e0491a2d30",
+  "bundleUrl": "https://github.com/elias-sundqvist/obsidian-annotator/releases/download/0.2.11/main.js",
+  "bundleSha256": "aa08182b6fac314af098ef692702987ff11a02c490a140009d67fa86c815a938",
+  "parserSha256": "8c3056afc5d15b1064dee169704f55f2807c85cdd5fe3c6dcbfedcefd18bee38",
+  "videoParserSha256": "107c431a3759e468d918d9255613b976d1f43a0d4365e1067e919672a04ce12a",
+  "epubHooksSha256": "355158611ad0703cf1bd134d74631ef874515c711eb3f8f030dcc6fada786561"
+}

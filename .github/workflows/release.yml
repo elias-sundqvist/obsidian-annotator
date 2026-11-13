@@ -1,75 +1,78 @@
-name: Build Obsidian Plugin
+name: Release
 
+# A pushed tag builds the plugin and publishes a release with the three files
+# Obsidian installs (main.js, manifest.json, styles.css), the licences of what
+# is bundled, and a zip of them all. The tag must be the manifest's version.
 on:
   push:
-    # Sequence of patterns matched against refs/tags
     tags:
-      - "*" # Push events to matching any tag format, i.e. 1.0, 20.15.10
+      - '*'
+
+permissions:
+  contents: write
 
 env:
-  PLUGIN_NAME: obsidian-annotator
+  PLUGIN_ID: obsidian-annotator
+  BEND_NO_TELEMETRY: '1'
+  # The same pinned version CI checks the proofs with.
+  BEND_VERSION: '2.0.40'
+  BEND_SHA256_LINUX_X64: 'c9ff8d67bd903fb6ad9a26b43d8a62c01021de82a44d55ce4a3dcd4732113d6b'
 
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 40
     steps:
-      - name: Checkout repository and submodules
-        uses: actions/checkout@v2
-        with:
-          submodules: recursive
-      - name: Use Node.js
-        uses: actions/setup-node@v1
-        with:
-          node-version: "16.x" # You might need to adjust this value to your own version
-      - name: Build
-        id: build
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: The tag is the manifest's version
         run: |
-          npm install
-          npm run build --if-present
-          mkdir ${{ env.PLUGIN_NAME }}
-          cp main.js manifest.json ${{ env.PLUGIN_NAME }}
-          zip -r ${{ env.PLUGIN_NAME }}.zip ${{ env.PLUGIN_NAME }}
-          ls
-          echo "::set-output name=tag_name::$(git tag --sort version:refname | tail -n 1)"
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ github.ref }}
+          version="$(node -p "require('./manifest.json').version")"
+          test "$GITHUB_REF_NAME" = "$version" || { echo "::error::Tag '$GITHUB_REF_NAME' is not the manifest's version '$version'."; exit 1; }
+          test "$(node -p "require('./manifest.json').id")" = "$PLUGIN_ID" || { echo "::error::The manifest's id is not $PLUGIN_ID."; exit 1; }
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
         with:
-          tag_name: ${{ github.ref }}
-          release_name: ${{ github.ref }}
-          draft: false
-          prerelease: false
-      - name: Upload zip file
-        id: upload-zip
-        uses: actions/upload-release-asset@v1
+          node-version: 26
+
+      # The pinned release itself, checked against its sha256 (as in ci.yml).
+      - name: Install Bend
+        run: |
+          name="bend-$BEND_VERSION-linux-x64.tar.gz"
+          curl --proto '=https' --tlsv1.2 -fsSL -o "$RUNNER_TEMP/$name" "https://github.com/bendlang/bend/releases/download/v$BEND_VERSION/$name"
+          echo "$BEND_SHA256_LINUX_X64  $RUNNER_TEMP/$name" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$name" -C "$RUNNER_TEMP"
+          mkdir -p "$HOME/.bend/bin"
+          mv "$RUNNER_TEMP/bend/bend2" "$RUNNER_TEMP/bend/guide" "$HOME/.bend/"
+          mv -f "$RUNNER_TEMP/bend/bin/bend" "$HOME/.bend/bin/bend"
+          echo "$HOME/.bend/bin" >> "$GITHUB_PATH"
+
+      - name: The Bend version is the pinned one
+        run: |
+          found="$(bend version)"
+          echo "$found"
+          test "$found" = "bend $BEND_VERSION" || { echo "::error::Expected bend $BEND_VERSION, found '$found'."; exit 1; }
+
+      - name: Install packages
+        run: npm ci --no-audit --no-fund
+
+      - name: Proofs and tests pass before anything is published
+        run: npm test
+
+      - name: Build the release
+        run: |
+          npm run build:release
+          mkdir "$PLUGIN_ID"
+          cp dist/* "$PLUGIN_ID"/
+          zip -r "$PLUGIN_ID-$GITHUB_REF_NAME.zip" "$PLUGIN_ID"
+
+      - name: Publish the release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./${{ env.PLUGIN_NAME }}.zip
-          asset_name: ${{ env.PLUGIN_NAME }}-${{ steps.build.outputs.tag_name }}.zip
-          asset_content_type: application/zip
-      - name: Upload main.js
-        id: upload-main
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./main.js
-          asset_name: main.js
-          asset_content_type: text/javascript
-      - name: Upload manifest.json
-        id: upload-manifest
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./manifest.json
-          asset_name: manifest.json
-          asset_content_type: application/json
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --verify-tag \
+            --notes "What changed is in CHANGELOG.md." \
+            dist/main.js dist/manifest.json dist/styles.css dist/*_LICENSE.txt \
+            "$PLUGIN_ID-$GITHUB_REF_NAME.zip"

@@ -1,0 +1,3 @@
+# Preserve the captured document's real boundary-completion whitespace.
+test/fixtures/persistent-highlights.md whitespace=-blank-at-eof
+test/fixtures/cross-compatibility-live.md whitespace=-blank-at-eof

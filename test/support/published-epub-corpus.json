@@ -1,0 +1,37 @@
+{
+  "verticalWriting": {
+    "title": "ガリ版の話",
+    "creator": "津野海太郎",
+    "publisher": "株式会社ボイジャー",
+    "catalog": "https://idpf.github.io/epub3-samples/30/samples.html",
+    "url": "https://github.com/IDPF/epub3-samples/releases/download/20230704/mymedia_lite.epub",
+    "bytes": 267252,
+    "sha256": "6623732b1aa7cefed26e2db95f7ac14c80360b99d328ed927b93548a96990c62",
+    "license": "CC-BY-SA-3.0",
+    "licenseBasis": "The IDPF sample catalog's default license; no different license is listed for Vertical Writing.",
+    "distribution": "Downloaded separately for QA. EPUB content and screenshots are not bundled in this repository.",
+    "styleSets": [
+      "縦組",
+      "横組"
+    ]
+  },
+  "kusamakura": {
+    "title": "草枕",
+    "creator": "夏目 漱石",
+    "catalog": "https://idpf.github.io/epub3-samples/30/samples.html",
+    "url": "https://github.com/IDPF/epub3-samples/releases/download/20230704/kusamakura-japanese-vertical-writing.epub",
+    "bytes": 17940673,
+    "sha256": "6d4d4ed5eda3f612e3263c54fa0f74ccfa87260f43e81bb58ea658636e52eeb7",
+    "styleSets": [
+      "横組",
+      "縦組"
+    ],
+    "license": "CC-BY-SA-3.0",
+    "licenseBasis": "The IDPF sample catalog default license; no different sample license is listed for Kusamakura.",
+    "distribution": "Downloaded separately for QA; no book content or audio bundled in the repository.",
+    "emphasisSelector": "strong.sesame_dot",
+    "emphasisStyle": "sesame",
+    "emphasisColor": "rgb(255, 0, 0)",
+    "emphasisTextColor": "rgb(0, 0, 255)"
+  }
+}

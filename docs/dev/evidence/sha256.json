@@ -1,0 +1,12 @@
+{
+  "01-native-viewer-open.png": "0b8cc9d756ce74dbb9211aff1958d254be3b9815d2cd3bb5d678faf1c31df079",
+  "02-native-selection-captured.png": "ed48509b0e84a8e0087f1efdbbb5cfdeeeedce309b42271f3b91699790e0f81f",
+  "03-markdown-preview.png": "371735ad26de4f449797bac946b9e1706e80cdca306d9e2488cf9b01ae9f2058",
+  "04-native-zoom-and-preview.png": "250fe73f3da2aa3e178d0d4d3abdfd57f1818f991bf803f13772bc563cb4f4b1",
+  "05-second-pdf-selection.png": "b570ca5b93ad6c9be2869b1cbf48db8103373ab5fbda56aaa453b892ac45d25a",
+  "06-page-two-selection.png": "8be5bd665356ae8ac0cae8a972a8f4ee95ff1d1f6d1e70ffbf7ed016d287fbce",
+  "07-non-pdf-selection-refused.png": "1841360832f366e2e262546e278e4151d2ae431e9bfff17a24f39cf14519fc4f",
+  "08-reloaded-draft-cleared.png": "86f57c6e876eef88c5f94580622c4c93bf30df90f25f2ddc201da2eecafba3d9",
+  "09-runtime-dom-check.png": "4f2248261eaf5603e98cab02fe72db39048368499cebc193c055b55269ce27a3",
+  "10-capture-after-reload.png": "bd0b33e1d41589af8b309fb5a260b0200026f33c471ff58de484304876c941f9"
+}

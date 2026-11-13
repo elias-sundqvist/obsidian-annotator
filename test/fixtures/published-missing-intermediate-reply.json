@@ -1,0 +1,30 @@
+{
+  "provenance": "Synthetic native-written EPUB thread, nested comment edited and intermediate reply deleted through unchanged published Annotator 0.2.11 UI on Android Obsidian 1.14.4.",
+  "publishedBundleSha256": "aa08182b6fac314af098ef692702987ff11a02c490a140009d67fa86c815a938",
+  "expectedAnnotationThreadRoots": [
+    "nativeparentqa"
+  ],
+  "expectedPageNoteRoots": [
+    "unrelatedqa"
+  ],
+  "expectedThreadPath": [
+    {
+      "id": "nativeparentqa",
+      "available": true
+    },
+    {
+      "id": "nativechildqa",
+      "available": false
+    },
+    {
+      "id": "nativenestedqa",
+      "available": true
+    }
+  ],
+  "survivingReferences": [
+    "nativeparentqa",
+    "nativechildqa"
+  ],
+  "expectedNestedText": "Published nested edit QA.",
+  "native0119KnownGap": "Two independent annotation roots, no missing-intermediate placeholder."
+}

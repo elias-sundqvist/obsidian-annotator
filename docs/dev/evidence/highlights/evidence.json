@@ -1,0 +1,36 @@
+{
+  "tested_on": "2026-10-30",
+  "app_version": "1.13.7",
+  "macos_version": "26.6.2",
+  "prototype_version": "0.0.2",
+  "screenshots": {
+    "01-saved-native-highlight.png": "afc07d646784e241108ad59c260d9830e8aba9a2ce86de1b1d83a284823a0a41",
+    "02-highlight-after-native-zoom.png": "c1ccebd5d48bbf5cfb43987de64736d7812eef94935e0e556e60ce3eccf45574",
+    "03-multiline-highlight.png": "eed9a5a3b1df9b83aa9f129d69c2511337ca70d1949a3082db71174e56577673",
+    "04-highlights-restored-after-reload.png": "319775df43a06b2123b53debc9930ae1afeaadc9d6087bf1959dddabadcebee7",
+    "05-click-and-edit-highlight.png": "70a8ca23755c85b3d60ec2dacb4c2183a5d182fac588bd247940378c677564e0",
+    "06-delete-highlight.png": "e36aa4cf15944980ae42eac5d0c88c22305716a7de4e97326c74fadd4981d640",
+    "07-second-pdf-isolation.png": "94131211be1be1eba5e5506fa7b48a18327632d8d5827f0522bee18c5988b2d5",
+    "08-highlights-after-page-jump.png": "a028412583c4e0dbbba0a47dc94f0fe75c9c44114a33b951a218b82a34525cf9",
+    "09-unresolved-annotation-visible.png": "6b01f77e74955900e5a1cba20e7386565be2434bab045aceeebbc33ee23e6a49"
+  },
+  "final_build": {
+    "main.js": "83149f3f79e0749976c17477b58315adb365468fe54e5862c467b7b52d1a4525",
+    "manifest.json": "fa30674f99bf68f190f8dee87770eee9162b896593c27bb286cf0b4d28892263",
+    "styles.css": "76b494eb52bf9f801bad33cd1f837eb119c1fd7e2f9cfb60439016a272652358"
+  },
+  "note_fixture_sha256": "496656af9814d466bfadf1b1383aad35270f6b13ae6e883afbe1a44f302c94ee",
+  "last_optional_check": "Not completed: Mac locked during optional live DOM/pixel alignment measurement; automatic unlock failed.",
+  "final_automated_tests": 11,
+  "interactively_tested_plugin": {
+    "main.js": "0cc1a87dbc46499c838843c6de022dc55521cd56fdffea18773420863794dd5d",
+    "manifest.json": "fa30674f99bf68f190f8dee87770eee9162b896593c27bb286cf0b4d28892263",
+    "styles.css": "76b494eb52bf9f801bad33cd1f837eb119c1fd7e2f9cfb60439016a272652358"
+  },
+  "after_lock_change": "Comment-only updates retain original embedded JSON bytes; tested automatically, not reloaded interactively.",
+  "installed_for_next_reload": {
+    "main.js": "83149f3f79e0749976c17477b58315adb365468fe54e5862c467b7b52d1a4525",
+    "manifest.json": "fa30674f99bf68f190f8dee87770eee9162b896593c27bb286cf0b4d28892263",
+    "styles.css": "76b494eb52bf9f801bad33cd1f837eb119c1fd7e2f9cfb60439016a272652358"
+  }
+}

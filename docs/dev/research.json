@@ -1,0 +1,106 @@
+{
+  "investigated_on": "2026-10-30",
+  "base_commit": "9b8fe21",
+  "fork_endpoint": "https://api.github.com/repos/elias-sundqvist/obsidian-annotator/forks?per_page=100&sort=newest",
+  "direct_fork_count_returned": 85,
+  "screen_cutoff": "2024-01-08T11:21:17Z",
+  "screen_scope": "Default-branch README.md, src/main.tsx, src/definePdfAnnotation.tsx, src/defineGenericAnnotation.tsx; not all branches or indirect forks. Raw branch files are a dated observation, not immutable snapshots.",
+  "screened_forks": [
+    {
+      "repo": "0shombh-d3v/annotator-plus",
+      "iframe_source": true,
+      "native_pdf_mentions": [],
+      "missing": []
+    },
+    {
+      "repo": "sparthaje/obsidian-references",
+      "iframe_source": true,
+      "native_pdf_mentions": [],
+      "missing": []
+    },
+    {
+      "repo": "hughengwu/obsidian-annotator",
+      "iframe_source": true,
+      "native_pdf_mentions": [],
+      "missing": []
+    },
+    {
+      "repo": "CampbellReid/obsidian-annotator",
+      "iframe_source": true,
+      "native_pdf_mentions": [],
+      "missing": []
+    },
+    {
+      "repo": "stefandanzl/obsidian-annotator",
+      "iframe_source": true,
+      "native_pdf_mentions": [],
+      "missing": []
+    },
+    {
+      "repo": "sm0ro/obsidian-annotator-extension",
+      "iframe_source": true,
+      "native_pdf_mentions": [],
+      "missing": []
+    },
+    {
+      "repo": "Chiara06830/obsidian-annotator",
+      "iframe_source": true,
+      "native_pdf_mentions": [],
+      "missing": []
+    },
+    {
+      "repo": "this-scott/obsidian-annotator",
+      "iframe_source": true,
+      "native_pdf_mentions": [],
+      "missing": []
+    },
+    {
+      "repo": "HeCG95/obsidian-annotator-plus",
+      "iframe_source": true,
+      "native_pdf_mentions": [],
+      "missing": []
+    },
+    {
+      "repo": "0xMax42/obsidian-annotator",
+      "iframe_source": true,
+      "native_pdf_mentions": [],
+      "missing": []
+    },
+    {
+      "repo": "AdiNar/obsidian-annotator",
+      "iframe_source": true,
+      "native_pdf_mentions": [],
+      "missing": []
+    },
+    {
+      "repo": "blue-cosmos/obsidian-annotator",
+      "iframe_source": true,
+      "native_pdf_mentions": [],
+      "missing": []
+    },
+    {
+      "repo": "pcedison/obsidian-annotator",
+      "iframe_source": true,
+      "native_pdf_mentions": [],
+      "missing": []
+    }
+  ],
+  "deeper_inspections": [
+    {
+      "repository": "0shombh-d3v/annotator-plus",
+      "commit": "68f1be5793b9d5539f776882c589be9ee2ee712b"
+    },
+    {
+      "repository": "sparthaje/obsidian-references",
+      "commit": "119651f4ccda516611bca7177a877ffd19f7f170"
+    },
+    {
+      "repository": "RyotaUshio/obsidian-pdf-plus",
+      "commit": "6a3218b9c506076b405438489e614bc9e22b833b"
+    },
+    {
+      "repository": "predator2k/obs-pdf-annotator",
+      "commit": "9ad1c72ceb99129c33a4551f1e93028e34876691"
+    }
+  ]
+}

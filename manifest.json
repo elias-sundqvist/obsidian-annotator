@@ -1,10 +1,14 @@
 {
-	"id": "obsidian-annotator",
-	"name": "Annotator",
-	"version": "0.2.11",
-	"minAppVersion": "1.0.3",
-	"description": "This is a sample plugin for Obsidian. It allows you to open and annotate PDF and EPUB files.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md/about",
-	"isDesktopOnly": false
+  "id": "obsidian-annotator",
+  "name": "Annotator",
+  "version": "0.3.0",
+  "minAppVersion": "1.11.4",
+  "description": "Read and annotate PDFs, EPUB books, web pages and videos in Obsidian. Highlights, notes, areas and drawings are kept as Markdown in your vault.",
+  "author": "Elias Sundqvist",
+  "isDesktopOnly": false,
+  "authorUrl": "https://github.com/elias-sundqvist",
+  "fundingUrl": {
+    "GitHub Sponsors": "https://github.com/sponsors/elias-sundqvist",
+    "PayPal": "https://www.paypal.com/donate/?hosted_button_id=C5MBC9YBWTYEC"
+  }
 }

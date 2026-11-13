@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" width="640" height="360" font-family="Helvetica, Arial, sans-serif">
+  <rect width="640" height="360" rx="10" fill="#f3f6fa"/>
+  <g transform="translate(-55,-19) scale(1.12)">
+  <!-- ordinary lens -->
+  <g transform="translate(40,60)">
+    <text x="120" y="232" text-anchor="middle" font-size="15" fill="#33415c">Ordinary lens</text>
+    <path d="M150 20 Q215 100 150 180 L150 20 Z" fill="#9ecbf0" stroke="#3b6ea5" stroke-width="2"/>
+    <circle cx="30" cy="100" r="9" fill="#f6b23c" stroke="#b97a10" stroke-width="2"/>
+    <g stroke="#e0932b" stroke-width="2" fill="none">
+      <path d="M38 96 L150 40 L250 40"/><path d="M39 99 L150 70 L250 70"/><path d="M39 100 L250 100"/>
+      <path d="M39 101 L150 130 L250 130"/><path d="M38 104 L150 160 L250 160"/>
+    </g>
+  </g>
+  <!-- Fresnel lens -->
+  <g transform="translate(350,60)">
+    <text x="130" y="232" text-anchor="middle" font-size="15" fill="#33415c">Fresnel lens</text>
+    <g fill="#9ecbf0" stroke="#3b6ea5" stroke-width="2" stroke-linejoin="round">
+      <path d="M150 80 Q172 100 150 120 Z"/>
+      <path d="M150 52 L168 78 L150 78 Z"/><path d="M150 122 L168 122 L150 148 Z"/>
+      <path d="M150 22 L166 50 L150 50 Z"/><path d="M150 150 L166 150 L150 178 Z"/>
+    </g>
+    <circle cx="30" cy="100" r="9" fill="#f6b23c" stroke="#b97a10" stroke-width="2"/>
+    <g stroke="#e0932b" stroke-width="2" fill="none">
+      <path d="M38 96 L150 36 L260 36"/><path d="M39 99 L150 66 L260 66"/><path d="M39 100 L260 100"/>
+      <path d="M39 101 L150 134 L260 134"/><path d="M38 104 L150 164 L260 164"/>
+    </g>
+  </g>
+</g>
+</svg>

@@ -1,18 +1,16 @@
-# Intellij
+# Editors
 *.iml
 .idea
 
-# npm
+# Packages (the lockfile is kept)
 node_modules
-package-lock.json
-pnpm-lock.yaml
-yarn.lock
 
-# build
+# Build output
+dist/
+test/.generated/
 main.js
 *.js.map
 
-# obsidian
+# Obsidian
 data.json
 .vault_plugin_dir
-resources/cdn.hypothes.is/hypothesis/build

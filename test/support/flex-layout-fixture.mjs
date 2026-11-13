@@ -1,0 +1,15 @@
+// Synthetic responsive flex corpus. Source order deliberately differs from visual order.
+import JSZip from 'jszip';
+import {writeFile} from 'node:fs/promises';
+import {pathToFileURL} from 'node:url';
+export async function flexLayoutBook(){
+ const zip=new JSZip(),date=new Date('2020-01-01T00:00:00Z'),put=(path,text)=>zip.file(path,text,{date});
+ put('mimetype','application/epub+zip');
+ put('META-INF/container.xml','<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OPS/book.opf" media-type="application/oebps-package+xml"/></rootfiles></container>');
+ put('OPS/book.opf','<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="bookid">urn:annotator:flex-layout-fixture</dc:identifier><dc:title>Flex Layout Field Guide</dc:title><dc:language>en</dc:language><meta property="dcterms:modified">2020-01-01T00:00:00Z</meta></metadata><manifest><item id="chapter" href="chapter.xhtml" media-type="application/xhtml+xml"/><item id="css" href="layout.css" media-type="text/css"/><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/></manifest><spine><itemref idref="chapter"/></spine></package>');
+ put('OPS/nav.xhtml','<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Contents</title></head><body><nav epub:type="toc"><ol><li><a href="chapter.xhtml">Responsive panels</a></li></ol></nav></body></html>');
+ put('OPS/layout.css','body{font-family:serif;color:#202020}h1{font-size:1.8em}.panels{display:flex;flex-flow:row wrap;gap:1em 2em;align-items:stretch}.card{flex:1 1 14em;min-width:0;box-sizing:border-box;padding:1em;border:2px solid #3158bb;background:#e3edf8}.second{order:-1;background:#ede4f8}.card h2{font-size:1.2em;margin-top:0}.card p{margin-bottom:0}@media(max-width:600px){.panels{flex-direction:column;gap:1em}.card{flex-basis:auto}}');
+ put('OPS/chapter.xhtml','<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Responsive panels</title><link rel="stylesheet" href="layout.css"/></head><body><h1>Responsive panels</h1><p>Publisher flex layout keeps these panels together. The purple panel is visually first.</p><div class="panels"><section class="card first"><h2>Source first / blue</h2><p>The blue panel is first in the original source. Its placement must not change annotation coordinates.</p></section><section class="card second"><h2>Visual first / purple</h2><p id="passage">This compatibility passage lives in the second source panel, even when it appears first on screen.</p></section></div><p>Rotate to compare stacked and side-by-side panels. Select compatibility in the purple panel to annotate.</p></body></html>');
+ return zip.generateAsync({type:'uint8array',compression:'STORE'});
+}
+if(process.argv[1]&&pathToFileURL(process.argv[1]).href===import.meta.url){if(!process.argv[2])throw new Error('Pass output .epub path');await writeFile(process.argv[2],await flexLayoutBook());}

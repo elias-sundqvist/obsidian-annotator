@@ -1,77 +1,92 @@
-# Contributing to obsidian-annotator
+# Contributing to Annotator
 
-Thinks for contributing to `obsidian-annotator` and helping make it better!
+Thanks for helping make Annotator better. Bug reports and suggestions are
+welcome as [issues](https://github.com/elias-sundqvist/obsidian-annotator/issues);
+so are pull requests.
 
-## Issues
+## What is where
 
-Feel free to pick up any existing issue that looks interesting to you, or fix a bug you encountered while using `obsidian-annotator`. No matter the size, we welcome all improvements.
+| Folder | Holds |
+| --- | --- |
+| `src/` | The plugin, in TypeScript. `main.ts` is the entry. |
+| `proofs/` | The rules for what is written into notes, in [Bend](https://bend-lang.com), with their laws and proofs. See [proofs/README.md](proofs/README.md). |
+| `test/` | The reader's tests, their support code (`test/support/`), fixtures, and frozen copies of what the reader is compared against (`test/compat/`). |
+| `docs/` | [STYLING.md](docs/STYLING.md) and [SECURITY.md](docs/SECURITY.md), the screenshots, and the development record in `docs/dev/`. |
+| `styles.css`, `manifest.json`, `versions.json` | What Obsidian reads. |
 
-## Building
+## Set up
 
-### Setting up dev environment
+You need:
 
-You'll want to install the following on your machine:
-- [NodeJS](https://nodejs.org/en/download/)
-- [Yarn](https://yarnpkg.com/) *required by submodule*
-- It also possible to use [pnpm](https://pnpm.js.org) instead of `npm`
-
-### Clone with SUBMODULE
+- [Node.js](https://nodejs.org) 26 or later (the tests use its test runner
+  and its TypeScript support).
+- Bend 2.0.40, on your `PATH` or named by `BEND_BIN`. The build compiles the
+  Bend modules, so it is needed even if you never touch a proof. CI checks the
+  proofs with exactly this version.
 
 ```bash
-git clone git@github.com:elias-sundqvist/obsidian-annotator.git
-git submodule init
-git submodule update
+git clone https://github.com/elias-sundqvist/obsidian-annotator.git
 ```
 
-### Download dependencies
+```bash
+npm ci
+```
 
-Run `npm install` to download all necessary dependencies.
+## Build and test
 
-### Building on Windows requires additional changes
+| Command | Does |
+| --- | --- |
+| `npm run build` | Type-checks, then builds the plugin into `dist/` and the test bundles into `test/.generated/`. |
+| `npm run build:release` | The plugin only, as a release has it. |
+| `npm run test:reader` | Builds, then runs the reader's tests. |
+| `npm run proofs` | Checks every law, that each deliberately broken program is refused, and the tests of the bridge between Bend and JavaScript. Takes a minute or two. |
+| `npm run lint` | ESLint over `src/`: the recommended rules, typescript-eslint's, and the browser-compatibility rules for the oldest browsers the plugin runs on (`browserslist` in `package.json`). No warnings allowed. |
+| `npm run format` / `npm run format:check` | Prettier over `src/` (`.prettierrc.json`: 120 columns, four spaces, single quotes), to write or to check. |
+| `npm test` | Proofs, then the reader's tests. |
 
-1. Go to `.\submodules\hypothesis-client-annotator-fork\node_modules\@hypothesis\frontend-build\lib\rollup.js`
-2. Add `import { pathToFileURL } from 'url'` to the top of the file
-3. Replace `import(resolve(path))` with `import(pathToFileURL(resolve(path)))`
-4. Go to `.\submodules\hypothesis-client-annotator-fork\node_modules\@hypothesis\frontend-build\lib\manifest.js`
-5. modify line 46 to say. `const relativePath = path.relative(manifestDir, file).replace("\\","/");`
+CI runs the lint, the format check, the proofs (with the kernel check) and the reader's tests on every push and pull request.
 
-### Building
+To try a build in Obsidian, copy `dist/main.js`, `dist/manifest.json` and
+`dist/styles.css` into `<vault>/.obsidian/plugins/obsidian-annotator/` and
+reload the plugin. Use a vault you can afford to break.
 
-1. `npm run build` – builds `hypothesis` submodule and `obsidian-annotator`
-2. `npm run quick-build` – builds only `obsidian-annotator`
-3. `npm run build-hypothesis` - build only `hypothesis` submodule
+Some checks are made by hand and are not part of `npm test`:
 
-`npm run dev` recommended for active development. It builds `obsidian-annotator` on every change of code.
+- `test/support/browser-*-check.mjs` and `check-automatic-captions.mjs` drive
+  a real browser over one fixture each (layout of books, reading copies, the
+  editor's shortcuts, transcripts). They need Playwright, which is not a
+  dependency of this repository; each is named by the note in `docs/dev/`
+  whose result it produced.
+- `test/support/codec-bench.mjs` times the note codec.
+- `test/support/ios/` runs the built plugin in iOS WebKit in the Simulator
+  (its README says how).
+- `npm run proofs` also has the proofs checked a second time by Bend's kernel
+  where Lean 4.34.0 is installed; CI requires it.
 
-## Developing
+## Rules that keep the plugin trustworthy
 
-### Liters and types
+- **Notes are the user's.** The annotation format is the one Annotator has
+  always written, and other tools read it. A change to what is written into a
+  note is a change to the specification: it starts in `proofs/`, with a law.
+- **Logic that decides what is stored goes in Bend**, with laws in
+  `proofs/LAWS.bend` and proofs in `proofs/PROOF.bend`. Never weaken a law to
+  make an implementation pass. No unsafe definitions or proof holes.
+- **A shortcut around checked logic stays off until it is proved.** Tests are
+  not enough for that.
+- **The frozen references are not source.** `test/compat/frozen`,
+  `test/compat/published` and `proofs/fixtures` say what the old plugin and
+  the Hypothesis client did; the build refuses a changed copy.
+- **The user's original files are not modified.** PDFs, books and saved pages
+  are read; an export writes a copy.
+- **The interface follows the theme.** Use Obsidian's classes and variables,
+  expose what can be tuned as `--annotator-*` variables, and keep
+  [STYLING.md](docs/STYLING.md) true.
+- Add a test with a change, and keep `npm test` passing.
 
-Project use `betterer` to improve code step by step. Please run `npm run betterer` from time to time to see if your changes made code better or worse.
+## Releasing
 
-When you made an improvement, run `npm run betterer -- --update` to update betterer results.
-
-**Known problem**: Sometime betterer makes warnings about code you didn't change. In this case, run `npm run betterer -- --update` to ignore this warnings.
-
-### Hot Reload
-
-There are two ways to hot reload the plugin during development: automatically and semi-automatically.
-
-#### Automatically
-
-How to build, install and reload plugin in your test vault on every change:
-1. Install [Hot reload plugin](https://github.com/pjeby/hot-reload) manually and *enable it*
-2. Link repository as plugin into your test vault. `<test vault path>/.obsidian/plugins/obsidian-annotator` should refer to directory with repository
-3. Run `npm run dev`
-
-#### Semi-automatically
-
-How to build and install plugin on every change with manual reload:
-1. Create plugin's directory in your test vault. Exmaple: `<test vault path>/.obsidian/plugins/obsidian-annotator`
-2. Write absolute path to plugin's directory `.vault_plugin_dir` file
-3. Run `npm run dev` to build and copy plugin into you test vault on every change
-4. Reopen your test vault or disable/enable plugin to see changes
-
-## Submiting a Pull Request
-
-Fork this repository, create a topic branch, and when ready, open a pull request from your fork.
+The version is written in `manifest.json`, `package.json`, `versions.json`
+and `manifest-beta.json`; the build refuses them out of step. Pushing a tag
+equal to that version runs the proofs and tests, builds, and publishes a
+release with `main.js`, `manifest.json`, `styles.css` and the licences of the
+bundled code.

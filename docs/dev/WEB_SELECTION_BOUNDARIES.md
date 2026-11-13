@@ -1,0 +1,29 @@
+# Live website selection boundaries — 0.0.119
+
+Unsupported selections must never reuse a cached quote from another passage. A regression reproduced this defect by selecting ordinary page text, then focusing an iframe: capture returned the old outer-page quote. Shadow-root selection exposed another path to the same fallback.
+
+The guest now clears its cached quote and toolbar when focused content belongs to an embedded frame/object, selection endpoints are outside the document tree, or a shadow selection has been retargeted into an apparently collapsed outer selection. In Chromium 151.0.7922.34, selecting text in both open and closed shadow roots produces `Selection.isCollapsed === true` while `Selection.toString()` still contains the selected text. That combination is rejected before the collapsed-selection cache fallback. Non-body, empty/oversized and multiple-range selections also clear stale capture. Ordinary collapsed-selection retention remains available to the existing host interaction flow.
+
+A stale toolbar action cannot commit its old quote while a frame owns focus. The host receives a bounded plain-text selectionError for an unavailable surface, rather than the generic selection-lost response. No comments, tags, vault paths or host APIs are sent into page/frame content. This does not add iframe/shadow-root anchoring or selector formats; those capabilities remain open.
+
+## Evidence
+
+The boundary regression failed before the fix. It covers frame focus, stale toolbar activation, native shadow endpoints, Chromium-style retargeted collapsed endpoints, multiple ranges, explicit errors and ordinary-text recovery. All 382 tests and release/original-ID rehearsal checks pass. Existing editable/read-only-island and retained-intent tests also pass.
+
+`test-support/browser-unsupported-selection-check.mjs` runs the actual guest plus LiveWebHost against two own local origins in a fresh isolated Chromium. Real pointer drags select ordinary text, text in a separate-origin frame, open-shadow text and closed-shadow text. Every unsupported case returns a specific host error and no toolbar; ordinary selection succeeds again after each case. No annotation file is written. The closed root is not opened or traversed by the production agent; the Selection API inconsistency identifies that case.
+
+Private evidence: `~/Documents/obsidian-annotator-native-test-validation/2026-11-02-web-selection-boundaries/verified/` (`observations.json`, `frame.png`, `shadow.png`, `closed-shadow.png`). Screenshots were inspected. `/tmp/annotator-frame-before.log` records the original stale quote. Earlier `final/` and `shadow-diagnostic/` runs preserve the failed initial assumption that shadow endpoints would always expose their actual root; the final logic handles the observed browser retargeting. The fixture first clicks to collapse any retained native text selection before dragging again, avoiding browser text-drag behavior. All test servers/browser contexts close on completion.
+
+## Remaining scope
+
+This is actual-browser/bridge evidence, not a new Obsidian core Web viewer check. The Mac remains locked; no installed desktop artifact or vault changed. Installed Android remains 0.0.118. Frame/shadow content annotation support, other browser/host versions, SPA/login/provider corpus, and full published-reader compatibility remain open. No storage schema, annotation wire format or Bend theorem changed.
+
+## Pinned published selection-observer comparison — unchanged 0.0.126
+
+The development oracle builder now bundles the existing selectedRange export from the pinned client's selection-observer.js, archived from client commit 6e9f06ad6bd8b096a79614b16b0733e0491a2d30. Its source matches that Git object exactly; SHA256 is 4be9dff55a9c125814f601240f1eed7cd68dd708bf996ac90194280b357a2583. No source implementation is patched. The observer reads document.getSelection/getRangeAt(0) and returns null for a collapsed range; the guest's SelectionObserver callback uses this result to select or clear its range. Shadow-root code elsewhere primarily isolates the client UI, with a separate VitalSource frame integration; a source text search is not itself a general support proof.
+
+The fresh Chromium 151.0.7922.34 boundary fixture now runs this published function and the production native guest/host against the exact same real pointer selections. Ordinary text is selected correctly by both, including recovery after each unsupported case. For both open- and closed-shadow passages, the published observer returns null, while native returns its explicit shadow-component error and exposes no annotation toolbar. This establishes the pinned function's behavior in this browser, rather than assuming shadow selection is a missing published capability.
+
+The outer document's published observer retains OrdinaryPassage when a separate-origin iframe owns focus. That isolated-function observation does not establish the full published frame client/injection/routing behavior: child-frame integration remains a separate compatibility question. The fixture does not install or exercise the unchanged published application. Cross-browser/host versions, provider integrations, saved shadow annotations and full published-reader frame/shadow behavior remain unproven. No universal unsupported-feature classification or release gate closure is claimed.
+
+Private evidence: `~/Documents/obsidian-annotator-native-test-validation/2026-11-02-published-shadow-selection/`: source-audit.json, initial observations/screenshots and the final displayed/ observations/screenshots with both outcomes printed in the fixture. The final open-shadow screenshot was visually inspected. The repeatable browser check retains explicit assertions for both published null shadow results and ordinary selections. All 394 tests and release/rehearsal builds pass. No runtime, installed artifact, vault, selector format or Bend proof changed; Android remains 0.0.124.

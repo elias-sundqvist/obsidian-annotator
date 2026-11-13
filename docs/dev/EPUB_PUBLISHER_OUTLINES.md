@@ -1,0 +1,13 @@
+# Publisher outline cascade — 0.0.111
+
+A temporary instrumented copy of the generated reader, used only in the isolated browser fixture, traced the pinned IDPF sample's 42 omissions. There were 36 applications of its `outline:0` reset, one prefixed underline-position declaration, four unsupported-selector events and one at-rule event. These were counted declaration applications, not 42 distinct missing features. No diagnostic instrumentation ships in production.
+
+The bounded cascade now supports outline width/style/color/offset. The shorthand expands before specificity/importance comparison and resets its omitted longhands; outline-offset remains independent. Browser CSSOM supplies the native expansion, with a grammar-based fallback where longhands are not expanded. Invalid-variable behavior still masks earlier declarations through the existing computed-value-invalidity path. Outline rules remain scoped to projected source elements and do not style the host UI. See [CSS outlines](https://www.w3.org/TR/css-ui-3/#outline).
+
+`text-underline-position` and its EPUB/WebKit aliases also pass through the bounded path. The deprecated prefixed `alphabetic` value maps to `auto` as specified by the [EPUB compatibility mapping](https://idpf.org/epub/31/spec/epub-contentdocs.html#sec-css-text-decoration).
+
+The new unit regression failed before implementation, then passed reset/longhand precedence, important weights, independent offsets, source retention and host isolation. All 376 tests pass. In real Chromium 151.0.7922.34, `test-support/browser-outline-check.mjs` compares five native-projection cases against independent browser CSS in a shadow root. Width/style/color/offset agree for zero-width reset, important width with none style, a visible colored outline, a variable outline and invalid-variable fallback. The source stays unchanged and the measured paragraph box does not shift.
+
+Evidence: `~/Documents/obsidian-annotator-native-test-validation/2026-11-02-publisher-omissions`. `before` and `traced-view.mjs` contain the private diagnostic run; `outline-reference` contains computed-style observations and the inspected comparison screenshot. `after` reruns the pinned published sample's preferred/alternate/default switch cycle: all phases retain source offset 200 and report 5 omissions instead of 42. The remaining events correspond to the sample's link-state selectors and @page rule; they remain visible rather than being silently suppressed. This does not establish full visual fidelity for the book or support for those remaining cases.
+
+Release and original-ID rehearsal checks pass. No installed artifact, vault data, annotation format or Bend theorem changed; actual Obsidian/device outline checks and wider corpus cases remain open.

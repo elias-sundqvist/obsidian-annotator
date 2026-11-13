@@ -1,0 +1,40 @@
+{
+  "client": {
+    "repository": "elias-sundqvist/hypothesis-client-annotator-fork",
+    "commit": "6e9f06ad6bd8b096a79614b16b0733e0491a2d30"
+  },
+  "files": {
+    "contract/client-annotation-fixtures.js": {
+      "from": "elias-sundqvist/hypothesis-client-annotator-fork@6e9f06ad6bd8b096a79614b16b0733e0491a2d30:src/sidebar/test/annotation-fixtures.js",
+      "sha256": "8f7a38b8bd3f5c6b1badb1b5511938a0adf6f455a10faa9ecfff0c5bb47fc893"
+    },
+    "contract/client-services-api.js": {
+      "from": "elias-sundqvist/hypothesis-client-annotator-fork@6e9f06ad6bd8b096a79614b16b0733e0491a2d30:src/sidebar/services/api.js",
+      "sha256": "3fc4f306ccd5375bed8b2104a534771d3169af2b229e69b92bdb4e69953d2fb2"
+    },
+    "contract/client-types-api.js": {
+      "from": "elias-sundqvist/hypothesis-client-annotator-fork@6e9f06ad6bd8b096a79614b16b0733e0491a2d30:src/types/api.js",
+      "sha256": "e3cdd380c599d41e6455138f7737be0e5cde27317865882c8d6a122ae60ec33b"
+    },
+    "contract/fake-service-api.json": {
+      "from": "obsidian-annotator@f7d93b708d6bda6a6ae97bbe3a888607fd45092f:resources/fake-service/api.json",
+      "sha256": "1915ec839e5486af3710d56001f72aaffed515eeef71b870efd50859521cbcc9"
+    },
+    "contract/defineGenericAnnotation.tsx": {
+      "from": "obsidian-annotator@f7d93b708d6bda6a6ae97bbe3a888607fd45092f:src/defineGenericAnnotation.tsx",
+      "sha256": "6b82819c739e27d836c1c258d47abf366c8b4f48ff1fdc545afc44f5dbd5137f"
+    },
+    "testfile.md": {
+      "from": "obsidian-annotator@f7d93b708d6bda6a6ae97bbe3a888607fd45092f:tests/testfile.md",
+      "sha256": "5450a95a12c99c7eb9493bb4d462dfee283acd70979729dd3561220439cb675b"
+    },
+    "testfile2.md": {
+      "from": "obsidian-annotator@f7d93b708d6bda6a6ae97bbe3a888607fd45092f:tests/testfile2.md",
+      "sha256": "b3d41f89b32f46ba413dcf2b65ed5d24f00bb003dc0ad8aefa6abfd28b1dedaf"
+    },
+    "legacy-annotationUtils.tsx": {
+      "from": "obsidian-annotator@9b8fe21:src/annotationUtils.tsx",
+      "sha256": "8c3056afc5d15b1064dee169704f55f2807c85cdd5fe3c6dcbfedcefd18bee38"
+    }
+  }
+}

@@ -1,0 +1,40 @@
+/* Only what the stand-in workspace needs to sit as Obsidian's does; nothing here styles the plugin's own elements. */
+body { --safe-area-inset-top: env(safe-area-inset-top); --safe-area-inset-bottom: env(safe-area-inset-bottom); --safe-area-inset-left: env(safe-area-inset-left); --safe-area-inset-right: env(safe-area-inset-right); --keyboard-height: 0px; margin: 0; height: 100vh; overflow: hidden; background: var(--background-primary); }
+.app-container { display: flex; flex-direction: column; height: 100vh; }
+.horizontal-main-container { flex: 1 1 auto; display: flex; min-height: 0; }
+.workspace { flex: 1 1 auto; display: flex; position: relative; min-width: 0; }
+.workspace-split.mod-root { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; }
+.workspace-tabs, .workspace-tab-container { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+.workspace-split.mod-root > .workspace-leaf { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; width: 100%; }
+.workspace-drawer .workspace-leaf { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+.workspace-leaf-content { width: 100%; flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+.view-content { width: 100%; flex: 1 1 auto; min-height: 0; overflow: auto; position: relative; }
+.workspace-drawer.is-collapsed { display: none; }
+.workspace-drawer.is-pinned .workspace-drawer-backdrop { display: none; }
+.workspace-drawer-active-tab-container, .workspace-drawer-active-tab-content { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+.workspace-drawer-header { display: flex; align-items: center; justify-content: space-between; padding: 4px 12px; }
+.workspace-drawer .workspace-drawer-inner { position: relative; z-index: 1; }
+.workspace-drawer-backdrop { z-index: 0; }
+/* PDF view (Obsidian's DOM shape, its toolbar imitated). pdf.js wants an absolutely positioned scroller. */
+.pdf-view { display: flex; flex-direction: column; overflow: hidden; }
+.pdf-container { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; position: relative; }
+.pdf-toolbar { display: flex; align-items: center; gap: 8px; padding: 4px 8px; flex: 0 0 auto; }
+.pdf-page-input { width: 4em; }
+.pdf-content-container { flex: 1 1 auto; position: relative; min-height: 0; }
+.pdf-viewer-container { position: absolute; inset: 0; overflow: auto; -webkit-overflow-scrolling: touch; }
+.markdown-reading-view { padding: 0; }
+.markdown-preview-view { height: 100%; overflow: auto; padding: 16px 20px calc(var(--view-bottom-spacing, 0px) + 16px); box-sizing: border-box; }
+/* Harness chrome */
+.mobile-navbar-actions { display: flex; flex: 1 1 auto; justify-content: space-around; align-items: center; }
+.mobile-navbar-action { font-size: 22px; min-width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center; }
+.harness-tablet-bar { position: fixed; z-index: 30; left: calc(env(safe-area-inset-left) + 8px); bottom: calc(env(safe-area-inset-bottom) + 8px); background: var(--background-secondary); border-radius: 22px; box-shadow: 0 2px 8px #0003; padding: 0 6px; }
+.harness-tablet-bar .mobile-navbar-actions { gap: 4px; }
+.harness-sheet { position: fixed; z-index: 100; left: 0; right: 0; bottom: 0; max-height: 70vh; overflow: auto; background: var(--background-primary); border-top: 1px solid var(--background-modifier-border); padding-bottom: env(safe-area-inset-bottom); box-shadow: 0 -4px 20px #0004; }
+.harness-sheet-head { display: flex; justify-content: space-between; padding: 12px 16px; font-weight: 600; }
+.harness-sheet-row { padding: 12px 16px; border-top: 1px solid var(--background-modifier-border); }
+.menu-harness-bg { position: fixed; inset: 0; z-index: 90; background: #0003; }
+.menu.mod-mobile { position: fixed; z-index: 91; left: 8px; right: 8px; bottom: calc(env(safe-area-inset-bottom) + 8px); max-height: 60vh; overflow: auto; background: var(--background-primary); border-radius: 12px; padding: 6px 0; }
+.menu.mod-mobile .menu-item { display: flex; gap: 10px; padding: 10px 16px; }
+.notice-container { position: fixed; z-index: 120; top: calc(env(safe-area-inset-top) + 8px); left: 0; right: 0; display: flex; flex-direction: column; align-items: center; pointer-events: none; }
+.notice { pointer-events: auto; }
+.harness-icon { font-size: 16px; line-height: 1; }

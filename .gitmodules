@@ -1,3 +1,0 @@
-[submodule "submodules/hypothesis-client-annotator-fork"]
-	path = submodules/hypothesis-client-annotator-fork
-	url = git@github.com:elias-sundqvist/hypothesis-client-annotator-fork.git

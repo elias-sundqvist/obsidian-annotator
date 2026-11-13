@@ -1,237 +1,455 @@
 [![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/elias-sundqvist/obsidian-annotator?style=for-the-badge&sort=semver)](https://github.com/elias-sundqvist/obsidian-annotator/releases/latest)
 ![GitHub All Releases](https://img.shields.io/github/downloads/elias-sundqvist/obsidian-annotator/total?style=for-the-badge)
-# Obsidian Annotator
 
-This is a plugin for Obsidian (https://obsidian.md). It allows you to open and annotate PDF and EPUB files. 
+# Annotator
 
-The plugin is based on https://web.hypothes.is/, but modified to store the annotations in a local markdown file instead of on the internet. 
+Read and annotate PDFs, EPUB books, web pages and videos inside
+[Obsidian](https://obsidian.md), and keep what you mark as Markdown in your
+vault. Every annotation is a block in an ordinary note, so it links, embeds,
+searches and syncs like the rest of your notes.
 
-## Demonstration
-![annotator demo](https://user-images.githubusercontent.com/9102856/131702952-1aa76baa-a279-474c-978d-cec95a683485.gif)
+Website: [annotator.esh.sh](https://annotator.esh.sh/).
 
-**Warning!** In the above gif I use **Dataview** syntax to specify the annotation-target.
-If you do not have the dataview plugin installed, you must instead write the annotation-target in the **frontmatter**, like this:
-```md
----
-annotation-target: https://arxiv.org/pdf/2104.13478.pdf
----
-```
+![A PDF open beside its annotation list: a passage is highlighted, a note is written on another in Obsidian's own editor, and a card in the list takes the page to its highlight](docs/annotator.gif)
 
-## Known issues
+Version 0.3 is a new reader. Earlier versions showed the Hypothesis web client
+in a frame; this one is built on Obsidian's own PDF view and editor. Your
+annotation notes are read and written in the same format as before:
+[Coming from Annotator 0.2](#coming-from-annotator-02) says what changes.
 
-1. Plugin doesn't work on iOS 16.3 or higher. Follow [#289](https://github.com/elias-sundqvist/obsidian-annotator/issues/289) issue state up to date.
-2. Reader doesn't show annotations if they were changed on different platforms.
+## Install
 
-## Getting Started 
+In Obsidian: **Settings → Community plugins → Browse**, search for
+"Annotator", install and enable it. It needs Obsidian 1.11.4 or later and
+works on desktop (macOS, Windows, Linux) and Android. On iOS and iPadOS the
+reader has been tested in the iOS Simulator; a check inside Obsidian on an
+iPhone or iPad is still to come.
 
-Add the property `annotation-target` to the frontmatter of your obsidian note, with a value corresponding to the location of the EPUB/PDF file.
-The location can either be a file in the vault (such as `Pdfs/mypdf.pdf`), or online (such as `https://arxiv.org/pdf/2104.13478.pdf`)
+## Start
 
-Then you can, in the open note pane, select "more options" (the three dots in the top right), and a new option "annotate" should be available. 
+- Open a PDF or a book from your vault and run **Open annotations sidebar**
+  from the command palette. Select text to highlight it or write a note.
+- Or make a note with an `annotation-target` property that names a file or a
+  web address, and open it.
+- **Open annotated source…** lists everything you have annotated.
 
-The plugin automatically tries to determine whether the file is an `epub` or `pdf` based on the file path, but in case this doesn't work, 
-you can also add the property `annotation-target-type` and specify whether it is `epub` or `pdf` manually.
+The rest of this page says what you can do and how.
 
-If you have [dataview](https://github.com/blacksmithgu/obsidian-dataview) installed, then you can also specify the annotation target with a dataview attribute. In this case, obsidian-style links can be used instead of a plain-text path. 
+## Where annotations live
 
-> WARNING! Don't rename an original pdf or epub file! The plugin is going to lose the connection between annotations and file in that case.
+Each source has one annotation note: a Markdown note with an
+`annotation-target` property that names the source. Open the note, or the
+source, and the reader shows both. The note is yours to move, rename and edit;
+the sidebar's menu has **Open annotation note**.
 
-### Annotating
+A new annotation note starts with the heading "Annotations". In the settings
+you can choose another heading, or name a template note: its properties and
+text are kept (`{{title}}`, `{{date}}` and `{{target}}` are filled in) and
+annotations are added after it.
 
-Annotation is self-explanatory. Select text with your mouse to get started. 
+The `annotation-target` may be written in any of the usual ways:
 
-In the future, it would be nice to add colored highlights and image/region highlights. These features will have to be added to hypothes.is first, however.
-See these relevant issues: https://github.com/hypothesis/product-backlog/issues/198,  https://github.com/hypothesis/product-backlog/issues/669
+| Written as | Example |
+| --- | --- |
+| A path in the vault | `annotation-target: Papers/Attention.pdf` |
+| A wikilink | `annotation-target: "[[Attention.pdf]]"` |
+| An embed | `annotation-target: "![[Attention.pdf]]"` |
+| A Markdown link | `annotation-target: "[Attention](Papers/Attention.pdf)"` |
+| A web address | `annotation-target: https://arxiv.org/pdf/1706.03762` |
+| An HTML file in the vault | `annotation-target: "[[Saved page.html]]"` |
+| A Dataview inline field | `annotation-target:: [[Attention.pdf]]` in the note's text |
 
-### The annotations in markdown
+A name that differs from a file's only by the kind of space in it (a no-break
+space pasted from a web page) still finds that file.
 
-To return to the regular obsidian markdown editing mode, you can select `more options` → `Open as MD`.
-Each annotation has an associated quote block with a block reference. Be careful with modifying these blocks. 
-Minor edits to PREFIX, HIGHLIGHT, and POSTFIX are typically ok. But if the edits are too major, hypothesis may no longer be able to identify the corresponding text. 
+Nothing is stored anywhere else. If a block in the note is damaged (a sync
+conflict, a slip of the hand), the readable annotations are still shown, the
+sidebar names the damaged part with a button to its line, and nothing is
+written until you have repaired it.
 
-The COMMENT region can be freely edited. (but ensure that it is still part of the quote block.)
+## Highlighting and notes
 
-The TAGS region should consist of a comma-separated list of obsidian tags. (like `#tag1, #tag2, #tag3`) 
+Select text. A small bar appears with six inks and **Note**.
 
-### Dark Mode
+- A colour highlights the passage. `H` highlights in the last colour used,
+  `1`–`6` pick a colour, `A` opens a note on the passage.
+- A note is written in Obsidian's own editor: links, tags, lists and
+  formatting work as in any note. `Ctrl/Cmd+Enter` saves, `Escape` cancels.
+- A selection may run over a page break in a PDF; it is one highlight.
+- In the sidebar, a card's quote takes you to the passage; its actions edit,
+  reply, copy a link to the annotation, or delete. Deleting can be undone.
+- **Page notes** (the second tab) are notes about the whole source. One
+  written while a PDF page or a book chapter is in view remembers it: its card
+  says "Page 12" (or the chapter) and goes there, and in an exported PDF it
+  sits on that page.
 
-The plugin has built-in dark mode support. To toggle dark mode, select `more options` → `Toggle Dark Mode` while annotating.
-You can also tweak the dark mode behavior in the settings tab for the plugin. 
+The sidebar can sort by place or by date, filter by colour or to what has a
+note, and search
+(`tag:idea`, `text:…`, `quote:…`, `since:7day` narrow it). The strip at its top
+shows where the annotations fall in the source and where you are.
 
-### Linking to annotations
+## PDFs
 
-An obsidian link to an annotation block-reference will, when clicked, open the corresponding file and scroll to the associated highlight. 
-If the file is already open in a pane, then the link will cause the existing pane to scroll instead.  
+The reader works on Obsidian's built-in PDF view. Three buttons are added to
+the view's header, and a fourth while it has something to do: after you
+follow a link inside the PDF (a citation, a contents entry), **Back to page
+N** returns you to where you were. The command *PDF: go back to where a link
+was followed* does the same and can be given a hotkey.
+
+![A dark page with a marked area, its grips, and a drawing](docs/pdf-dark-area-drawing.jpg)
+
+**Page appearance** chooses the paper: Auto (follows your theme), Light,
+Sepia, or Dark. The Sepia paper is a styling variable (see
+[STYLING.md](docs/STYLING.md)), so it can be parchment or anything else.
+
+On a dark page the text is light and pictures are left as they are, so a
+line drawing in black on a clear ground can vanish. **Darken pictures too**
+(in the same card) turns the whole page instead: drawings and diagrams show,
+and photographs look like negatives. Pictures you keep of areas are taken
+from the page as printed either way.
+
+**Mark an area** keeps a picture of part of a page with a note: a figure, a
+table, an equation. Drag over the part to keep, or press `Enter` to place a
+frame and move it with the arrow keys. The picture is saved as an attachment
+and leads the note. The words that lie inside the area are kept with it, so a
+picture of a table is found by what it says.
+
+- Select a saved area to move it (arrow keys, or the grip at its top-left
+  corner) or resize it (`Shift`+arrow keys, or the grip at its bottom-right).
+  Its picture is taken again.
+- A PDF that is pictures of pages (a scan) has no text to select. The sidebar
+  says so and offers areas and drawing, which work on any page.
+
+**Draw on the page** is freehand: underline, circle, point, write in the
+margin. The toolbar has the six inks, three pens, an eraser, Undo, Done and
+Cancel.
+
+![Freehand drawing with a pen: a spiral that thickens with pressure](docs/drawing.jpg)
+
+- A pen that reports pressure draws thinner and thicker; fast strokes are
+  smoothed. Once a pen has drawn, a finger moves the page instead of drawing.
+- The eraser (the button, or the other end of the pen) removes whole strokes.
+  `Ctrl/Cmd+Z` takes back the last change, an erasure too. `Enter` or Done
+  keeps the drawing.
+- A saved drawing can be put right. Select it: the grip at its corner drags
+  it, the arrow keys move it, and the pencil (or `Enter`, or a double-click)
+  opens it again to erase strokes, add to it, or give it another ink. Its
+  note and tags are untouched.
+
+### Export a PDF with its annotations
+
+**Export PDF with annotations** (command palette, or the sidebar's menu) saves
+`<name> (annotated).pdf` beside the PDF. Any PDF reader shows it with the
+highlights in their colours and their notes as comments, areas as boxes,
+drawings as ink and page notes as sticky notes.
+
+![The exported PDF opened in another PDF reader](docs/exported-pdf.jpg)
+
+The original file is never changed: the copy is the original with the
+annotations added after it. Exporting again replaces the earlier copy.
+Encrypted PDFs cannot be exported this way; the reader says so.
+
+### The PDF's own details
+
+**Add the PDF's details to the note** (sidebar menu or command palette) reads
+what the file records about itself (title, authors, year, DOI, subject,
+keywords) and adds them as properties of the annotation note. Properties the
+note already has are left alone, and nothing is looked up online. Export
+templates can then use `{{title}}`, `{{author}}` and `{{year}}`.
+
+### A PDF that was annotated in another program
+
+PDF annotations are part of the PDF standard, so what Preview, Acrobat, a
+tablet's note app or a reference manager put into a file can be read. When a
+PDF holds such annotations the sidebar says so and offers to **take them in**
+(also in the sidebar's menu and the command palette):
+
+| In the PDF | Becomes |
+| --- | --- |
+| Highlight | A highlight of the words under it, in the nearest ink, with its comment as the note |
+| Underline, strike-out, squiggly | The same, tagged `underline`, `strike-out` or `squiggly` |
+| Rectangle, oval, text box | An area, with its text as the note |
+| Sticky note | A small area at its spot, with its text as the note |
+| Ink | A drawing |
+| An answer to any of these | A reply |
+
+From then on they are annotations like any other: edit, recolour, move, tag,
+link and export them. They keep the date they were made.
+
+- The PDF file is not changed, so its own copies stay visible on the page
+  under yours. **Export PDF with annotations** writes a copy in which each is
+  there once, as it is in your notes now; a passage tagged `underline`,
+  `strike-out` or `squiggly` is written as that kind of mark.
+- Taking in again adds only what is new in the file.
+- Not taken: stamps, attached files, form fields, review states, and
+  anything in an encrypted PDF. A mark over a scanned page (no text under
+  it) comes in as an area.
+
+## Books (EPUB)
+
+![A book in the Pages layout: a page is turned, a sentence is highlighted, and the text is made larger from the reading controls](docs/book.gif)
+
+The bar has Back, the chapter with turns either side, **Contents**, page
+turns, **Find**, **Keep a picture** and **Reading controls**.
+
+- **Contents** lists the book's own table of contents, nested, with where you
+  are and how many annotations each chapter holds.
+- **Find** (`Ctrl/Cmd+F`) looks through the whole book and lists every match
+  under its chapter; a result takes you there and selects the words.
+- In the **Pages** layout a swipe turns one page, as does a tap at either
+  side of the page; the arrows in the bar and the arrow keys do the same.
+- **Reading controls**: page colour, text size, layout (Scroll or Pages),
+  typeface, line spacing, column width and justification. Fixed-layout books
+  keep the publisher's pages as they are.
+
+- **Keep a picture with a note** (the picture button, or the *Mark an area*
+  command): every picture on screen offers itself; click one, or Tab to it
+  and press `Enter`. The picture's own file, as the book holds it, is saved
+  as an attachment and leads the note; the kept picture is framed in its ink.
+  What the book says about the picture (its description and caption) is kept
+  with it, so it is found by search. A book's text has no fixed page, so it
+  is the whole picture that is kept, not a rectangle; text in tables and
+  captions is highlighted like any other text.
+
+The thin line at the bottom is how far you are through the book.
+
+## Videos and recordings
+
+A note whose `annotation-target` is a YouTube link, or a video or audio file
+in your vault, with `annotation-target-type: video`, opens as a player with
+timed notes.
+
+![A video with a new note being written under the player](docs/video-note.jpg)
+
+- **Note at 0:12** (or `N`) writes a note at the current moment, in a card
+  under the picture. The video waits while you write; untick *Pause while
+  writing* to keep it running.
+- The camera button (or `S`) makes a **frame note**: the frame is frozen, you
+  keep all of it or drag over a part, and the note opens with the picture.
+  This reads the frame of a video file directly. For YouTube it pictures the
+  player in the app's window, which only works on desktop; elsewhere you get
+  a plain note at that moment.
+- The timeline under the player has a marker for every note. `K` or `Space`
+  plays and pauses, `J` and `L` skip ten seconds, the arrow keys five.
+- Captions can be loaded or imported (VTT or SRT). Select words in the
+  transcript and a bar offers **Highlight** (`H`: kept at once, at the time
+  they are said) and **Note** (`A`: a note that quotes them). What your notes
+  quote is marked in the transcript; a mark leads to its note.
+- An audio file gets a slim player and everything else the same.
+
+## Web pages
+
+A web page is annotated where it lives: the real page, in Obsidian's own Web
+viewer (a core plugin; desktop). Open a note whose `annotation-target` is a
+web address, or run **Open website in core Web viewer**, and the page opens
+with its annotations on it.
+
+- **Highlights and notes.** Select text on the page; the bar offers the inks
+  and **Note**. A highlight is painted in the page's own text and found again
+  by its words when the page has changed around it. Click one to open its
+  note.
+- **Keep a picture with a note** (the picture button beside the address bar,
+  or the *Mark an area* command): every picture on the page offers itself;
+  click one, or Tab to it and press `Enter`; `Escape` leaves. What the Web
+  viewer showed of the picture is saved as an attachment and leads the note,
+  and the picture is framed in its ink on the page. It is found again by its
+  place and by its address, and by its address alone if the page has moved
+  it. Nothing is downloaded for this: the picture kept is what was on screen.
+- **Nothing a page says is treated as an instruction.** The page can only
+  offer a selection or a picture; what is saved is shown in Obsidian's own
+  window first, and saving takes your click there. Your notes are never sent
+  to the page.
+
+![A web page in the Web viewer: the picture button makes its pictures offer themselves, one is clicked and kept, a note is written for it, and its card appears in the list with the picture](docs/web-picture.gif)
+
+To try it, open the sample article at
+`https://annotator.esh.sh/demo/lighthouse-lens/` in the Web viewer: it is the
+page in the recording, and its text and pictures are free to reuse.
+
+Where there is no Web viewer (phones and tablets) or no network, a **reading
+copy** stands in: **Save website as an offline Markdown reading copy** keeps
+the page's text as a note you can read and annotate anywhere, and the
+annotations made on the live page show on it. A reading copy is text only: a
+picture note is listed with its picture, but has no place on the copy.
+
+An **HTML file in the vault** can be a source too: point a note's
+`annotation-target` at it. The first time, a reading copy is made from the
+file and kept beside it ("… (reading copy).md"); that copy is what you read
+and annotate, offline, and it syncs with the vault. The HTML file is not
+changed. A page saved from a browser keeps the address it came from.
+
+## Sources outside the vault
+
+A note may point at a file on the internet or elsewhere on your computer. The
+first time, the reader asks, then downloads or copies it once into
+`Annotator sources` in your vault and reads it from there. If that fails it
+says why, and nothing is left behind.
+
+## Reading progress
+
+With **Keep reading progress in the note** on (settings; off by default),
+leaving a PDF, book or video writes where you were to its annotation note as
+the property `annotation-progress` ("12/340", "37%", "12:34"), so a list or a
+Base can show what you are in the middle of. It is written once, on leaving.
+
+The note travels with your vault, so the place does too: when a note says
+something this device did not write, the source opens there (the page of a
+PDF, the part of a book, the time in a recording). After that the device's
+own place is the newer one again.
+
+## Exporting notes
+
+From the sidebar's menu:
+
+- **Copy all as Markdown** and **Export to a summary note**: callouts, plain
+  quotes, or your own template (`{{quoted}}`, `{{quote}}`, `{{note}}`,
+  `{{image}}`, `{{kind}}`, `{{location}}`, `{{link}}`, `{{colour}}`,
+  `{{tags}}`, `{{date}}`, `{{title}}`, `{{author}}`, `{{year}}`).
+- **Export as individual notes + Base**: one note per annotation with
+  properties, and a Base that lists them.
+- **Export PDF with annotations** (PDFs).
+- Hypothesis JSON, from the command palette, for other annotation tools.
+
+## On phones and tablets
+
+<p>
+  <img src="docs/phone-pdf.jpg" width="19%" alt="A PDF on a phone, with highlights in four colours">
+  <img src="docs/phone-select.jpg" width="19%" alt="Words selected by touch on a phone; the bar with the six inks sits above the navigation">
+  <img src="docs/phone-note.jpg" width="19%" alt="A note being written on a phone, in a sheet at the bottom with the passage quoted on top">
+  <img src="docs/phone-list.jpg" width="19%" alt="The annotation list in the right drawer of a phone, each card with its passage and note">
+  <img src="docs/phone-book.jpg" width="19%" alt="A page of a book on a phone, with a highlighted sentence">
+</p>
+
+Obsidian for Android on a phone, left to right: a PDF with its highlights, a
+selection with the bar, a note being written, the annotations in the right
+drawer, and a book.
+
+**Read full screen** (in the view's menu, or the command) hides the app's
+header and navigation bar while you read; the small button at the bottom
+corner brings them back, and they come back by themselves when you go to
+something that is not a source.
+
+Long-press to select; the bar with the inks and Note sits above the
+navigation. A note is written in a sheet above the keyboard. Marking an area
+and drawing work by touch. Page colours and a book's contents open as sheets
+from the bottom. Opening a source shows the source: the annotations are in
+the right drawer when you want them.
+
+On a tablet there is room for both. The first time a source is opened with
+the tablet held wide, the right drawer is docked beside the page with the
+annotations in it; undock it and it stays undocked. A note is written beside
+its passage, above the keyboard, and two sources can be open side by side,
+each with its own annotations.
+
+![A PDF on a tablet held wide, with the annotation list docked beside the page](docs/tablet.jpg)
+
+## Keyboard
+
+| Where | Keys |
+| --- | --- |
+| Text selected | `H` highlight, `1`–`6` ink, `A` note |
+| Writing a note | `Ctrl/Cmd+Enter` save, `Escape` cancel |
+| Marking an area | `Enter` place or keep, arrows move, `Shift`+arrows resize, `Escape` leave |
+| A saved area, focused | arrows move, `Shift`+arrows resize, `Alt` for fine steps |
+| Drawing | `Enter` keep, `Ctrl/Cmd+Z` undo, `Escape` leave (asks once) |
+| A saved drawing, focused | arrows move, `Alt` for fine steps, `Enter` open for changes |
+| Book | `Ctrl/Cmd+F` find |
+| Video | `K`/`Space` play, `J`/`L` ±10 s, arrows ±5 s, `N` note, `S` frame note |
+
+Every command is in the command palette and can be given a hotkey.
+
+## Making it yours
+
+Highlights, cards and pages follow your theme. Colours, highlight strength,
+the paper of the Sepia page and more are variables you can set from a CSS
+snippet or the Style Settings plugin: see [STYLING.md](docs/STYLING.md).
+
+## Coming from Annotator 0.2
+
+Updating is all there is to do.
+
+- **Your notes are not converted.** The annotation blocks in your notes are
+  the format this version reads and writes. **Check annotation notes
+  (migration)** in the command palette counts your annotated sources and
+  highlights and lists anything that cannot be read; it changes nothing.
+  One character differs in what is written from now on: the tags line of a
+  new or edited annotation has a space after its quote mark (`> #tag`), so
+  that every tag is clickable in Live Preview. Annotator 0.2 reads that
+  line to the same tags, and blocks you do not edit stay as they are.
+- **Your settings come along** at the first start: dark mode, the book's
+  reading mode and text size, the default folder, the Markdown options and
+  whether annotation notes open in the reader. The settings file and the
+  workspace as they were are kept beside the plugin, in
+  `native-upgrade-backup-v1.json`.
+- **Tabs that were open** on an annotated source open again on it.
+- **Switch between reader and Markdown note** is the same command, so its
+  hotkey still works.
+
+What you should notice, measured on the same vault ([how](docs/MEASUREMENTS.md)):
+
+| | 0.2.11 | 0.3.0 |
+| --- | ---: | ---: |
+| Plugin files on disk | 26.3 MB | 1.5 MB |
+| Enabling the plugin at each start, desktop | 1.1 s | 0.014 s |
+| The same on an Android emulator | 6.0–8.6 s | 0.05–0.13 s |
+| First highlight of an annotated PDF, Android emulator | 2.0–2.7 s | 0.9–1.4 s |
+| The same on a desktop | 0.32–0.48 s | 0.40–0.43 s |
+| Memory kept after closing a 7.6 MB PDF | 9.7 MB | 0.2 MB |
+
+What is different:
+
+- PDFs open in Obsidian's own PDF view, with the annotations in a sidebar that
+  you can dock where you like. Books, web pages and videos each have their own
+  view. Nothing is loaded from the Hypothesis client any more.
+- A web page is read as a copy saved in your vault (or in Obsidian's Web
+  viewer), not through a frame.
+- Videos are annotated by time and by frame in the plugin itself; the
+  annotate.tv setting of 0.2 is no longer used.
+- Notes written here can hold things 0.2 did not have: areas, drawings,
+  picture notes, annotations taken in from a PDF. Annotator 0.2 on another
+  device still reads such a note.
+
+## What is checked, and how
+
+The rules that decide what is written into your notes (the annotation format,
+creating, editing and deleting a block, reading a changed note in parts, the
+geometry of areas and of lines drawn by hand) are written in Bend and proved
+for every input; the proofs are checked on every build. The rest is tested:
+over 600 tests of the reader,
+and the PDF export is read back with two independent PDF readers. See
+[proofs/README.md](proofs/README.md) and [SECURITY.md](docs/SECURITY.md).
+
+## Limits to know about
+
+- A highlight over a page break is shown by Annotator 0.2 (on a device not
+  yet updated) on one page only.
+- A frame of a paused YouTube video includes the player's own controls; take
+  it while the video plays.
+- Text in scanned PDFs is not recognised (no OCR).
+- Drawing is for PDFs; books have highlights, notes and picture notes, videos
+  have notes and frame notes.
+- A picture note in a book is not shown by Annotator 0.2 (it has no passage
+  to anchor to there); the note itself is kept.
+- iOS and iPadOS: the reader's own code has been run in iOS WebKit in the
+  Simulator (selection, highlights, notes, drawing, books), not yet inside
+  Obsidian for iOS on a device. YouTube may refuse to play there (its Error 153). The
+  reader then says so and offers **Open in YouTube**; a note's time opens the
+  video there at that time, and notes and the transcript work as before.
 
 ## Contributing
 
-Visit [CONTRIBUTING.md](./CONTRIBUTING.md) for information on building from source or contribution improvements. To report a bug, ask a question or suggest an improvement for this plugin, you can create an [issue](https://github.com/elias-sundqvist/obsidian-annotator/issues).
-
-## Changelog
-
-### 0.2.11 (2024-01-06)
-* Fix issue with rendering annotator in Obsidian 1.5.3 and later (See issue #356)
-
-### 0.2.10 (2023-01-09)
-* Fix bug #284 Plugin didn't start on iOS
-
-### 0.2.9 (2023-01-05)
-* Click on annotation link in markdown causes an immediate jump to annotation in PDF (Thanks to @HardwayLinka)
-* Fix broken drag-and-dropped link to highlight caused by line breaks. (See issue #267, Thanks to @HardwayLinka)
-
-### 0.2.8 (2022-11-27)
-* Fixed issue with "Annotate" button not appearing (See issue #253)
-* Fixed issue with scroll getting stuck after clicking annotation link (See PR #259, Thanks to @HardwayLinka for the contribution)
-* Partially fixed issue with annotation links not working (See PR #231, Thanks to @XSAM for the contribution)
-
-### 0.2.7 (2022-10-31)
-* Fixed issue with Latex Equations not rendering in annotations (See issue #228)
-* Removed "sign-in/log-in" buttons (See issue #241)
-* CSS Snippets can now be used to style the hypothesis sidebar
-
-### 0.2.6 (2022-08-19)
-* Fix bug #208 introduced in 0.2.5 It was impossible to open an internal link because of the plugin
-
-* Internal changes
-  * Use dataview package to communicate with dataview plugin
-
-### 0.2.5 (2022-08-14)
-* Move buttons 'Annotate', 'Toggle Dark Mode', 'Open as Markdown' to top of options menu
-* Video annotation
-  * fix [Video not found error](https://github.com/elias-sundqvist/obsidian-annotator/issues/198)
-  * Temporary disable video annotation on mobile devices
-
-* Internal changes
-  * CodeMirror updated to v6
-  * obsidian-api updated to 0.15.9
-  * betterer was installed with strict typing settings to make plugin more stable and reliable in a future
-
-### 0.2.4 (2022-07-23)
-* Fix [plugin fails to start on iPad](https://github.com/elias-sundqvist/obsidian-annotator/issues/176)
-
-### 0.2.2 (2022-05-14) *Minor improvement*
-* hypothes.is updated up to v1.1055.0
-
-### 0.2.1 (2022-03-06) **[BRAT](https://github.com/TfTHacker/obsidian42-brat) release** *Basic web and video annotation* 
-* `annotation-target-type` can now take on the values `web` and `video`. 
-  * With `web` the annotation target can (in theory) be any website. Some work better than others. Link navigation does not work. 
-  * With `video`, only youtube links are supported. In order to use this feature, a link to a zip file with the annotator.tv resources must be provided in the plugin settings. It cannot be bundled with the plugin since that would most likely violate copyright. 
-    * You can ask someone for a link, or generate it yourself by making an account at annotate.tv, signing in, going to https://annotate.tv/videos/620d5a42b9ab630009bf3e31#, and downloading the website using the [Save All Resources](https://chrome.google.com/webstore/detail/save-all-resources/abpdnfjocnmdomablahdcfnoggeeiedb?hl=en) chrome extension, uploading it to google drive, and [generating a direct link](https://sites.google.com/site/gdocs2direct/). 
-  * Other improvements:
-    * Some behind-the-scenes changes have been made so that the hypothes.is version can be more easily upgraded in the future. 
-
-### 0.2.0 (2022-01-26) **[BRAT](https://github.com/TfTHacker/obsidian42-brat) release** *Improved markdown rendering, epub reader* 
-* Markdown in the hypothesis sidebar should now fully support the regular obsidian syntax. (including links, embeds, custom codeblocks etc.)
-* Several Epub improvements, Thanks to @aladmit for these!
-  * New option added for font size scaling (See PR #127)
-  * New "epub reader mode" setting added. Infinite scrolling is now supported! (See PR #114)
-  * Reduced page padding so that maximum available space is used. (See PR #126)
-  
-### 0.1.9 (2022-01-17) *Minor fix* 
-* Removed sentry logging, again, (See issue #97)
-
-### 0.1.8 (2022-01-16) *Minor fixes, added default annotation mode setting* 
-* Fixed issue with pane loading on startup
-* Fixed some issues with epub highlighting
-* Added setting to choose default annotation mode, Thanks to @aladmit for the PR! (See PR #113)
- 
-### 0.1.7 (2022-01-14) **[BRAT](https://github.com/TfTHacker/obsidian42-brat) release** *chinese file name support* 
-* Fixed issue with chinese file names, as discussed in issue #53
- 
-### 0.1.6 (2022-01-12) **[BRAT](https://github.com/TfTHacker/obsidian42-brat) release** *Live Preview Drag and Drop fix + chinese character support* 
-* Drag and drop should now work in live preview (See issue #103)
-* Upgraded pdf.js to a newer version.
-  * Improved character support. (Japanese and Chinese letters should now work), (See issue #53)
-* Removed sentry logging (See issue #97)
- 
-
-### 0.1.5 (2021-12-19) *Quick fix*
-* Apparently the previous update broke some of the old annotations for some people (See issue #95). This version hopefully fixes that.   
-
-### 0.1.4 (2021-12-18) *Fix Issue With Ipad + Windows/Android compatibility.*
-* See issue #70, Thanks to @jonasmerlin for the fix! 
- 
-### 0.1.3 (2021-09-12) *Basic CORS support for desktop*
-* Added a basic workaround for CORS issues. This should make more links possible to view. (See issue #15)
-  * Note that this workaround only works on the desktop version of obsidian.
- 
-### 0.1.2 (2021-09-11) *Quick Fix*
-* Fixed critical bug that prevented any annotations from being saved. (See issue #61)
-
-### 0.1.1 (2021-09-10) *Drag & Drop Fixes, Open links in new pane, Multi-Line Comments Fix*
-* Drag and drop has been improved. The drop handlers are now unloaded when the plugin is unloaded. The issues regarding interferrence with other Drag and Drop functionality are hopefully also resolved.  (See Issue #50)
-* Using an array format for the annotation target should now work. This improves compatibility with MetaEdit (See Issue #51)
-* Holding <kbd>ctrl</kbd> and clicking links (or clicking with the mouse-wheel) now opens annotations in a new pane. (See Issue #54)
-* Issue with multi-line comments should be resolved. (See Issue #47)
-* A new command (`Toggle Annotation/Markdown mode) has been added. This can be bound to a hotkey in obsidian, enabling more efficient switching between the two modes. (See issue #39)
-* Other things
-  * A basic unit-test for annotation loading has also been added. More tests will be added as issues arise. This will guarantee that the plugin becomes increasingly stable over time.
-
-### 0.1.0 (2021-09-03) *Added annotation highlight drag and drop*
-* By holding the <kbd>shift</kbd> key you can now drag highlights from the epub/pdf into a separate Obsidian note, and a link to the highlight will be inserted. 
-  ![highlight drag and drop](https://user-images.githubusercontent.com/9102856/132098957-e6850c9f-77a0-4fd5-91ac-e7095cfbea9d.gif)
-
-### 0.0.9 (2021-09-03) *Quick fix for annotation id bug*
-* See #37
-
-### 0.0.8 (2021-09-03) *Added Pre/Postfix setting toggles, Fixed scrolling issue, More size reductions.*
-* The plugin is now available in the community plugins list! 
-* The Pre- and Postfix parts of the annotation markdown can now be disabled in the settings. (See #30)
-* Clicking a PDF annotation link now causes an immediate jump to the annotation. No more glitchy scrolling. (See #21)
-* Potential fix to the memory leak mentioned in #28 added.
-* Added core-js. Will hopefully mean that the plugin works with older versions of node (see #34)
-* Disabled global WebSocket override. Should resolve issues with Obsidian Sync (see #36)
-* Further size reductions of the plugin
-  * React is now built in 'production' mode.
-  * All the embedded resources now use the highest zip compression ratio.
-
-### 0.0.7 (2021-09-01) *Added Custom Default Path setting, Page notes fix, Slight JSON size reduction, etc.*
-* Added a new setting called `Custom Default Path`. See [this comment on #19](https://github.com/elias-sundqvist/obsidian-annotator/issues/19#issuecomment-909549603) for more info. 
-* Top-level values in the annotation JSON will now be ommited if their values are "unsurprising". See #24
-* Fixed page notes breaking the loading of annotations.
-* Made the `Post to...` button always say `Post to Only Me` to reduce privacy confusion. 
-* Further reduced plugin size
-  * Switched from base64 to full unicode encoding
-  * Added minimization of resources before zip generation
-  * Added minimization of final rollup output
-* Minor fixes
-  * Removed warning about websocket userid mismatch
-  * Added possible fix to #13
-
-### 0.0.6 (2021-08-30) *`file:` protocol support, various url fixes, privacy improvements, minor fixes*
-* Fixed so that no initial http request is made to the hypothes.is servers. 
-* Hypothes.is performance trackers removed. 
-* No more error messages from the websocket api. 
-* The stored annotations no longer reference the sample pdf url, since that confused some users. (See issue #7)
-* Initial support for `file:` protocol links added. (Has not been tested much yet.)
-* The placeholder staus bar text has been removed (See issue #17)
-
-### 0.0.5 (2021-08-26) *Fixed EPUB bug, minor file restructuring*
-* The files necessary for the epub reader were `.gitignore`d, which prevented it from working in the previous releases.  (See issue #6)
-* The code files has been moved to the `src` directiory so that the repo looks a bit less messy. 
-
-### 0.0.4 (2021-08-26) *Chinese File name support*
-* Added support for chinese file names. (See issue #4)
-
-### 0.0.3 (2021-08-26) *Plugin Size Reduction*
-* Removed some unnecessary files to reduce plugin size.
-
-### 0.0.2 (2021-08-26) *Minor fixes*
-* Removed logging, 
-* Simplified link handling
-* viewer height is now 100% instead of fixed to 1000px. 
-
-### 0.0.1 (2021-08-25) *First Release*
-* Basic functionality of the plugin implemented
+[CONTRIBUTING.md](CONTRIBUTING.md) says how the repository is laid out and how
+to build, test and check the proofs. Bugs, questions and suggestions are
+welcome as [issues](https://github.com/elias-sundqvist/obsidian-annotator/issues).
+What changed in each version is in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
-> Note: The files under the `resources` folder are scraped from the web. Each website has its licence file attached in the associated folder.
-
-[Obsidian Annotator](https://github.com/elias-sundqvist/obsidian-annotator) is licensed under the GNU AGPLv3 license. Refer to [LICENSE](https://github.com/elias-sundqvist/obsidian-annotator/blob/master/LICENSE.TXT) for more information.
-
+Annotator is licensed under the GNU AGPLv3: see [LICENSE.TXT](LICENSE.TXT).
+The licences of the code it bundles are attached to each release.
 
 ## Support
 
-If you want to support me and my work, you can [sponsor me on Github](https://github.com/sponsors/elias-sundqvist) (preferred method) or donate something on [**Paypal**](https://www.paypal.com/donate/?hosted_button_id=C5MBC9YBWTYEC).
-
+If you want to support me and my work, you can
+[sponsor me on GitHub](https://github.com/sponsors/elias-sundqvist) (preferred)
+or donate on [PayPal](https://www.paypal.com/donate/?hosted_button_id=C5MBC9YBWTYEC).

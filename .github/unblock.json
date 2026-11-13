@@ -1,0 +1,1222 @@
+{
+  "format": "unblock/v1",
+  "title": "Annotator native reader: what remains",
+  "view": {
+    "collapsed": []
+  },
+  "tasks": [
+    {
+      "id": "landed",
+      "title": "Landed this round (local, unpushed)",
+      "dependsOn": [],
+      "notes": "What experiment/native-design already has, for context. Commits c23cd03..ce9bb24."
+    },
+    {
+      "id": "landed-page-colours",
+      "title": "Page colours for PDF and EPUB (Auto, Light, Sepia, Dark)",
+      "status": "done",
+      "parent": "landed",
+      "dependsOn": [],
+      "estimate": 1,
+      "notes": "a2199fc. Auto follows the app; PDF takes the theme background."
+    },
+    {
+      "id": "landed-epub",
+      "title": "Book reader redesign",
+      "status": "done",
+      "parent": "landed",
+      "dependsOn": [],
+      "estimate": 1,
+      "notes": "a2199fc, 95b3813."
+    },
+    {
+      "id": "landed-video",
+      "title": "Video reader redesign, desktop and phone",
+      "status": "done",
+      "parent": "landed",
+      "dependsOn": [],
+      "estimate": 1,
+      "notes": "f386ba0, 95b3813, ce9bb24. Phone layout checked on the Android emulator; playback not exercised there."
+    },
+    {
+      "id": "landed-areas",
+      "title": "Area notes v1 on PDF, with keyboard and touch marking",
+      "status": "done",
+      "parent": "landed",
+      "dependsOn": [],
+      "estimate": 1,
+      "notes": "21ca053, 5f8c695."
+    },
+    {
+      "id": "landed-codec-speed",
+      "title": "Codec speed-ups that are proved",
+      "status": "done",
+      "parent": "landed",
+      "dependsOn": [],
+      "estimate": 1,
+      "notes": "84725a6, f5d9a4e: 153 laws, 56 negative controls. Unproved fast paths are in the code but off."
+    },
+    {
+      "id": "proofs",
+      "title": "Prove before enabling (Bend)",
+      "dependsOn": [],
+      "notes": "Rule from the user, 2026-11-11: an unproved fast path stays off until a law covers it. Each task here ends with the law in LAWS.bend, its proof in PROOF.bend, a negative control that fails for that law, and an independent review before the default changes."
+    },
+    {
+      "id": "proof-window-inspect",
+      "title": "Conservation theorem: a windowed re-inspection equals the whole scan",
+      "status": "done",
+      "parent": "proofs",
+      "dependsOn": [],
+      "estimate": 8,
+      "assignee": "recognizer session",
+      "tags": ["bend", "proof"],
+      "notes": "- [ ] Move the splice (reinspect / windowOf / revise in bridge.mjs) into a Bend definition\n- [ ] Law: for every earlier text, later text and split, a returned window result equals the whole scan of the later text\n- [ ] Each guard in `revise` is a checked hypothesis of the law or removed\n- [ ] JavaScript keeps only prefix/suffix finding and caching\nIf the argument is false somewhere, the counterexample is the result.\n\n2026-11-11: Started by the recognizer session from ce9bb24. Law shape agreed: for every list of Bend-made segments, assemble(segments) == Some ⇒ scan == Recognizer.scan(text). Conditions sent: Bend must not build the assembled text; segments frozen and never built in JS; one negative control per assemble check.\n\nDone 2026-11-12: Committed as the segments module with law segments_assemble. Reviewed by me (checker, controls, law diff, fresh-seed fuzz); an independent reader is still running. Default flips once that returns."
+    },
+    {
+      "id": "proof-window-crud",
+      "title": "Windowed create and delete carry whole-note evidence",
+      "status": "done",
+      "parent": "proofs",
+      "dependsOn": ["proof-window-inspect"],
+      "estimate": 5,
+      "assignee": "recognizer session",
+      "tags": ["bend", "proof"],
+      "notes": "- [ ] Law lifting SourceCrud.create on the stretch to CreationReady for the whole note\n- [ ] Duplicate-ID check against earlier annotations inside what is proved\n- [ ] Delete on the stretch equals Recognizer.delete on the whole note\n- [ ] Remove the JS-built CreationReady in createInSource\n\nDone 2026-11-12: Proof session's step 2: laws segments_create, segments_delete, segments_same_text; 12 negative controls. Reviewed here: law statements, bridge use (one comparison owed each time, frozen Bend-made values only), full verifier, and a fresh-seed fuzz of 6,300 creates and deletes against the whole-note answers."
+    },
+    {
+      "id": "enable-windows",
+      "title": "Turn on the proved stretch scan (inspections.windows)",
+      "status": "done",
+      "parent": "proofs",
+      "dependsOn": ["proof-window-inspect"],
+      "estimate": 2,
+      "tags": ["review"],
+      "notes": "Flip the default once the independent read of segments_assemble is back; update the 'as shipped' test, README and RECOGNIZER.md with re-measured timings.\n\nDone 2026-11-12: On as shipped after my review and an independent read of the proof (sound, complete; every scanner function has its move lemma). The reader found the bridge would accept a look-alike segment through a test export; now only segments minted from Bend are used. Edit: 2.4 ms at 200 annotations, 31 ms at 5,000."
+    },
+    {
+      "id": "proof-context-fast",
+      "title": "context_fast: assessed, stays parked",
+      "status": "done",
+      "parent": "proofs",
+      "dependsOn": [],
+      "estimate": 3,
+      "assignee": "recognizer session",
+      "tags": ["bend", "proof"],
+      "notes": "Assessed by the proof session (context-fast-assessment.md in its notes): the law is true but needs 60 to 100 lemmas about trimming and reversing strings, more than the whole scan-in-stretches proof, for about 10 µs per annotation at load (roughly 50 ms of a 940 ms open at 5,000 annotations) and nothing for edit, create or delete. Decision: not worth it now. The code stays parked: defined, compared with the exact definition in tests, never called. What runs is context_exact. Reopen if open time becomes the target."
+    },
+    {
+      "id": "native-lines-decision",
+      "title": "Native line split: a provable check, or leave it off for good",
+      "status": "done",
+      "parent": "proofs",
+      "dependsOn": [],
+      "estimate": 3,
+      "tags": ["bend", "proof"],
+      "notes": "JavaScript cannot be proved in Bend. Either Bend accepts host-supplied lines behind a check that a law shows sufficient, with the speed kept, or `inspections.lines` stays off and the switch and its code are removed. Staying off is an acceptable outcome.\n\nDone 2026-11-12: Decided: removed. No sufficient check cheaper than decoding exists, so it could never be turned on under the prove-first rule; the switch, readsOf and scan_reads are gone (e931ce7)."
+    },
+    {
+      "id": "bend-area",
+      "title": "Area geometry as a Bend module with laws",
+      "status": "done",
+      "parent": "proofs",
+      "dependsOn": [],
+      "estimate": 3,
+      "tags": ["bend"],
+      "notes": "area.ts is TypeScript with tests today. Laws: a fitted region lies within the page; corner order does not matter; the fragment text reads back to the same region. Then area.ts calls it through reader.mjs.\n\nDone 2026-11-12: area.bend + 21 laws; fitArea/parseArea go through reader.mjs; areaMove/areaResize exposed (commit 0f61cc5)"
+    },
+    {
+      "id": "bend-reader-logic",
+      "title": "Move the remaining pure reader logic to Bend",
+      "status": "done",
+      "parent": "proofs",
+      "dependsOn": ["bend-area"],
+      "estimate": 3,
+      "tags": ["bend"],
+      "notes": "Candidates: video timeline extent and marker order, book progress, note gist, attachment naming. Decide per item whether a law says anything useful; drawing code stays TypeScript. STARTED 2026-11-13, not finished: book progress. A module (total, before, place: the place of the character so many characters into a book, and the characters before a place) type-checks and is kept outside the repository at /tmp/claude-501/wip/book.bend. Laws intended: before(lengths, place(lengths, at)) == min(at, total(lengths)), and the place is a real place. The structural definitions take 5000 chapters and overflow the stack at 20000; Bend does not allow a match on a computed value, so a one-pass form needs its own def and an equality law, as stroke.bend's thin_fast has. The TypeScript it would replace: bookPlace in src/progress.ts and updateProgress in src/epub.ts.\n\nDone 2026-11-13: Decided per item. Book progress: moved and proved (proofs/book.bend: book_place_exact, book_place_real; the percentage shown and the place a percentage resumes to both come from it; three negative controls; bridge test against the reader's old arithmetic, including a 7001-chapter book taken 2000 chapters at a time). Video timeline extent and marker order: arithmetic on fractions of seconds and percentages; the one property worth a law (the track is at least as long as its last note) is a single max, and it is tested: stays TypeScript. Note gist: text clean-up by patterns for a tooltip; a law would say nothing a test does not: stays TypeScript. Attachment naming: the path is Obsidian's own choice (getAvailablePathForAttachment); nothing of ours to prove. 187 laws, 92 negative controls."
+    },
+    {
+      "id": "video-codec-linear",
+      "title": "Video codec: one-pass duplicate check and cheap evidence",
+      "status": "done",
+      "parent": "proofs",
+      "dependsOn": [],
+      "estimate": 3,
+      "tags": ["bend"],
+      "notes": "video_document.bend still compares IDs pairwise; video_source_crud.bend and leaves.bend still build equality evidence bit by bit (Evidence.string). Port the proved recognizer versions.\n\nDone 2026-11-13: The video note's duplicate check is one pass (the recognizer's set of IDs), proved equal to the pairwise definition for every list of parts (law video_errors_pairwise, one negative control): 128 ms → 2 ms for 1000 parts, 1 s → 6 ms for 3000. The certificates of a video create, a video edit and a split into leaves are now the equation String.eq(..) == True (Evidence.same) instead of an equality built bit by bit (Evidence.string); string_same turns them into the same equalities the laws stated before. An edit scans the edited text once. Through the reader's codec, a note of 500 video annotations: read 49 → 20 ms, create 315 → 109 ms, edit 289 → 123 ms, delete 99 → 39 ms. Left as it is: video_header.bend still uses Evidence.string, on one header line; the scan (about 40 µs an annotation) is still made several times for one change, where the note codec passes one scan along. 188 laws, 93 negative controls; reader suite 630 pass."
+    },
+    {
+      "id": "kernel-verdict",
+      "title": "Run the independent kernel check (`bend --verdict`)",
+      "status": "done",
+      "parent": "proofs",
+      "dependsOn": [],
+      "estimate": 1,
+      "tags": ["needs-user"],
+      "notes": "Needs Lean v4.34.0 installed (elan toolchain leanprover/lean4:v4.34.0), which is a download: ask first. PREPARED 2026-11-13: proofs/verify.mjs runs bend PROOF.bend --verdict when lean is on the PATH (or BENDTT names a built kernel) and requires it to pass; without Lean it prints that the step was skipped, and BEND_VERDICT=1 makes a missing Lean a failure. Tried here: bend reports 'the kernel did not build (lean: Executable not found)'. STILL TO DO once Lean may be installed: run it, and decide whether CI should install Lean and set BEND_VERDICT=1.\n\nDone 2026-11-13: Run 2026-11-13 (owner approved installing Lean): Lean 4.34.0 through elan (with the Lean project's own installer). bend PROOF.bend --verdict built its kernel (~/.bend/bendtt) and printed ALL PROOFS CHECK for all 182 laws; npm run proofs now includes it ('Kernel verdict: the proofs check a second time'). The verifier finds Lean on the PATH, in ~/.elan/bin, or a kernel Bend already built. CI installs Lean, caches it with the kernel and sets BEND_VERDICT=1 (not yet run on GitHub)."
+    },
+    {
+      "id": "enable-operations",
+      "title": "Turn on create and delete on a stretch once proved",
+      "status": "done",
+      "parent": "proofs",
+      "dependsOn": ["proof-window-crud"],
+      "notes": "Done 2026-11-12: inspections.operations on as shipped. Create 5.5 / 17 / 74 ms and delete 2 / 7 / 45 ms at 200 / 1,000 / 5,000 annotations (were 96 / 460 / 2,080 ms for create)."
+    },
+    {
+      "id": "bend-stroke",
+      "title": "Stroke geometry in Bend with laws",
+      "status": "done",
+      "parent": "proofs",
+      "dependsOn": ["pdf-ink"],
+      "notes": "drawing.ts strokePieces/drawingArea are TypeScript with tests. Move holding points on the page, thinning and the bounding region into a Bend module with laws (every point within the page; thinning returns a sublist that keeps both ends; the region covers every point). Mind stack depth: long strokes need tail-recursive definitions. DONE SO FAR (2026-11-12): moving a drawing is decided by the proved span functions (Area.later/earlier via reader.mjs spanShift; laws area_later_within, area_earlier_within, *_keeps_size). STILL TS: strokePieces, drawingArea, handStrokes.\n\nDone 2026-11-13: proofs/stroke.bend with seven laws, all proved: a held point is on the page and holding moves nothing that was on it; a thinned line only leaves points out (same points, same order), starts at the hand's first point and ends where the hand ended; the one-pass thinning that long lines need is equal to the defining one (the defining one overflows the stack at 8000 points; the one-pass form does 60 000 in 13 ms); the box around a line holds every point. Five negative controls. src/drawing.ts uses them through proofs/reader.mjs (strokeHeld, strokeThin, strokeBox) for holding, thinning and the bounding box; the bridge test compares the thinning with the rule the drawing code had, on 600 generated lines. Moving a drawing was proved earlier (spanShift). Still TypeScript, by nature: fractions and pressure to whole numbers, the curve through the samples, SVG text, grouping pieces into strokes. 185 laws, 89 negative controls; reader suite 630 pass."
+    },
+    {
+      "id": "areas",
+      "title": "Area notes: finish the feature",
+      "dependsOn": []
+    },
+    {
+      "id": "area-light-capture",
+      "title": "Take the picture from the light rendering",
+      "status": "done",
+      "parent": "areas",
+      "dependsOn": [],
+      "estimate": 3,
+      "notes": "Today the picture is the page as displayed, so a dark page gives a dark picture. Render the region from the PDF page itself into an offscreen canvas (light, fixed scale), independent of zoom and page colour.\n\nDone 2026-11-11: Picture drawn afresh from the PDF page on white (pdf.js render), cut to the region, long edge up to 2000 px; falls back to the displayed canvas. Checked on a dark page in the design vault: light, crisp picture."
+    },
+    {
+      "id": "area-delete-picture",
+      "title": "Deleting an area note deals with its picture",
+      "status": "done",
+      "parent": "areas",
+      "dependsOn": [],
+      "estimate": 2,
+      "notes": "Move the attachment to the trash with the annotation; Undo restores both. Never touch a picture another note also embeds.\n\nDone 2026-11-11: The area's own picture goes to the user's trash with it; Undo writes it back first. A picture embedded by any other file or annotation is left. Tested."
+    },
+    {
+      "id": "area-move-resize",
+      "title": "Move and resize a saved area",
+      "status": "done",
+      "parent": "areas",
+      "dependsOn": ["bend-area", "area-light-capture"],
+      "estimate": 5,
+      "notes": "Handles on the selected frame; keyboard equivalents; rewrites the selector and refreshes the picture. Undoable.\n\nDone 2026-11-12: Arrow keys move the focused area, Shift+arrows resize (Alt for fine steps); the selected area has a move grip and a resize grip. Every step goes through the Bend geometry (areaMove/areaResize). The stored fragment is rewritten in place and the note's own picture is retaken. Drawings are not moved this way (ink-edit)."
+    },
+    {
+      "id": "area-actions",
+      "title": "Area actions: copy image, copy embed link, open picture",
+      "status": "done",
+      "parent": "areas",
+      "dependsOn": [],
+      "estimate": 2,
+      "notes": "In the frame's context menu and the card menu.\n\nDone 2026-11-11: Copy picture, Copy picture embed, Open picture in the frame's and the card's menu; areas can be recoloured from the menu. Tested."
+    },
+    {
+      "id": "area-text",
+      "title": "Keep the words inside an area",
+      "status": "done",
+      "parent": "areas",
+      "dependsOn": [],
+      "estimate": 3,
+      "notes": "Optionally store the text layer's words within the frame so an area is searchable and exports with its text. Decide where it lives in the annotation JSON.\n\nDone 2026-11-12: When an area is marked on a PDF the words of the page's text that lie inside it are kept with the annotation (nativePdf.words: the reader's own details, not sent in Hypothesis exports). Search finds the area by them (also quote:…), its card shows them in two quiet lines, {{quote}} and the per-annotation note's passage use them, and they are read again when the area is moved. A scanned page has none."
+    },
+    {
+      "id": "area-export",
+      "title": "Areas in exports, per-annotation notes and Bases",
+      "status": "done",
+      "parent": "areas",
+      "dependsOn": [],
+      "estimate": 2,
+      "notes": "summary.ts, annotation-notes.ts (annotation-kind: area), templates ({{image}}), the annotated-source search.\n\nDone 2026-11-12: Summary, copy-as-Markdown, templates ({{image}}, {{kind}}; {{quoted}} of an area is its picture) and per-annotation notes (kind: area|drawing, image property for Bases, colour) treat areas and drawings as placed annotations in reading order."
+    },
+    {
+      "id": "area-epub",
+      "title": "Areas in books: mark an image or figure",
+      "status": "done",
+      "parent": "areas",
+      "dependsOn": ["area-move-resize"],
+      "estimate": 5,
+      "notes": "Reflowable text has no fixed page: anchor to the element (image, figure, table) rather than a rectangle. Fixed-layout EPUB can reuse the PDF path.\n\nDone 2026-11-12: Books: 'Keep a picture with a note' (bar button, mark-area command). Anchor = W3C CssSelector path of child steps (strict, never run as a selector) + the picture's file in the book (nativeEpub.src) as evidence; recovered by file when unique, never guessed. The picture's own bytes become the attachment. Framed mark in an unblended layer; card chip 'Picture'; search/exports via words. Phone bar: chapter turns hidden to fit. Not done: regions of fixed-layout pages, inline SVG drawings. 571 tests; checked on desktop and Android."
+    },
+    {
+      "id": "area-video-frame",
+      "title": "Frame notes on video",
+      "status": "done",
+      "parent": "areas",
+      "dependsOn": [],
+      "estimate": 3,
+      "tags": ["research"],
+      "notes": "A note with the frame's picture. The embedded player is cross-origin, so the frame cannot be read; find out what is possible (provider thumbnails at a time, local video files) before designing.\n\nDone 2026-11-12: Frame notes: freeze the frame, keep all or a dragged part (area.ts geometry), picture embedded at the start of the note. Local video: frame read directly (desktop and Android verified). Provider players (YouTube): desktop app pictures that part of its own window; elsewhere a plain note with an explanation. Picture discarded with a cancelled or deleted note unless used elsewhere."
+    },
+    {
+      "id": "area-scanned",
+      "title": "Scanned PDFs: areas as the way to annotate pages without text",
+      "status": "done",
+      "parent": "areas",
+      "dependsOn": [],
+      "estimate": 2,
+      "notes": "Verify marking, painting and reveal on an image-only PDF; say so in the empty state (\"No selectable text here: mark an area\"). OCR itself is out of scope (issue 397).\n\nDone 2026-11-12: Checked on an image-only PDF in the real app: an area is marked, saved with its picture (no words), painted, listed under its page and revealed from the sidebar. The empty sidebar for such a PDF says there is no selectable text and offers 'Mark an area' and 'Draw on the page'. OCR is out of scope."
+    },
+    {
+      "id": "video",
+      "title": "Video reader: finish the redesign",
+      "dependsOn": []
+    },
+    {
+      "id": "video-sidebar-unify",
+      "title": "Rebuild the video notes on the shared sidebar",
+      "status": "done",
+      "parent": "video",
+      "dependsOn": [],
+      "estimate": 8,
+      "notes": "The panel is a separate older design. Use the annotation sidebar's shell: cards with a time chip where a quote goes, inks, tags, search, the live Markdown editor, hover actions, context menu, undo. Keep the tested behaviours of video-workspace.test.mjs.\n\nDone 2026-11-11: Video notes now use the sidebar's card language (time chip, title, note, icon actions on hover) and the live Markdown editor with Mod+Enter and Escape. Not carried over: inks, tags, context menu and undo, which the video note format does not have."
+    },
+    {
+      "id": "video-duration",
+      "title": "Use the video's real length",
+      "status": "done",
+      "parent": "video",
+      "dependsOn": [],
+      "estimate": 2,
+      "notes": "Expose duration from the player session to the view; the timeline runs to the end; markers no longer move as playback advances.\n\nDone 2026-11-11: Playback exposes length(); the timeline runs to the real end (22:24 on the demo) and is rebuilt once when the player reports it."
+    },
+    {
+      "id": "video-controls",
+      "title": "Playback controls and keys",
+      "status": "done",
+      "parent": "video",
+      "dependsOn": ["video-duration"],
+      "estimate": 3,
+      "notes": "- [ ] One play/pause toggle instead of two buttons\n- [ ] Speed\n- [ ] J / K / L and arrow seeking\n- [ ] A hotkey for \"note at the current time\"\n- [ ] Click and drag on the timeline to scrub\n\nDone 2026-11-11: One of Play/Pause shown; speed menu; K or Space, J/L, arrows and N in the view; four commands for hotkeys; the track seeks on click. Not done: dragging to scrub."
+    },
+    {
+      "id": "video-composer",
+      "title": "Write a video note without leaving the picture",
+      "status": "done",
+      "parent": "video",
+      "dependsOn": ["video-sidebar-unify"],
+      "estimate": 3,
+      "notes": "\"Note at 0:12\" opens the composer under the player (sheet on a phone), pausing optionally, with the live editor.\n\nDone 2026-11-12: A new note (Note at 0:12, N, or a frame note) is written in a card under the player, with the live editor; on a phone that is directly under the picture. The video pauses while writing and goes on after saving or cancelling if it was playing; a 'Pause while writing' box, remembered on the device, turns that off. Editing a saved note stays beside its card."
+    },
+    {
+      "id": "video-transcript",
+      "title": "Transcript: selection bar and a tidy menu",
+      "status": "done",
+      "parent": "video",
+      "dependsOn": ["video-sidebar-unify"],
+      "estimate": 3,
+      "notes": "Selecting transcript text offers the same highlight/note bar as documents instead of a button; loading, language, import and save move into one menu; transcript highlights are drawn in their ink.\n\nDone 2026-11-12: Selecting transcript words shows a bar (Highlight saves at once at the cue time; Note opens a quoting note; H/A/Escape). Notes that quote the transcript are marked in it (yellow: the video format has no inks) and a mark selects its note. Options are one card; the old note button shows only while something is selected. 581 tests; checked live."
+    },
+    {
+      "id": "video-markers",
+      "title": "Timeline markers: ink colours and stacked notes",
+      "status": "done",
+      "parent": "video",
+      "dependsOn": ["video-sidebar-unify"],
+      "estimate": 2,
+      "notes": "A marker takes its note's ink; notes at the same moment show a count; hover shows the note.\n\nDone 2026-11-12: A marker's tooltip is its time and what the note says (title, or first words); notes within about 1% of the timeline share one visible marker with their number, and each is still its own keyboard stop. Not done: ink colours, because video notes store no ink (the video note format has title, time and text only)."
+    },
+    {
+      "id": "video-local",
+      "title": "Local video and audio files",
+      "status": "done",
+      "parent": "video",
+      "dependsOn": [],
+      "estimate": 5,
+      "tags": ["research"],
+      "notes": "Only YouTube is supported. Local mp4/webm/mp3 in the vault would also allow frame pictures and work offline (issue 351 is about video not working at all).\n\nDone 2026-11-12: Video and audio files in the vault (and direct https media URLs) play in the reader's own player: mp4, webm, mov, m4v, ogv and mp3, m4a, wav, flac, opus, oga, aac. A recording without a picture gets a slim player and no frame button. Frame notes read local video frames directly (desktop and Android checked)."
+    },
+    {
+      "id": "epub",
+      "title": "Book reader: finish the redesign",
+      "dependsOn": []
+    },
+    {
+      "id": "epub-toc",
+      "title": "Table of contents with nesting",
+      "status": "done",
+      "parent": "epub",
+      "dependsOn": [],
+      "estimate": 3,
+      "notes": "A panel or popover from the chapter title: nested entries, current place marked, annotation counts per chapter.\n\nDone 2026-11-12: A Contents button beside the chapter name opens a card with the publisher's contents (EPUB 3 nav and NCX), nested to their depth, the place being read marked, annotation counts per chapter, arrow keys and Escape; a book without contents lists its reading-order chapters; a bottom sheet on a phone."
+    },
+    {
+      "id": "epub-nav-bar",
+      "title": "Chapter turns and find as bar controls",
+      "status": "done",
+      "parent": "epub",
+      "dependsOn": [],
+      "estimate": 2,
+      "notes": "Chevrons beside the title; find gets an icon and Mod+F; the controls card keeps only appearance.\n\nDone 2026-11-12: Chapter turns either side of the chapter name; a find button and Mod+F open the controls with the search field ready. Find's field itself is still in the card."
+    },
+    {
+      "id": "epub-find",
+      "title": "Find in the whole book with a result list",
+      "status": "done",
+      "parent": "epub",
+      "dependsOn": ["epub-nav-bar"],
+      "estimate": 3,
+      "notes": "Done 2026-11-12: Find looks through the whole book: matches are listed under their chapters with the words around them (the first 200), each goes to its chapter and selects the words; the first match in the chapter being read shows at once. Words that mean something to a pattern are looked for as themselves. The search button and Mod+F open the field."
+    },
+    {
+      "id": "epub-typography",
+      "title": "Type choices: font, line spacing, margins, justification",
+      "status": "done",
+      "parent": "epub",
+      "dependsOn": [],
+      "estimate": 3,
+      "notes": "Issue 354 asks for font family. Publisher fonts remain an option. Layout as a segmented Scroll | Pages control.\n\nDone 2026-11-12: Reading controls gained Typeface (as published, serif, sans-serif, same as notes), Line spacing (as published, close, normal, open), Width (narrow, normal, wide; scroll layout) and Justify. Stored with the reader preferences, validated; carried out by the stylesheet over the publisher's styles; code, mathematics and drawings keep their faces; fixed-layout pages are left alone. Not done: the Layout select as a segmented control (cosmetic)."
+    },
+    {
+      "id": "epub-progress",
+      "title": "Real progress: percent, and position within the chapter",
+      "status": "done",
+      "parent": "epub",
+      "dependsOn": [],
+      "estimate": 2,
+      "notes": "The hairline is per chapter today. Use character offsets; show percent in the footer.\n\nDone 2026-11-12: Progress is by characters read across the whole book: the hairline and a percentage in the footer follow the scroll; the percentage is not announced."
+    },
+    {
+      "id": "epub-reveal",
+      "title": "Going to an annotation from the sidebar always lands on it",
+      "status": "done",
+      "parent": "epub",
+      "dependsOn": [],
+      "estimate": 2,
+      "tags": ["bug"],
+      "notes": "Issue 413 (original plugin). Verify in the native reader across chapters, in both layouts, and add a test.\n\nDone 2026-11-12: Checked in the real app on a two-chapter book: ten jumps back and forth between annotations in different chapters, five in Scroll and five in Pages layout, each landed with its mark on screen. No unit test added: landing depends on layout, which the DOM test environment does not compute; the existing reflow-anchor tests cover the logic."
+    },
+    {
+      "id": "epub-paged",
+      "title": "Paged layout: visual pass",
+      "status": "done",
+      "parent": "epub",
+      "dependsOn": [],
+      "estimate": 2,
+      "notes": "Check the new margins and top edge in paged mode and right-to-left books; page-turn zones and swipe on touch; the sliced top line while scrolling.\n\nDone 2026-11-12: Paged layout: page margins moved inside the pages (they were on the reader, which cut every page off at the right on phones and misaligned later pages); page turns counted from whole pages (a fraction of a pixel on dense screens blocked turning back); the end of a chapter restores onto its last page (turning back across a chapter landed on its first); swipe and edge-tap page turns on touch, kept from the app's drawer gesture; sideways scrollbar hidden; ink mixed for the paper actually shown (highlights were invisible on a book's own white paper in a dark app) and such paper gets margins. Checked on desktop and Android. Not checked visually: right-to-left and vertical books (logic is direction-aware and covered by existing tests)."
+    },
+    {
+      "id": "pdf",
+      "title": "PDF reader",
+      "dependsOn": []
+    },
+    {
+      "id": "pdf-dark-figures",
+      "title": "Dark pages: readable figures",
+      "status": "done",
+      "parent": "pdf",
+      "dependsOn": [],
+      "estimate": 2,
+      "notes": "Figure labels drop to about 2.6:1 on a dark page (host renderer). Offer \"keep figures light\" or tune the adjustments; document the limit.\n\nDone 2026-11-12: Measured: the host's dark leaves pictures as they are; labels in coloured boxes keep ~11:1, black line art on a clear ground drops to ~1.1:1. Added 'Darken pictures too' (Page appearance card, preference darkFigures, off by default): renderer stays light and the canvas is turned (invert(0.89) hue-rotate(180deg)), so every contrast is what it was on paper; photographs look like negatives. Marks/text layer/area pictures not turned. Tests + PDF_APPEARANCE.md + guide. Checked live."
+    },
+    {
+      "id": "pdf-page-colour-custom",
+      "title": "A custom page colour",
+      "status": "done",
+      "parent": "pdf",
+      "dependsOn": [],
+      "estimate": 1,
+      "notes": "Issue 399 asks for parchment; Sepia covers it. Decide whether a free colour is worth a control or a Style Settings variable.\n\nDone 2026-11-12: Decision: no extra control. The Sepia paper is a styling variable (--annotator-paper, and --annotator-paper-text for books), in the Style Settings block under 'Page colours' and in STYLING.md; the PDF page, the book and the swatch all take it."
+    },
+    {
+      "id": "pdf-anchors-verify",
+      "title": "Repeated text and re-highlighting",
+      "status": "done",
+      "parent": "pdf",
+      "dependsOn": [],
+      "estimate": 2,
+      "tags": ["bug"],
+      "notes": "Issues 377 (wrong occurrence when text repeats) and 408 (a deleted highlight cannot be made again) are against the original plugin. Add tests that pin the native reader's behaviour for both.\n\nDone 2026-11-12: Tests pin both: context or a stored position selects the right occurrence of repeated text (issue 377), and a deleted highlight can be captured, saved and painted again (issue 408)."
+    },
+    {
+      "id": "pdf-overview-keys",
+      "title": "Keyboard path for the overview strip",
+      "status": "done",
+      "parent": "pdf",
+      "dependsOn": [],
+      "estimate": 1,
+      "tags": ["a11y"],
+      "notes": "Done 2026-11-12: The overview strip is one slider: arrows step through annotations in reading order, Home and End jump, and it keeps the keyboard across redraws. Tested."
+    },
+    {
+      "id": "pdf-hotkeys",
+      "title": "Hotkeys while a PDF has focus",
+      "status": "done",
+      "parent": "pdf",
+      "dependsOn": [],
+      "estimate": 1,
+      "tags": ["bug"],
+      "notes": "Issue 345. Verify the reader's commands and Obsidian's own hotkeys work with focus in the page, the composer and area mode.\n\nDone 2026-11-12: Checked in the real app with focus in the PDF page: h highlights the selection, 1-6 pick the ink, a opens the composer with the editor focused, and the same keys typed in the composer are typed, not acted on. Area and drawing mode keys are covered by tests. Obsidian's own hotkeys are global and unaffected."
+    },
+    {
+      "id": "pdf-cross-page",
+      "title": "Select across a page break in a PDF",
+      "status": "done",
+      "parent": "pdf",
+      "dependsOn": [],
+      "estimate": 5,
+      "notes": "capture() accepts a selection that starts on one page and ends on a later one: one stretch of the document's text, verified anchors, painted on each page, 'Page 3–4', exported as a highlight per page; more than 20,000 characters refused. Compatibility: the original Annotator's reader (pinned Hypothesis) cannot paint over a page break; it shows such an annotation on the part that lies on one page, or not at all. Its data is untouched. The interoperability test now states this."
+    },
+    {
+      "id": "pdf-ink",
+      "title": "Draw on PDF pages (freehand ink)",
+      "status": "done",
+      "parent": "pdf",
+      "dependsOn": ["bend-area", "pdf-export"],
+      "notes": "User request 2026-11-12: people should be able to doodle on PDFs, and the drawings must come out in the PDF export. Pen with the six inks and a few widths, eraser, undo; pointer, touch and stylus (pressure where the device gives it). Stored as an annotation with an SvgSelector in page units beside a FragmentSelector for its bounding box, so it stays ordinary annotation JSON. Stroke geometry (bounds, simplification, unit conversion) in Bend with laws.\n\nDone 2026-11-12: Draw on PDF pages: header action, command, toolbar (six inks, three pens, eraser, undo, done/cancel). Pen-grade: every sample, pressure-stepped line width, fast strokes smoothed, palm rejection with finger panning, pen eraser end. Stored as FragmentSelector (region) + strictly parsed SvgSelector (strokes in tenths of a point); painted from numbers only. Shown on the page, on the sidebar card, and written into the exported PDF as Ink (verified with PDFKit). Works by touch on Android."
+    },
+    {
+      "id": "ink-edit",
+      "title": "Edit a saved drawing: erase strokes, add to it, move it",
+      "status": "done",
+      "parent": "pdf",
+      "dependsOn": ["pdf-ink"],
+      "notes": "Done 2026-11-12: Select a drawing: grip/arrow keys move it (clamped to the page); pencil, Enter or double-click opens it: erase whole strokes (segment hit-test), add strokes, change ink, undo any change, Delete drawing when empty. Rewritten in place (strokes, region, ink only). 567 tests; checked live."
+    },
+    {
+      "id": "import-the-annotations-a-pdf-alr",
+      "title": "Import the annotations a PDF already has (from other programs)",
+      "status": "done",
+      "parent": "pdf",
+      "dependsOn": ["pdf-ink"],
+      "notes": "Asked by the user 2026-11-12. Read /Annots through the PDF library (page.getAnnotations): Highlight/Underline/StrikeOut/Squiggly quads -> text under them -> quote highlight; Text -> page note; Square/Circle/FreeText -> area; Ink -> drawing; IRT -> replies. Skip names starting annotator- (our own export); remember the /NM of imported ones so a second import adds nothing. One-way: the original PDF is not changed.\n\nDone 2026-11-12: pdf-read.ts reads /Annots with the reader's own PDF parser (Highlight/Underline/StrikeOut/Squiggly/Text/FreeText/Square/Circle/Ink; popups, links, widgets, hidden, review states skipped). pdf-import.ts maps them (quads -> text range, inverse of the export geometry; shapes/sticky -> areas; ink -> drawing; IRT -> replies; nearest ink). Sidebar offers when a PDF holds foreign annotations; command + menu. nativePdf.from remembers the source so a second import adds nothing and export replaces the original (with its pop-up) instead of duplicating. Underline/strike-out/squiggly round-trip via tags. Fixture annotated with Apple PDFKit; 580 tests; verified live and re-rendered with PDFKit. The PDF file itself is never changed."
+    },
+    {
+      "id": "issues-page-notes-page",
+      "title": "Page notes that know their page or chapter",
+      "status": "done",
+      "parent": "pdf",
+      "dependsOn": [],
+      "notes": "Closes GitHub issues #57, #163, #182 (ISSUE_PLAN.md). A page note written while a PDF page or a book chapter is in view keeps that place (an extra field in the annotation JSON, which the original plugin preserves and ignores; or an optional page selector). The card shows \"Page 12\" and clicking it goes there; the sidebar can group page notes by page. Notes without a place stay as they are.\n\nDone looks like: New page notes carry the page or chapter; clicking one goes there; old page notes unchanged; the original plugin still reads the note (interoperability test); a test pins it.\n\nDone 2026-11-12: A page note begun on a PDF page keeps it (nativePdf.page; the original plugin preserves and ignores the field). Its card shows a 'Page N' chip that goes there; a book's chapter notes show their chapter the same way (they already knew it). In an exported PDF the note's sticky sits on its page. Old page notes unchanged. Tests + live check. Closes #57, #163, #182."
+    },
+    {
+      "id": "issues-pdf-metadata",
+      "title": "PDF title, authors and year into the note's properties",
+      "status": "done",
+      "parent": "pdf",
+      "dependsOn": [],
+      "notes": "Closes GitHub issues #18 (ISSUE_PLAN.md). A command \"Add the PDF's details to the note\" that reads the document information and XMP through the host's PDF.js (title, author, subject, keywords, creation date, and a DOI if the metadata has one) and writes the ones the note does not yet have as properties. No network lookup.\n\nDone looks like: Command fills properties without overwriting; test on a fixture PDF with and without metadata; the `{{title}}`/`{{author}}` placeholders become available to exports and the link template.\n\nDone 2026-11-12: pdf-details.ts reads title, authors, year, DOI, subject, keywords from the document information and XMP (program-made titles left out; no network). Command and sidebar menu item 'Add the PDF's details to the note' write the missing ones as properties without overwriting. {{title}}, {{author}}, {{year}} available to export templates. Tests + live check. Closes #18."
+    },
+    {
+      "id": "quality",
+      "title": "Accessibility, themes and polish",
+      "dependsOn": []
+    },
+    {
+      "id": "a11y-screenreader",
+      "title": "Screen-reader walkthrough",
+      "status": "done",
+      "parent": "quality",
+      "dependsOn": [],
+      "estimate": 3,
+      "tags": ["a11y"],
+      "notes": "VoiceOver through: select, highlight, note, area by keyboard, page colours, book controls, video timeline. Fix names and states the review listed as minor (labels overridden by aria-label, aria-current on the row, doubled announcements).\n\nDone 2026-11-12: Audited what a screen reader is given on the PDF view + sidebar, drawing bar, book controls/contents/picture mode and the video view (every control's accessible name, label-in-name, live regions, images, tab order): no unnamed controls of ours. Fixed: book controls are named by their visible labels (Text size, Layout, Typeface, Line spacing, Width; were overridden by different aria-labels); video speed says its speed; the note button's name starts with its visible word; the current transcript passage is marked on the focusable element. NOT DONE: a walkthrough with VoiceOver itself (needs a person at the machine)."
+    },
+    {
+      "id": "rtl-logical",
+      "title": "Right-to-left: logical properties throughout",
+      "status": "done",
+      "parent": "quality",
+      "dependsOn": [],
+      "estimate": 2,
+      "tags": ["a11y"],
+      "notes": "Remaining physical left/right in styles.css and inline styles; test with an RTL interface language and an RTL book.\n\nDone 2026-11-12: The few direction-dependent rules are logical now (selection bar divider, choice list alignment); positions on a page stay physical because the paper is. Checked the PDF reader and sidebar in a right-to-left interface: the layout mirrors, ink bars and tabs follow. A card's passage and note now take their own direction (dir=auto), so an English passage in a right-to-left interface keeps its full stop at the end. Not checked: an RTL book in the EPUB reader on a device."
+    },
+    {
+      "id": "style-settings",
+      "title": "Check the Style Settings block in the real plugin",
+      "status": "done",
+      "parent": "quality",
+      "dependsOn": [],
+      "estimate": 1,
+      "tags": ["needs-user"],
+      "notes": "The block has 'Highlight strength on dark pages' (--annotator-mark-opacity-dark) and a 'Page colours' section (--annotator-paper, --annotator-paper-text). 2026-11-13: checked without the plugin by test/style-settings.test.mjs (the block parses as the YAML Style Settings reads; each setting has what its type needs; every variable is declared on body and read by a rule; every class has rules matched from body; each default is the value the stylesheet already has; the six inks are written as r, g, b the way the rules use them). The block's id is now the plugin's id, obsidian-annotator. Still to do: install the Style Settings plugin in the design vault and see it render and apply. Installing is a download: needs the user's go-ahead.\n\nDone 2026-11-13: Checked 2026-11-13 with Style Settings 1.0.9 in the design vault (owner approved the install): the block parses with no error as section 'Annotator' with 20 settings; every kind applies (slider, select, themed colour as r,g,b for the active theme, text, number, colour, both class toggles) and the reader follows (ink bars and card actions changed on screen); Reset returns every value to the stylesheet's own. Static test: test/style-settings.test.mjs."
+    },
+    {
+      "id": "themes-pass",
+      "title": "Theme pass over the new screens",
+      "status": "done",
+      "parent": "quality",
+      "dependsOn": [],
+      "estimate": 2,
+      "notes": "Area frames, the marking hint, page-colour card, book card, video timeline under the six installed themes, light and dark; contrast probe.\n\nDone 2026-11-12: Contrast probe over Default, Mado 11, Obsidianite, Primary, Shiba Inu, light and dark, for the screens added this round (drawing bar, drawing pencil, picture choosing, kept-picture frame, import offer, transcript bar/marks/options, area words). Fixed: picture offer outline now the page's text colour (was the accent: 1.7:1 in Primary dark), frame mixed toward the page's shade, area words and transcript help muted instead of faint (2.1:1 -> >=3.7). All probed text >= 4.1:1 except themes' own muted colours."
+    },
+    {
+      "id": "escape-scopes",
+      "title": "Escape and focus handled by scopes, not document listeners",
+      "status": "done",
+      "parent": "quality",
+      "dependsOn": [],
+      "estimate": 2,
+      "notes": "Area mode and the page-colour card listen on the document; one Escape can reach two things and they stay armed behind a modal. Use an Obsidian Scope and end area mode on leaf change.\n\nDone 2026-11-12: Marking modes (area, drawing) and the page-colour card answer the keyboard only when their view is in front (no dialog open, tab showing); a handled Escape stops at its handler; area marking ends when the reader goes to another tab, a drawing in progress is kept. Done with guards on the existing listeners rather than an Obsidian Scope, which the PDF host has no Component to own."
+    },
+    {
+      "id": "titles-tooltips",
+      "title": "Remaining native tooltips",
+      "status": "done",
+      "parent": "quality",
+      "dependsOn": [],
+      "estimate": 1,
+      "notes": "Elements with only a `title` still show the system tooltip; move them to the host tooltip where that does not change their accessible name.\n\nDone 2026-11-12: No element of the reader carries a title attribute any more: explanations are aria-descriptions shown through the app's tooltip (hint.ts describe()). A source scan in design.test guards it."
+    },
+    {
+      "id": "web-readers",
+      "title": "Design pass on the web readers",
+      "status": "done",
+      "parent": "quality",
+      "dependsOn": [],
+      "estimate": 5,
+      "notes": "Reading copies (snapshot) and live web pages were not part of this round: toolbar, page colours, areas over images, phone layout.\n\nDone 2026-11-12: Reading copies are Obsidian notes: checked in reading view and Live Preview (highlights show in both, sidebar works). Tidied: the sidebar and library call a reading copy by its page title (no file-name hash, no .md), and the reader's two internal properties are hidden from the Properties list. Live web pages were verified earlier (WEBSITE_LIVE_RESULTS.md) and not re-run. Not done: picture notes for images in reading copies (new task), and a phone pass of reading copies (they use the app's own reading view)."
+    },
+    {
+      "id": "links-reuse-pane",
+      "title": "Annotation links reuse the pane that already shows the source",
+      "status": "done",
+      "parent": "quality",
+      "dependsOn": [],
+      "estimate": 2,
+      "notes": "Issues 230, 321. Opening an annotation link when its source is already open should focus that pane and go to the annotation, not open another.\n\nDone 2026-11-12: A plain annotation link, the library and the search show a source in the pane where it is already open with that note's annotations; an explicit tab, split or window still opens one. Tested."
+    },
+    {
+      "id": "issues-target-forms",
+      "title": "Every common way of writing annotation-target works, and the guide shows them",
+      "status": "done",
+      "parent": "quality",
+      "dependsOn": [],
+      "notes": "Closes GitHub issues #93, #386, #202 (ISSUE_PLAN.md). Accept an embed `![[A.pdf]]` (preferences.ts annotationTarget strips `[[ ]]` but not the leading `!`), treat a non-breaking space in a file name like the space it looks like when resolving, and add a short section to GUIDE.md with the accepted forms: plain path, `[[wikilink]]`, `![[embed]]`, Markdown link, URL, and the Dataview inline field `annotation-target:: …`.\n\nDone looks like: Unit tests for `![[…]]` and for a target with U+00A0; GUIDE.md has a \"Pointing a note at its source\" section with a Dataview example.\n\nDone 2026-11-12: annotation-target accepts embeds (![[A.pdf]]), wikilinks with a place or display text, and Markdown links to vault files (percent-encoded or in angle brackets); a name that differs from a file's only by the kind of space (no-break, narrow) finds it when unique. GUIDE.md lists the accepted forms. Tests in readers.test.mjs and plugin-boundary.test.mjs. Closes #93, #386, #202."
+    },
+    {
+      "id": "issues-sidebar-on-open",
+      "title": "Setting: open the annotation sidebar with a source, or not",
+      "status": "done",
+      "parent": "quality",
+      "dependsOn": [],
+      "notes": "Closes GitHub issues #125 (ISSUE_PLAN.md). A toggle \"Open the sidebar when a source opens\" (main.ts openNoteTarget calls openSidebar unconditionally today). The command \"Show or hide the annotations sidebar\" remains for opening it later.\n\nDone looks like: Toggle present, default on; off keeps the sidebar closed on open and on following a link; test.\n\nDone 2026-11-12: Setting 'Open the sidebar when a source opens' (default on). Off keeps the sidebar closed on open; a link to one annotation still shows it. Test. Closes #125."
+    },
+    {
+      "id": "issues-note-css-class",
+      "title": "A CSS class on annotation notes",
+      "status": "done",
+      "parent": "quality",
+      "dependsOn": [],
+      "notes": "Closes GitHub issues #308 (ISSUE_PLAN.md). Add a class (e.g. `annotator-note`) to Markdown views of notes that have an `annotation-target`, in Reading view and Live Preview, and document it in STYLING.md, so snippets can style the note's quotes without fragile selectors.\n\nDone looks like: Class present in both modes, removed when the property goes; STYLING.md lists it.\n\nDone 2026-11-12: Markdown panes of notes with an annotation-target carry .annotator-note (editor and reading view), removed when the property goes or the plugin unloads; documented in STYLING.md. Test. Closes #308."
+    },
+    {
+      "id": "issues-html-in-vault",
+      "title": "An HTML file in the vault as a source",
+      "status": "done",
+      "parent": "quality",
+      "dependsOn": [],
+      "notes": "Closes GitHub issues #262 (ISSUE_PLAN.md). Let `annotation-target` name an `.html` file in the vault (wikilink or path): open it through the same path as a saved reading copy (reading-copy.ts), so it is annotated offline and syncs. No `file://` URLs.\n\nDone looks like: An in-vault .html target opens and takes highlights on desktop and Android; test on a fixture page.\n\nDone 2026-11-12: A note whose annotation-target names an .html/.htm/.xhtml file in the vault opens a reading copy made from the file (kept beside it, made once, reused), tied to that note; annotations go into the note. The copy's source is the address the page says it was saved from (browser note, canonical, og:url, base) or an unfetchable vault.invalid address. No file:// URLs. Tests + checked on desktop (open, highlight, saved to the note). Not checked on Android. If the HTML file changes later, the copy is not remade. Closes #262."
+    },
+    {
+      "id": "picture-notes-in-web-reading-cop",
+      "title": "Picture notes on the live web page",
+      "status": "done",
+      "parent": "quality",
+      "dependsOn": ["area-epub", "web-pictures-decision"],
+      "notes": "Re-scoped 2026-11-13 by the owner's answer (the web reader is live annotation of the real page in Obsidian's Web viewer; reading copies stay text only). Done: on a live page the picture button beside the address bar (or the Mark an area command) lets the reader choose a picture; the page only offers it (place as a strict path of child steps, address, words, where it is on screen), the host checks each, takes what the Web viewer showed in that rectangle (capturePage: nothing is fetched), shows it in Obsidian's own window and keeps it on the reader's click. Kept, it is framed in its ink on the page, found again by place and address (by address alone when moved, never guessed), opens its note on click, and is listed with its picture in the sidebar. In a reading copy it has no place and says so. Checked in the real Web viewer on two Wikipedia pages; tests in test/web-figures.test.mjs and design.test.mjs. Also fixed on the way: a note read again while its own save was being read back left the new note's editor closed (loadNote now waits for the later read).\n\nDone 2026-11-13: Built and checked in the real Web viewer; 575 reader tests."
+    },
+    {
+      "id": "sidebar-note-filter",
+      "title": "Sidebar: a filter for highlights that have a note",
+      "status": "done",
+      "parent": "quality",
+      "dependsOn": [],
+      "notes": "Idea from the annotator-plus fork (All / Notes filter). Highlights with a note are already underlined (has-note in src/ink.ts, src/native-pdf.ts) and the spine marks them, but the sidebar only filters by colour (inkFilter in src/sidebar.ts). Add a 'with a note' toggle next to the colour filter in the Annotations tab, keeping page notes in their own tab. Small; not a release gate.\n\nDone 2026-11-13: A toggle before the colour swatches in the Annotations tab shows only what has something written about it: a highlight with a note, a region with words after its picture, or anything with an answer. Offered only while it would narrow the list (some have a note, some do not); page notes keep their own tab; it lets go when another source opens or an annotation is selected from the page. Test in design.test.mjs; looked at live in the dark theme."
+    },
+    {
+      "id": "web-pictures-decision",
+      "title": "Decide: may a reading copy keep the page's pictures (fetching them when the copy is made)?",
+      "status": "done",
+      "parent": "quality",
+      "dependsOn": [],
+      "notes": "Owner's decision. A reading copy is text only by design: the page's images are dropped when it is made ('Offline snapshot does not fetch tracking images', src/markdown-map.ts), so that making a copy contacts one address, once. A picture note needs a picture. Options: (a) leave copies text-only: no picture notes on web pages (books and PDFs have them); (b) when a copy is made, fetch the pictures inside the article and store them beside the copy, after asking once per site, never from another site than the page's own unless allowed; (c) only for an HTML file saved in the vault with its pictures beside it (no network at all). (b) and (c) each make picture notes possible with the code books already use (the picture's path in the page and the file it shows).\n\nDone 2026-11-13: Answered 2026-11-13 by the owner: 'the web annotator is supposed to leverage obsidian's browser. it is supposed to be real live annotations on the real webpage'. So the web reader's main form is the live page in Obsidian's Web viewer, where the page's pictures are simply there; a reading copy is the fallback where there is no Web viewer and stays text only (no picture fetching). Follow-up work: check how far live annotation goes today and make picture notes on the live page."
+    },
+    {
+      "id": "mobile",
+      "title": "Phones and tablets",
+      "dependsOn": []
+    },
+    {
+      "id": "android-notes",
+      "title": "Android: new note from a long-press selection, and saving from the sheet",
+      "status": "done",
+      "parent": "mobile",
+      "dependsOn": [],
+      "estimate": 2,
+      "notes": "Still unverified from earlier. Programmatic selection does not work in the WebView, so this needs real touches on the emulator or a device.\n\nDone 2026-11-12: Verified with real touches on the Android emulator: long-press selects a word in a PDF, the selection bar appears with the inks and Annotate, the note sheet opens with the keyboard and stays above it, typed text is saved from the sheet ('Annotation saved to Markdown')."
+    },
+    {
+      "id": "android-new-screens",
+      "title": "Android: area marking, page colours, book controls",
+      "status": "done",
+      "parent": "mobile",
+      "dependsOn": [],
+      "estimate": 3,
+      "notes": "Area drag vs page scroll and the drawer swipe; the marking hint and Cancel; the page-colour card at 360 px; the book card on a short screen.\n\nDone 2026-11-12: Checked on the Android emulator: marking an area by touch (drawer stays shut, region and picture arrive; hint no longer mentions Enter on a phone), the page-colour card (was half off-screen: now a bottom sheet clear of the gesture bar), the book's reading-controls card and eight-control bar at 412 px, drawing by touch, frame notes, PDF export."
+    },
+    {
+      "id": "android-video-playback",
+      "title": "Android: play, seek and note on a video",
+      "status": "done",
+      "parent": "mobile",
+      "dependsOn": [],
+      "estimate": 1,
+      "notes": "Layout is checked; playback, the timeline and writing a note are not.\n\nDone 2026-11-12: Android emulator, local clip: play advances the clock, seek lands (+5 s), pause, 'Note at 0:07' saves a note, its marker shows on the timeline and its card in the list. Added bottom room so the last notes scroll clear of the floating navigation."
+    },
+    {
+      "id": "ios-pass",
+      "title": "iOS pass",
+      "status": "done",
+      "parent": "mobile",
+      "dependsOn": [],
+      "estimate": 3,
+      "tags": ["needs-user"],
+      "notes": "Obsidian is not in the simulator; this needs your device or TestFlight. Safe areas, the keyboard and the sheet, container-query support, selection handles. 2026-11-13: the owner asked for a simulator pass; an Opus 5.5 session (ios-sim-pass) is installing an iOS simulator runtime and checking the reader in iOS WebKit (WKWebView harness, not Obsidian itself). Results go to docs/dev/IOS_SIMULATOR_RESULTS.md. What only the real app shows (plugin loading, the app's drawers, sync) stays a device check.\n\nDone 2026-11-13: Done 2026-11-13 as a Simulator pass (an Opus 5.5 session; iPhone 17 Pro and iPad Pro, iOS 27.0): the plugin's real main.js in iOS WebKit under capacitor://localhost against a stand-in for Obsidian, which cannot be installed there. Results: docs/dev/IOS_SIMULATOR_RESULTS.md; harness: test/support/ios. Six defects found and fixed (highlights lost after zoom, link landing on page 1, composer colour row, landscape right inset, selection bar on a docked iPad, area picture named after an internal key). Left for a real device (issues-check-ios): plugin loading (#289), the fixes inside Obsidian's own PDF view, the keyboard with the composer, pinch zoom, pen hover (#373), YouTube playback (#207, Error 153 from capacitor://)."
+    },
+    {
+      "id": "tablet",
+      "title": "Tablet layout",
+      "status": "done",
+      "parent": "mobile",
+      "dependsOn": ["android-new-screens"],
+      "estimate": 2,
+      "notes": "Sidebar docked beside the reader; the on-page composer rather than the sheet; split view.\n\nDone 2026-11-13: Checked on the Android emulator given a tablet's screen (800×1280 dp, Obsidian reports is-tablet), portrait and landscape, then returned to a phone. Before: opening a source slid the floating drawer over more than half the page, notes were written in the phone's sheet, and the drawer's toolbar squeezed the search field to nothing. Now: the drawer is docked beside the page the first time a source is opened with room for it (1000 px or wider), remembered so that a reader who undocks it is left alone; undocked, it is never opened over the page; the composer is the on-page one, placed in what is left of the pane above the keyboard; the drawer's toolbar wraps and the note toggle keeps its icon under the mobile app's button styles. Two panes side by side (a PDF and a book) each keep their highlights and the sidebar follows the active one. Test of the docking rule in plugin-boundary.test.mjs. Not checked: a real tablet, iPadOS."
+    },
+    {
+      "id": "issues-phone-fullscreen",
+      "title": "Full-screen reading on phones",
+      "status": "done",
+      "parent": "mobile",
+      "dependsOn": [],
+      "notes": "IN PROGRESS (2026-11-12). Built: command 'Read full screen', a header action on phones, an exit button, auto-exit when leaving a source or unloading; test. Checked on Android in portrait: header and navigation bar hide, the reader moves up. STILL TO DO: the reader leaves empty space at the bottom where the navigation bar was; the exit button was moved to the bottom-right and not re-checked on the device; landscape not checked; Android Back does not leave full screen; iOS unchecked. Closes #236 when finished.\n\nDone 2026-11-12: Command 'Read full screen', a header action on phones, an exit button at the bottom corner, auto-exit when leaving a source or unloading; test. Checked on the Android emulator in portrait and landscape: header and navigation bar hide, the reader fills the screen, the button brings them back. Not done: Android Back does not leave full screen (the app owns that key); iOS is for ios-pass. Closes #236."
+    },
+    {
+      "id": "storage",
+      "title": "Storage, migration and export",
+      "dependsOn": []
+    },
+    {
+      "id": "per-annotation-decision",
+      "title": "Decide: one file per annotation as a per-source choice?",
+      "status": "done",
+      "parent": "storage",
+      "dependsOn": [],
+      "estimate": 1,
+      "tags": ["needs-user"],
+      "notes": "The prototype (leaves.bend, annotation-files.ts) and its design note recommend offering it per source and keeping the single note as default. Nothing is wired in.\n\nDone 2026-11-13: Decided 2026-11-13: skipped. The owner, asked for the status: 'I'm thinking perhaps we should just skip it.' Storage stays one note per source; the one-way export to separate notes with a Base stays. Not yet decided: whether the unwired prototype (src/annotation-files.ts, its test and benchmark, proofs/leaves.bend with six laws) is removed or kept; asked, waiting for the answer."
+    },
+    {
+      "id": "migration-e2e",
+      "title": "Migration from the original Annotator, end to end",
+      "status": "done",
+      "parent": "storage",
+      "dependsOn": [],
+      "estimate": 3,
+      "notes": "Run the migration check and the reader against a copy of a real vault from the original plugin (PDF, EPUB, web, video notes); confirm the original plugin can still read notes the native reader has written.\n\nDone 2026-11-12: Design vault: original-plugin notes open unchanged and resolve (4/4, 21/21 PDF; 2/2 EPUB); the one re-pointed annotation is retained and matches the original's behaviour. Notes written by this reader (areas, drawings, book pictures, imported PDF annotations, replies, video) are read by the original plugin's parsers with identical ids/text/tags/targets; added as a test. Recorded in INTEROPERABILITY_RESULTS.md. Not done: a run inside the real original plugin UI on a user's own vault (needs the user's vault)."
+    },
+    {
+      "id": "export",
+      "title": "Export: formats people ask for",
+      "status": "done",
+      "parent": "storage",
+      "dependsOn": ["area-export"],
+      "estimate": 3,
+      "notes": "Issue 400. Markdown summary exists; check templates with areas and video notes, and decide on CSV / Hypothesis JSON.\n\nDone 2026-11-12: Decision: no CSV. What people ask for is covered: a Markdown summary (three styles and templates, with {{image}} and {{kind}} for areas and drawings), one note per annotation with a Base (tables, filters, and the Base's own export), Hypothesis JSON for other annotation tools, and now the PDF itself with its annotations inside. Video notes are already readable Markdown blocks in their note."
+    },
+    {
+      "id": "external-sources",
+      "title": "Sources outside the vault and remote files",
+      "status": "done",
+      "parent": "storage",
+      "dependsOn": [],
+      "estimate": 2,
+      "tags": ["bug"],
+      "notes": "Issues 364 and 398: files not in the vault, and \"Failed to fetch\". Pin what the native reader does and say it in the UI.\n\nDone 2026-11-12: What the reader does, pinned: a file on the internet or on this computer outside the vault is fetched or copied once into 'Annotator sources' after a dialog that says so (and can be allowed per site); on a phone a file: source says to open it on desktop first. A failed fetch says why (unreachable, not found, needs a sign-in, server failed, not a PDF) and that nothing was downloaded or the copy in hand is unchanged. Fetching goes through the app's own request, so the browser's 'Failed to fetch' (issue 398) cannot occur. Tests pin the wording."
+    },
+    {
+      "id": "perf-large",
+      "title": "Loading and startup time",
+      "status": "done",
+      "parent": "storage",
+      "dependsOn": [],
+      "estimate": 3,
+      "notes": "Issue 401. Measure plugin load and first open; loading an annotation is about 63 µs and the scan dominates a cold open. Lazy-load the Bend modules per reader.\n\nDone 2026-11-12: Measured in the real app (desktop): enabling the plugin took 71 to 79 ms (median 74); a 1.24 MB bundle whose evaluation alone is about 37 ms. The CSS grammar (css-tree's lexer, 15% of the bundle) and the unzipper are now loaded when a book first needs them: evaluation 37 -> 29 ms, enabling 57 to 72 ms (median 67). First open of an annotated PDF: annotations loaded at 83 ms, first highlight painted at 358 ms; a book shows its first text 46 ms after opening. Not done: making the whole EPUB, web and video readers load on demand (needs shell views), and the Markdown parser (used synchronously by reading copies). Bend modules are 27% of the bundle; the three video modules each carry their own copy of shared code."
+    },
+    {
+      "id": "damaged-notes",
+      "title": "A damaged block must not hide the whole note",
+      "status": "done",
+      "parent": "storage",
+      "dependsOn": [],
+      "estimate": 5,
+      "notes": "Issues 194, 301, 306 (and 152, 47): one malformed annotation block makes the whole read fail. Show the readable annotations, name the damaged block and its line, and offer to open the note there. Never rewrite the note to repair it without being asked.\n\nDone 2026-11-12: readSome: a note with a damaged block still loads its readable annotations; the sidebar says what is damaged with a button to each line; every write path refuses the note until it is repaired. Nothing is rewritten."
+    },
+    {
+      "id": "perf-idle",
+      "title": "Idle cost: no timers when nothing can change",
+      "status": "done",
+      "parent": "storage",
+      "dependsOn": [],
+      "estimate": 3,
+      "notes": "Issues 264, 272, 315. The reader polls on 750 ms and 1000 ms timers (PDF document check, sidebar position, web guest). Profile an idle vault with a PDF open; replace polling with events where the host has them, and stop timers for hidden views.\n\nDone 2026-11-12: Measured in the real app with one PDF open, idle for 10 s: the PDF document check costs 0.13 ms per tick (1.3/s) and the tab binder 0.12 ms (1/s): about 0.03% of one core. So the timers were never heavy, but they woke the app 2 to 4 times a second forever. Now every timer rests while the app's window is hidden, and the PDF check and the sidebar's position marker rest while their view is in a tab that is not showing. Not done: replacing the timers with events; the host has no event for 'the PDF viewer swapped its document'."
+    },
+    {
+      "id": "pdf-export",
+      "title": "PDF export with annotations",
+      "status": "done",
+      "parent": "storage",
+      "dependsOn": [],
+      "estimate": 5,
+      "notes": "User request 2026-11-12: export a PDF with the annotations embedded. Issues 25, 102, 110, 252, 389. Highlights as real PDF Highlight annotations with the note as their contents, area notes as Square annotations, page notes as Text annotations, drawings as Ink annotations, so any PDF reader shows and edits them. Written by appending an incremental update to the original bytes (no re-encoding of the document). Markdown export already exists.\n\nDone 2026-11-12: Export PDF with annotations (command + sidebar menu): a copy beside the PDF, original bytes + an incremental update. Highlights (QuadPoints, appearance multiplied onto the page, note as Contents), areas as Square, document notes as Text, Ink supported by the writer for drawings. Read back with Apple PDFKit and pdf.js; classic and compressed (object/xref stream) structures tested; encrypted and damaged files refused. Works on Android."
+    },
+    {
+      "id": "issues-link-template",
+      "title": "A template for copied and dragged annotation links",
+      "status": "done",
+      "parent": "storage",
+      "dependsOn": ["issues-pdf-metadata"],
+      "notes": "Closes GitHub issues #91, #280 (ISSUE_PLAN.md). One setting, \"Copied link\", that takes the export placeholders (`{{quote}}`, `{{link}}`, `{{location}}`, `{{note}}`, `{{date}}`, and `{{title}}`/`{{author}}` once PDF metadata exists) and is used by the card's link button, the drag, and \"Copy link to selected annotation\". Default stays the current form.\n\nDone looks like: Setting in place; drag, copy and the command all use it; a test fills the template; default output byte-identical to today.\n\nDone 2026-11-12: Setting 'Copied link': empty copies the plain link (unchanged); a template may use {{link}} with {{quote}}, {{note}}, {{location}}, {{date}}, {{tags}}, {{title}}, {{author}}, {{year}}. Used by the card's link button, the drag, and the 'Copy link to selected annotation' command. Test. Closes #91, #280."
+    },
+    {
+      "id": "issues-note-heading",
+      "title": "Where new annotations are written in their note",
+      "status": "done",
+      "parent": "storage",
+      "dependsOn": [],
+      "notes": "Closes GitHub issues #124, #167 (ISSUE_PLAN.md). A setting for the heading a new annotation note starts with (default \"# Annotations\") and an optional template note for new annotation notes, so properties and a heading such as \"## Highlights\" are in place before the first block; new blocks keep being appended at the end. Writing into the middle of a note (after a chosen heading) is a change to the proved create operation and is left out unless the owner wants it.\n\nDone looks like: New notes are made from the setting or template; blocks append after it; existing notes untouched; a test pins it.\n\nDone 2026-11-12: Settings 'New annotation notes start with' (heading, default '# Annotations', may be empty) and 'Template for new annotation notes' (a note whose properties and text the new note starts as; {{title}}, {{date}}, {{target}} filled; the target property added or put right). Annotations are still appended at the end; writing into the middle of a note is left out (it changes the proved create operation). A missing template or one that already holds annotations is not used and says so. Tests. Closes #124, #167."
+    },
+    {
+      "id": "issues-default-paths",
+      "title": "Several default target folders, tried in order",
+      "status": "done",
+      "parent": "storage",
+      "dependsOn": [],
+      "notes": "Closes GitHub issues #150, #168 (ISSUE_PLAN.md). \"Default target path\" accepts one folder per line, inside or outside the vault, tried in order; the first that resolves wins. Lets one synced setting work on Windows, macOS and Linux with different library folders. Outside-vault folders keep going through the existing confirmation and copy (LOCAL_FILE_TARGETS.md).\n\nDone looks like: Setting takes several lines; resolution order tested (in-vault first, then each folder); outside folders still ask first.\n\nDone 2026-11-12: 'Default target folders' takes one folder per line, tried in order after the target itself (targetCandidates in preferences.ts); a folder with or without its slash; the old single prefix still works; outside-vault folders keep the existing confirmation. Tests. Closes #150, #168."
+    },
+    {
+      "id": "issues-progress-property",
+      "title": "Reading progress in a note property",
+      "status": "done",
+      "parent": "storage",
+      "dependsOn": [],
+      "notes": "Closes GitHub issues #285 (ISSUE_PLAN.md). Optionally write `annotation-progress` (page/pages for PDFs, percent for books, time for video) to the annotation note when the source is closed or left, not on every page turn, so Dataview can list it. Off by default, because it rewrites the note.\n\nDone looks like: Setting off by default; when on, the property is written once on leaving; no writes while reading; test.\n\nDone 2026-11-12: Setting 'Keep reading progress in the note' (off by default). On leaving a source (tab closed or another file opened in it) the note's annotation-progress property is written: page/pages for PDFs, percent for books, clock time for video. Only when changed, never while reading, never by creating a note. Tests. Not checked live in the app. Closes #285."
+    },
+    {
+      "id": "issues-tags-live-preview",
+      "title": "Clickable tags in the raw note (only if the original reads it unchanged)",
+      "status": "done",
+      "parent": "storage",
+      "dependsOn": [],
+      "notes": "Closes #388 if done. FACTS, measured 2026-11-13 in Obsidian 1.13.7 with a note holding both forms: today's line '>#first, #second' is indexed as vault tags in full (tag pane, search) and all its tags are clickable in Reading view; in Live Preview only the FIRST tag on the line is not recognised (no pill, not clickable), because '#' follows '>' directly; later tags are. With a space ('> #first, #second') every tag is recognised in Live Preview too. Indexing does not differ between the forms (an earlier note here said tags would 'start to count as vault tags': wrong, they already do). The frozen 0.2.11 parser reads both forms to the same tags, also a tag with a space; the new codec too. A tag with a space is clickable only up to the space in either form. OPTIONS put to the owner: (A) display only: an editor extension styles and links the first tag in Live Preview, file bytes unchanged; (B) write the space for new and edited blocks: one character, read identically by 0.2.11, the byte-identity law and published-compatibility tests restated; old blocks untouched until edited; if 0.2.11 later edits such a block it writes its own form back (no loss). Owner asked for this explanation on 2026-11-13; waiting for their choice. Also 2026-11-13: the owner chose to leave the two post-release ideas until after the release.\n\nDone 2026-11-13: Done 2026-11-13, the owner chose 'Write the space': visibleTags in proofs/typed-annotations.mjs writes the line with one leading space, so the quoted line is '> #a, #b'; a block without tags keeps its bare line; blocks not edited keep their bytes. Checked in Obsidian: a block written by the plugin has every tag recognised in Live Preview and indexed. Test against the frozen 0.2.11 reader: published-compatibility.test.mjs."
+    },
+    {
+      "id": "progress-resume",
+      "title": "Resume from annotation-progress when this device has no saved position",
+      "status": "done",
+      "parent": "storage",
+      "dependsOn": [],
+      "notes": "Idea from hughengwu's fork (PR #414, closed): the reading position travels with the note so another device opens where you left off. The native reader writes annotation-progress ('12/340', '37%', '12:34') on leaving (writeProgress in src/main.ts) but resumes only from plugin data (positions). When a source opens with no saved position, or the note's progress is newer, read the property back and go to that page / percentage / time. Coarser than the saved position, so the saved one wins when both exist and agree on the device. Only when the progress setting is on.\n\nDone 2026-11-13: The note's annotation-progress is read back (src/progress.ts: '12/340', '37%', '12:34'). The plugin remembers, per note, the value this device last wrote or went to; a note that says something else was left on another device, and the source opens there once: a PDF goes to that page when its pages are drawn and it is the same length, a book to the place the percentage names (the inverse of how its progress is shown, tested to show as the same percentage), a recording to that time if it is at its start. After that the device's own saved place is the newer one. Only with 'Keep reading progress in the note' on. Also fixed: closing a PDF's tab wrote nothing, because the document was already gone when the reader was asked where it was; it now says the place last seen. Checked live: opened at the note's page 9, read to 11, closed (11/15 written), reopened at 11."
+    },
+    {
+      "id": "pdf-other-copy-decision",
+      "title": "Decide: show annotations made on another copy of a PDF when their words are found?",
+      "status": "done",
+      "parent": "storage",
+      "dependsOn": [],
+      "notes": "Owner's decision; not a regression. Today an annotation whose stored PDF fingerprint differs from the open file's is kept and listed as 'Unresolved: annotation belongs to another PDF fingerprint' (src/pdf-annotation.ts). That is what happens when a paper is downloaded again (publishers regenerate PDFs) or a note is pointed at another copy: seen in the design vault's 2024 note for 1706.03762.pdf, on macOS and on Linux. Annotator 0.2 does not show such an annotation either when the note's target differs from the address it was made at. Options: (a) leave it; (b) where the quoted words with their context are found exactly once in the open file, paint it and say 'made on another copy of this PDF' in its status, changing nothing in the note; (c) as (b), plus a command that re-ties a note's annotations to the open file (rewrites their fingerprint; needs a proved write path). I lean to (b).\n\nDone 2026-11-13: Decided 2026-11-13 by the owner: 'Show when unique'. Where the quoted words with their context are found exactly once in the open file, the highlight is painted and marked as made on another copy of this PDF; the note is not changed."
+    },
+    {
+      "id": "release",
+      "title": "From experiment to release",
+      "dependsOn": []
+    },
+    {
+      "id": "issue-triage",
+      "title": "Go through the 60 open issues against the native reader",
+      "status": "done",
+      "parent": "release",
+      "dependsOn": [],
+      "estimate": 3,
+      "notes": "For each: fixed by the native reader, still open, or out of scope. This list becomes the release notes and the replies.\n\nDone 2026-11-11: 271 open issues triaged in experiments/native-pdf/ISSUE_TRIAGE.md: 38 fixed by design, 108 addressed, 66 need verification, 39 not addressed, 20 out of scope. New tasks added from it."
+    },
+    {
+      "id": "security-384",
+      "title": "Issue 384: remote code execution report",
+      "status": "done",
+      "parent": "release",
+      "dependsOn": [],
+      "estimate": 2,
+      "tags": ["security"],
+      "notes": "Read the report, establish whether the native reader (no Hypothesis iframe, sanitised EPUB and web content) is affected, add a regression test, and write the answer.\n\nDone 2026-11-11: Not affected by the reported mechanism. Fixed an adjacent hole (a live page could make the reader save text) and made source words inert in the note's visible line; script addresses are never links. SECURITY.md has the answer; follow-up: security-target-confirm."
+    },
+    {
+      "id": "identity",
+      "title": "Name, id and settings of the released plugin",
+      "status": "done",
+      "parent": "release",
+      "dependsOn": [],
+      "estimate": 2,
+      "tags": ["needs-user"],
+      "notes": "The build is `annotator-native-pdf-spike`. Decide whether it replaces the original plugin's id or ships beside it, and carry settings over.\n\nDone 2026-11-12: Decided by the owner 2026-11-12: the release replaces the old plugin under id obsidian-annotator (name Annotator); it does not ship beside it. Carrying it out (manifest, package, automatic settings carry-over, dropping the spike id) is promote-manifest. Version number still the owner's choice."
+    },
+    {
+      "id": "ci",
+      "title": "CI runs the proofs and both test suites",
+      "status": "done",
+      "parent": "release",
+      "dependsOn": [],
+      "estimate": 2,
+      "notes": "verify.mjs needs the Bend binary in the workflow; pin its version (the toolchain changed under us once).\n\nDone 2026-11-12: .github/workflows/native-reader.yml: on pushes and pull requests touching experiments/, installs Bend, fails unless it is exactly 2.0.40, runs verify.mjs (proofs, negative controls, bridge tests) and the reader's npm test. Not run yet: the branch has not been pushed."
+    },
+    {
+      "id": "docs",
+      "title": "User guide, screenshots and changelog",
+      "status": "done",
+      "parent": "release",
+      "dependsOn": ["issue-triage"],
+      "estimate": 3,
+      "notes": "README for the native reader: reading, highlighting, areas, page colours, video, migration, styling. Fresh screenshots in light and dark.\n\nDone 2026-11-12: GUIDE.md (task-oriented, 7 screenshots light/dark/phone/exported), CHANGELOG.md, linked from the README. Screenshots show pages of a published paper; swap before publishing if wanted."
+    },
+    {
+      "id": "push-pr",
+      "title": "Push the branch and open a pull request",
+      "status": "done",
+      "parent": "release",
+      "dependsOn": ["promote-move"],
+      "estimate": 1,
+      "tags": ["needs-user"],
+      "notes": "Everything is local on experiment/native-design at your request. Say when. ASKED 2026-11-13, everything else being done: the owner answered 'Not yet'. Do not push until they say so. The release build runs locally and produces every file the release workflow uploads; version files agree on the placeholder 0.3.0.\n\nDone 2026-11-13: 2026-11-13: the owner asked to make sure of CI and code style, squash to one commit and open the pull request. Done: the CI workflow's steps were run from a clean copy on Ubuntu (npm ci, lint, format check, proofs with the kernel check, 590 reader tests, release build), then the branch was squashed onto the 0.2.11 release and pushed, and the pull request opened against master. The unsquashed history is kept locally on backup/native-design-before-squash."
+    },
+    {
+      "id": "beta",
+      "title": "Beta release",
+      "status": "todo",
+      "parent": "release",
+      "dependsOn": ["identity", "ci", "docs", "push-pr", "security-384", "migration-e2e", "android-notes", "android-new-screens", "a11y-screenreader", "security-target-confirm", "desktop-platforms", "damaged-notes", "promote-delete-legacy", "promote-manifest", "promote-cleanup", "promote-docs", "promote-measure"],
+      "estimate": 2,
+      "notes": "A BRAT-installable build of the promoted plugin, under the real id obsidian-annotator (manifest-beta.json), and a call for testers. Testers on 0.2.11 get it as an update: old notes, settings and open tabs must carry over."
+    },
+    {
+      "id": "housekeeping",
+      "title": "Stop the design instance and the emulator; clear scratch files",
+      "status": "done",
+      "parent": "release",
+      "dependsOn": [],
+      "estimate": 1,
+      "notes": "Both are still running on this Mac. Scratch copies and review screenshots live outside the repository.\n\nDone 2026-11-13: Decided 2026-11-13 by the owner, asked what may be removed: 'lets keep all of it'. Nothing is stopped or deleted: the design Obsidian instance and the Android 16 emulator stay running; the Linux VM (obs-linux), the Android 12 AVD and image, the iOS simulator runtimes, Lean in ~/.elan and the scratch files under /tmp/claude-501 stay."
+    },
+    {
+      "id": "security-target-confirm",
+      "title": "Ask before following a note's target outside the vault or to the network",
+      "status": "done",
+      "parent": "release",
+      "dependsOn": [],
+      "estimate": 2,
+      "tags": ["security"],
+      "notes": "From the security review: an http(s) annotation-target is fetched and an absolute local path is read (and copied in if it is a PDF/EPUB) when the note opens in the reader. Confirm once per note and target; remember the answer. See experiments/native-pdf/SECURITY.md.\n\nDone 2026-11-11: A target on the network or outside the vault is asked about once (per address, or per site with 'Always from …'), remembered with the source's record. Declined: nothing is fetched or written. Tested."
+    },
+    {
+      "id": "desktop-platforms",
+      "title": "Verify on Windows and Linux desktops",
+      "status": "done",
+      "parent": "release",
+      "dependsOn": [],
+      "estimate": 3,
+      "tags": ["needs-user"],
+      "notes": "Issues 409 (core PDF view shows 0/0 pages after enabling), 360, 411, 342 on Windows and Linux. LINUX DONE 2026-11-13 (Ubuntu 24.04 arm64 VM, Obsidian 1.15.1 AppImage; a subagent ran it, results in ISSUE_PLAN.md 'Progress'): #409, #360, #411, #342 pass; names with spaces, umlauts, CJK, NFD and a case-mismatched target resolve; two book defects found and fixed (percent-encoded chapter names, chapter language). The VM 'obs-linux' is stopped and kept (limactl start obs-linux; ~6 GB with its image; remove with limactl delete obs-linux and brew uninstall lima). #181, #338, #205 listed here before are Android issues and belong to issues-check-android. WINDOWS IN PROGRESS 2026-11-13: the owner offered a Windows 11 machine over SSH (Windows 11 Home x64, Obsidian app 1.13.6). A subagent runs the checks there with its own Obsidian profile and a test vault under one temp folder, installs nothing and removes it afterwards: #409, #360, #411, #89, plus what only Windows shows (backslashes, CRLF, case-insensitive names, long names, fonts).\n\nDone 2026-11-13: Done 2026-11-13. Linux: Ubuntu 24.04 VM (subagent). Windows: a Windows 11 laptop over SSH, Windows 11 Home x64, Obsidian app 1.15.1 on Electron 34 (subagent; its own profile and a test vault in one temp folder, removed afterwards, nothing installed). #409, #360, #411, #342 pass on both; #89 passes on Windows. Results in ISSUE_PLAN.md 'Progress'. One missed paint seen once on Windows on the build before the iOS fixes; the cause fixed there, and the painter now retries by itself."
+    },
+    {
+      "id": "issues",
+      "title": "Close out GitHub issues",
+      "parent": "release",
+      "dependsOn": [],
+      "notes": "Every open issue of elias-sundqvist/obsidian-annotator (271 on 2026-11-12) has a disposition in experiments/native-pdf/ISSUE_PLAN.md, which supersedes ISSUE_TRIAGE.md. Work items that close issues sit in their area groups (ids issues-*); the checks and the closing task are here."
+    },
+    {
+      "id": "issues-check-pdf-view",
+      "title": "Check: PDF selection, links, back and large files in the host PDF view",
+      "status": "done",
+      "parent": "issues",
+      "dependsOn": [],
+      "notes": "Closes, once checked, GitHub issues #79, #84, #118, #136, #184, #200, #217, #223, #233, #269, #290, #293, #327, #366, #387, #392 (ISSUE_PLAN.md, \"Closes after a check\"). What to test: In the real app on desktop, with the reporters' files where attached and otherwise a two-column paper, a PowerPoint export and a 900-page book: select text with mouse and trackpad (no offset, no runaway selection), click a web link and an internal link and the outline, go back after an internal link, hover a `[[paper.pdf]]` link, open with Better PDF / PDF++ enabled, open and close the 900-page file and watch memory.\n\nDone looks like: each issue checked and marked pass or fail in ISSUE_PLAN.md; a failure becomes a fix task here; one that cannot be reproduced gets the reopen-if-it-recurs reply.\n\nDone 2026-11-13: Checked in the running app on macOS (Obsidian 1.13.7) with a 15-page paper and a 900-page, 110 MB file made from it; recorded per issue in docs/dev/ISSUE_PLAN.md. Pass: #84, #269, #327 (mouse selection is exactly the stretch dragged; its highlight lies on its text), #387 (by mouse; no trackpad), #184, #223 (links reachable under highlights), #118 (hover preview), #217 (900 pages: first page 0.3 s, text read in 6.7 s in the background, no error), #233 (memory returns after closing), #293 (by tests). Fixed: #79, #290, #366 (back after a link inside a PDF: task pdf-link-back). Not reproduced, reply 'reopen if it recurs': #200, #392 (the reports' files are not at hand; no PowerPoint export was tried). Not checked: #136, which needs the Better PDF or PDF++ plugin installed (a download, the owner's to allow)."
+    },
+    {
+      "id": "issues-check-notes-editor",
+      "title": "Check: notes, links and the note editor",
+      "status": "done",
+      "parent": "issues",
+      "dependsOn": [],
+      "notes": "Closes, once checked, GitHub issues #47, #135, #137, #140, #260, #279, #283, #307, #335, #352, #374. DONE 2026-11-12 (recorded in ISSUE_PLAN.md 'Progress'): #47 pass (codec test), #140/#335 pass (display test), #279 fixed (spellcheck follows the app's setting), #283 pass (paste attaches), #352 fixed (clear message). STILL TO CHECK in the app: a heading link inside an annotation note (135); drop a card link on an Excalidraw drawing (137, needs the Excalidraw plugin); a note with a title property and annotation-target (260); open the note in Markdown view and edit (307); #374 main-process error (cannot be reproduced without the reporter's setup).\n\nDone 2026-11-13: Recorded per issue in docs/dev/ISSUE_PLAN.md. Earlier: #47, #140, #335 pass; #279, #352 fixed; #283 pass. Now: #135 pass (heading links inside an annotation note stay Obsidian's; checked in the app and pinned by a test), #260 pass (title, aliases and tags beside the target; test and app), #307 not reproduced (edited by hand in source mode, Live Preview and Reading view: saved, all annotations still read, no error), #374 not reproduced (no known cause). Not checked: #137, which needs the Excalidraw plugin installed (a download, the owner's to allow)."
+    },
+    {
+      "id": "issues-check-web",
+      "title": "Check: web pages and remote files",
+      "status": "done",
+      "parent": "issues",
+      "dependsOn": [],
+      "notes": "Closes, once checked, GitHub issues #130, #187, #226 (ISSUE_PLAN.md, \"Closes after a check\"). What to test: A docdrop URL with a trailing slash as a PDF target (130); a PDF URL declared as `web` (187, should say what to do, not hang); a link to an annotation on a live page scrolls to it after load (226).\n\nDone looks like: each issue checked and marked pass or fail in ISSUE_PLAN.md; a failure becomes a fix task here; one that cannot be reproduced gets the reopen-if-it-recurs reply.\n\nDone 2026-11-13: All three were real gaps and are fixed, each with a test that failed before: #130 a file address with a trailing slash (docdrop) is that file, not a web page; #187 an address asked for as a page that returns a PDF or a book says so and what to set, and a page's text is read in the encoding the server, a byte-order mark or the page's own meta names (GBK reads as Chinese; text that would come out broken is refused); #226 a live page is scrolled to the annotation the reader was sent to once its highlight is restored. Recorded in docs/dev/ISSUE_PLAN.md. Not tried against real sites (no network use)."
+    },
+    {
+      "id": "issues-check-books",
+      "title": "Check: books that failed in the original reader",
+      "status": "done",
+      "parent": "issues",
+      "dependsOn": [],
+      "notes": "Closes, once checked, GitHub issues #82, #367, #375 (ISSUE_PLAN.md, \"Closes after a check\"). What to test: Open the EPUBs attached to these issues (or Chinese, large and fixed-layout samples), select and highlight in Scroll and Pages layouts, reopen and confirm the highlights are placed.\n\nDone looks like: each issue checked and marked pass or fail in ISSUE_PLAN.md; a failure becomes a fix task here; one that cannot be reproduced gets the reopen-if-it-recurs reply.\n\nDone 2026-11-13: Checked in the running app with three books made for it (Chinese with pictures and non-ASCII file names; 300 chapters with a 445 kB stylesheet; fixed layout), each in Scroll and Pages: selection bar appears, the highlight is saved with its exact text and is restored on reopening ('Verified passage'), no errors. #82, #367, #375 pass; recorded in docs/dev/ISSUE_PLAN.md. The reporters' own books were not used (attachments are downloads)."
+    },
+    {
+      "id": "issues-check-android",
+      "title": "Check: older Android, a real device and HarmonyOS",
+      "status": "done",
+      "parent": "issues",
+      "dependsOn": ["android-notes"],
+      "notes": "Closes, once checked, GitHub issues #98, #181, #205, #221, #235, #338, #348 (ISSUE_PLAN.md, \"Closes after a check\"). What to test: On a real Android device with an older WebView (Android 11 or 12 if one can be had) and, if possible, HarmonyOS: plugin loads, start-up time, a PDF with highlights opens and keeps them after restart, a web target opens its reading copy.\n\nDone looks like: each issue checked and marked pass or fail in ISSUE_PLAN.md; a failure becomes a fix task here; one that cannot be reproduced gets the reopen-if-it-recurs reply.\n\nDone 2026-11-13: Done 2026-11-13 on an Android 12 emulator with the WebView it shipped with (Chrome 91), three rounds by a subagent; results in ISSUE_PLAN.md 'Progress'. #98, #181, #205, #221, #338, #348 pass on the final build as shipped. Found and fixed: missing structuredClone/randomUUID/Array.at (src/portable.ts); JSON.parse without number source text before Chrome 114 and iOS 18.4 (own parser, proofs/typed-annotations.mjs); layout without :has(), color-mix(), translate and env() insets; a tapped highlight greyed by Obsidian. Not checked: HarmonyOS (#235), a real old tablet, real touch handles. The AVD Android12Check and the android-31 image (5.2 GB together) are kept; emulator shut down."
+    },
+    {
+      "id": "issues-check-ios",
+      "title": "Check: iOS and iPadOS reports",
+      "status": "todo",
+      "parent": "issues",
+      "dependsOn": ["ios-pass"],
+      "notes": "Closes, once checked, GitHub issues #89, #166, #177, #207, #225, #289, #322, #373 (ISSUE_PLAN.md, \"Closes after a check\"). What to test: During the iOS pass: multi-line selection on iPhone and iPad (166, 322), the selection bar instead of the system menu (177), a file name with spaces synced from desktop (89), a video note on iPad (207), annotation links (225), the plugin loads on current iPadOS (289), pen hover shows the note (373).\n\nDone looks like: each issue checked and marked pass or fail in ISSUE_PLAN.md; a failure becomes a fix task here; one that cannot be reproduced gets the reopen-if-it-recurs reply. SIMULATOR PASS 2026-11-13 (ISSUE_PLAN.md Progress): #166 pass, #322 not reproduced, #177 pass, #89 matching pass, #225 fixed, in iOS WebKit. STILL NEEDS THE OWNER'S iPhone/iPad: #289 (loads in Obsidian for iOS), #207 (YouTube Error 153 from a capacitor:// page: check whether a YouTube embed in an ordinary note plays in Obsidian for iOS; if not, the plugin can only say so and link out), #373 (pen hover), #89 sync, and a look at zoom, links and the keyboard in the real app."
+    },
+    {
+      "id": "issues-check-desktop",
+      "title": "Check: Windows and Linux reports",
+      "status": "done",
+      "parent": "issues",
+      "dependsOn": ["desktop-platforms"],
+      "notes": "Closes, once checked, GitHub issues #342, #360, #409, #411 (ISSUE_PLAN.md, \"Closes after a check\"). What to test: Part of the Windows and Linux pass: plugin loads (360, 411), the core PDF view still shows pages after enabling (409), EPUB selection and highlighting on Linux (342).\n\nDone looks like: each issue checked and marked pass or fail in ISSUE_PLAN.md; a failure becomes a fix task here; one that cannot be reproduced gets the reopen-if-it-recurs reply.\n\nDone 2026-11-13: Checked 2026-11-13 on Ubuntu 24.04 and Windows 11: #342, #360, #409, #411 pass; marked in ISSUE_PLAN.md."
+    },
+    {
+      "id": "issues-close",
+      "title": "Close the issues the release resolves",
+      "status": "todo",
+      "parent": "issues",
+      "dependsOn": ["beta", "pdf-dark-figures", "issues-page-notes-page", "issues-target-forms", "issues-link-template", "issues-note-heading", "issues-default-paths", "issues-sidebar-on-open", "issues-note-css-class", "issues-html-in-vault", "issues-progress-property", "issues-phone-fullscreen", "issues-pdf-metadata", "issues-tags-live-preview", "issues-check-pdf-view", "issues-check-notes-editor", "issues-check-web", "issues-check-books", "issues-check-android", "issues-check-ios", "issues-check-desktop", "store-release", "issues-open-prs"],
+      "notes": "After the beta is out: close each issue with the reply in ISSUE_PLAN.md (\"Closes with the release\", the work items, the passed checks, the declines; \"Not an issue for the reader\" can go earlier). Read-only until the owner says to post. Done: no open issue left without a reply; any left open are named with why."
+    },
+    {
+      "id": "issues-open-prs",
+      "title": "Close the two open pull requests with the release",
+      "status": "todo",
+      "parent": "issues",
+      "dependsOn": ["store-release"],
+      "notes": "Close PR #336 (wikilink annotation-target: done in src/preferences.ts annotationTarget) and #330 (style poller: the code no longer exists) with the release. Replies are in docs/dev/ISSUE_PLAN.md, 'Forks and open pull requests'."
+    },
+    {
+      "id": "pdf-link-back",
+      "title": "PDF: go back after following a link inside the document",
+      "status": "done",
+      "parent": "issues",
+      "dependsOn": [],
+      "notes": "Found by issues-check-pdf-view: Obsidian's PDF view keeps no history of jumps inside a document, and the app's Back does not return after an internal link (checked live: page 1 → 11 by a citation link, Back stays on 11). Asked for in #79, #290, #366. Remember where the reader was when a link inside the PDF is followed; a header action 'Back to page N' appears while there is somewhere to go back to, and a command does the same (for a hotkey).\n\nDone 2026-11-13: The PDF reader remembers where the reader was each time a link inside the document is followed (up to 30 places). A header action 'Back to page N' is there while there is somewhere to go back to, and the command 'PDF: go back to where a link was followed' does the same. Links out of the app and links that go nowhere leave no trail; another document in the tab starts afresh. Test in native-pdf-lifecycle.test.mjs; checked in the app (page 1 → 11 by a citation, back to the same scroll position)."
+    },
+    {
+      "id": "promote",
+      "title": "Promote the native reader: it replaces the old plugin",
+      "parent": "release",
+      "dependsOn": [],
+      "notes": "Decided by the owner 2026-11-12: the release completely replaces the Hypothesis/iframe plugin under id obsidian-annotator. The native code leaves experiments/ and takes the old code's place; legacy code is deleted. Side effects to show in the release notes: plugin size (old main.js 28 MB vs native 1.33 MB + 150 KB CSS), load time, idle cost, fewer moving parts. Best done when feature work on experiments/ is quiet: it moves every file."
+    },
+    {
+      "id": "promote-freeze-compat",
+      "title": "Freeze what the tests still take from the old code",
+      "status": "done",
+      "parent": "promote",
+      "dependsOn": [],
+      "notes": "The native build and tests still reach outside experiments/: build.mjs bundles ../../src/annotationUtils.tsx (legacy.mjs) and modules of submodules/hypothesis-client-annotator-fork (epub-identity, html-metadata, frame-sync, html and pdf anchoring, annotations service, pdf-metadata); codec, interoperability and annotation-files tests read ../../tests/testfile*.md; test-support/publisher-fixture.mjs reads pdf.js standard fonts from the submodule. Copy each into a frozen compat fixture (compat/published already holds some) with its licence and the commit it came from, so the compatibility proofs keep testing against the published 0.2.11 behaviour. Done: build and all tests pass with src/, resources/, tests/ and submodules/ moved away.\n\nDone 2026-11-12: Done 2026-11-12. The reference bundles the compatibility tests compare against (original note parser, Hypothesis client anchoring/services at the fork head and at published 0.2.11, the published video parser, the epub.js modules the old reader used) are frozen in experiments/native-pdf/compat/frozen (19 files, ~1 MB) with provenance, licences and checksums; the build copies them and refuses a changed file. The original plugin's test notes are in fixtures/legacy, the test font in test-support/fonts. Verified: build and all 602 tests pass with src/, tests/, submodules/, resources/ and the root node_modules moved away. oracle.mjs (needed the submodule) removed."
+    },
+    {
+      "id": "promote-move",
+      "title": "Move the native reader and the proofs to the repository root",
+      "status": "done",
+      "parent": "promote",
+      "dependsOn": ["promote-freeze-compat"],
+      "notes": "experiments/native-pdf becomes the plugin at the root (src/, test/, docs/, one package.json and lockfile, one build producing main.js, manifest.json, styles.css); experiments/bend-codec becomes a top-level folder for the proofs. Update import paths, build.mjs, CI (native-reader.yml becomes ci.yml) and release.yml to build and attach the new plugin. Use git mv so history follows. Done: npm test runs proofs and both suites from the root; release workflow produces the three files; nothing left under experiments/.\n\nDone 2026-11-12: Root now holds the plugin: src/ (sources), test/ (suite, support, fixtures, frozen references; built into test/.generated), proofs/ (was experiments/bend-codec), docs/ (STYLING, SECURITY, screenshots) and docs/dev/ (design notes and evidence). One package.json and lockfile; npm test = proofs then the reader's suite; ci.yml and release.yml rebuilt (release: tag must equal the manifest's version, proofs and tests run first, attaches main.js, manifest.json, styles.css, licences and a zip). Verified from the root: build, release build, reader 602 pass, node verify.mjs passes. The old plugin's root files went in the commit before (ca3142b). The original-id rehearsal script went with the old manifest it read; promote-manifest makes the real id the build."
+    },
+    {
+      "id": "promote-delete-legacy",
+      "title": "Delete the old plugin",
+      "status": "done",
+      "parent": "promote",
+      "dependsOn": ["promote-move"],
+      "notes": "Remove the legacy src/*.tsx, resources/ (35 MB, bundled Hypothesis build and pdf.js viewer), the hypothesis-client fork submodule and .gitmodules, rollup.config.js, rollup-folder-zip-string.js, jest config, betterer, the old build scripts, 'Modified Resources.md', and modules that only served the old reader running beside the new one (check legacy-epub.ts and the .generated/*.cjs bridges). Keep what upgrades users: legacy-view.ts (restores old workspace leaves), settings import from the old plugin, and the wire-format compatibility code. Done: no reference to Hypothesis code outside frozen fixtures and licences; tests pass; upgrade rehearsal (old 0.2.11 vault opens unchanged) passes.\n\nDone 2026-11-12: The old plugin's sources, resources/ (35 MB), the Hypothesis fork submodule, rollup/jest/betterer/eslint/prettier configuration and old CI went in ca3142b. Here: legacy-epub.ts (the bridge that let the old iframe reader use the new book resolver), its test and the unused CommonJS codec build. Kept: legacy-view.ts (claims the old plugin's restored tabs), adoption of the old settings, src/compat (EPUB identity and search folding, with licences), Hypothesis JSON import/export, and the frozen references under test/compat and proofs/fixtures. Reader suite 601 pass; the in-place upgrade was checked live (see promote-manifest). Left for promote-cleanup: video-player.ts, video-session.ts and video-transport.ts are not in the plugin's bundle (only tests and test/support/video-host.mjs use them); annotation-files.ts waits on the per-annotation decision."
+    },
+    {
+      "id": "promote-manifest",
+      "title": "Release identity in the manifest, package and settings",
+      "status": "done",
+      "parent": "promote",
+      "dependsOn": ["promote-move", "identity"],
+      "notes": "Carries out the identity decision: manifest id obsidian-annotator, name Annotator, a real description, author, version (proposal 1.0.0 or 0.3.0, owner to choose), versions.json and manifest-beta.json for BRAT; package name; settings read from the old plugin's data.json on first start (exists as 'Copy preferences from Annotator'; make it automatic when the id is the same). Remove the annotator-native-pdf-spike id, the '(Experimental)' name and the rehearsal builds once the real id is the build. Done: a vault with 0.2.11 updated in place opens with its settings, notes and open tabs.\n\nDone 2026-11-12: manifest id obsidian-annotator, name Annotator, description, author, funding links (from .github/FUNDING.yml); package name. Version is a working number, 0.3.0, in manifest.json, package.json, versions.json and manifest-beta.json: the owner chooses the real one (the build refuses the four out of step, and the release workflow refuses a tag that is not the manifest's version). The sidebar's view type is annotator-sidebar; command ids no longer say native (toggle-annotation-mode is the old plugin's id, so its hotkey carries over). The separate 'Copy preferences from Annotator' action is gone: with the same id the old settings are adopted at first start and the raw files are kept in native-upgrade-backup-v1.json. Checked live in the design vault: build installed over the old plugin's folder with 0.2.11-shaped data.json adopted dark mode, pagination, font size, Markdown options and default opening; a tab of the old view type (pdf-annotator) became the PDF with its 11 marks; note unchanged; backup holds data.json and both workspace files. Reader suite 602 pass."
+    },
+    {
+      "id": "promote-cleanup",
+      "title": "Remove experiment scaffolding and dead code",
+      "status": "done",
+      "parent": "promote",
+      "dependsOn": ["promote-move", "per-annotation-decision"],
+      "notes": "Anything not reachable from main.ts or the tests (find with the bundler's metafile), research JSON, spike names, rehearsal and evidence scripts that only served the experiment, debug flags, stale comments that describe the experiment. Look for jank left by the side-by-side period: polling that has events, duplicate paths kept for the old reader. Done: bundle metafile shows no unused module; lint clean; size noted. DONE SO FAR (2026-11-13): no 'spike' or 'experiment' wording is left in src/, styles.css, the build or the manifest (class, view type, command ids, comments); the rehearsal script and the old-reader bridge are gone; idle polling was profiled (6 ms of script in 20 idle seconds) and left. 2026-11-13: the live-video design the plugin never ran (video-player.ts, video-session.ts, video-transport.ts, their two tests, test/support/video-host.mjs, npm run video:host) is removed; 623 reader tests. Checked 2026-11-13: of 87 modules in src/, the plugin and its worker reach all but annotation-files.ts (and two type declarations); of the proofs wrappers all but leaves.mjs. The three docs/dev/*.json research files stay: 8 kB, each cited by a document of the development record. 2026-11-13: the owner chose to remove the one-file-per-annotation prototype: src/annotation-files.ts, its test, proofs/leaves.bend with its wrapper, test, six laws and five controls are gone (182 laws, 88 controls, 567 reader tests, 61 proofs tests); the benchmark stays as test/support/codec-bench.mjs. Every module in src/ is now reached by the plugin or its worker. STILL OPEN: the 14 manual browser-check scripts in test/support and the fixtures only they use (they need Playwright, which is not a dependency; the iOS simulator session reads them as a pattern, so decide after it ends).\n\nDone 2026-11-13: Done 2026-11-13. Every module in src/ is reached by the plugin or its worker (bundle metafile); the one-file-per-annotation prototype and the unused video transport are removed; no 'spike' or 'experiment' wording is left in the source, stylesheet, build or manifest; idle polling profiled and left. Kept on purpose: the three docs/dev/*.json research files (cited by the development record) and the manual browser-check scripts in test/support (each is the script behind a result in docs/dev; they need Playwright, which is not a dependency; CONTRIBUTING.md now says so). Size: main.js 1.38 MB including the worker's program, styles.css 156 kB. There is no separate linter; the build type-checks."
+    },
+    {
+      "id": "promote-docs",
+      "title": "Documentation for the released plugin",
+      "status": "done",
+      "parent": "promote",
+      "dependsOn": ["promote-move"],
+      "notes": "README.md becomes the user page (from GUIDE.md, with screenshots and the move from 0.2.11 explained); CHANGELOG for the release; STYLING.md and SECURITY.md stay. The ~60 plan, evidence and result notes (PARITY.md, *_RESULTS.md, *_PLAN.md, ISSUE_TRIAGE.md) move to docs/dev/ or are condensed into one design note; superseded plans are deleted. CONTRIBUTING.md describes the Bend proofs and the test suites.\n\nDone 2026-11-12: README.md is the user page (the guide, with install, start, 'Coming from Annotator 0.2', contributing, licence and support). CHANGELOG.md has the release entry and the earlier versions' history carried over from the old README. CONTRIBUTING.md describes the layout, Bend, the commands and the rules. docs/ keeps STYLING.md, SECURITY.md and the screenshots; the ~60 design and evidence notes are in docs/dev/ with an index that maps their old paths to the new layout. The plans were kept, not deleted: the results notes link to them. The proofs' README and notes no longer describe an experiment. The before/after table is promote-measure's."
+    },
+    {
+      "id": "promote-measure",
+      "title": "Before and after: size, load time, idle cost, memory",
+      "status": "done",
+      "parent": "promote",
+      "dependsOn": ["promote-delete-legacy"],
+      "notes": "Same vault, same machine, old 0.2.11 and the release build: plugin files on disk, time to enable, first open of an annotated PDF and EPUB, CPU while idle with a PDF open, memory after opening and closing a large PDF; desktop and Android. Done: a table in the release notes and README.\n\nDone 2026-11-12: docs/MEASUREMENTS.md, with the table also in README ('Coming from Annotator 0.2') and CHANGELOG. Same vault and machine, the published 0.2.11 file (checksum-verified, already on this machine) against the release build. Desktop: files 26.3 MB → 1.5 MB; enabling 1.1 s → 0.014 s; memory added with nothing open 19.5 MB → under 1 MB; first highlight of an annotated PDF 0.32–0.48 s → 0.40–0.43 s (about equal); first page of a book 0.09–0.11 → 0.05–0.10 s; kept after closing a 7.6 MB PDF 9.7 MB and 4 frames → 0.2 MB and nothing; idle within noise for both. Android emulator: enabling 6.0–8.6 s → 0.05–0.13 s; first highlight 2.0–2.7 s → 0.9–1.4 s. Not measured: a real phone (emulator only). Measuring found and fixed the anchoring cost (task pdf-highlights-appear-before-the)."
+    },
+    {
+      "id": "pdf-highlights-appear-before-the",
+      "title": "PDF highlights appear before the whole text is read; anchoring cost no longer grows with the document",
+      "status": "done",
+      "parent": "promote",
+      "dependsOn": [],
+      "notes": "Done 2026-11-12: Found while measuring: every context check normalized the whole document on both sides of the passage (128 ms for 21 annotations on a 9-page paper, growing with document × annotations), and nothing was painted until every page's text was read. Now a context is read only as far as it is long (same result: the old definitions are kept in test/anchors.test.ts as the reference, compared on 4000 generated documents), the normalized text and joined pages are computed once per pass, and passages whose stored offsets hold in the pages read so far are painted at once (resolveSettled: proved equal to the whole-document result by the same property test; nothing is stored from it and the complete pass replaces it). Live: anchoring 128 ms → 5 ms; first highlight of a note written by this reader ~10 ms after the page's text (was ~230 ms); notes from 0.2, whose offsets differ, still wait for the whole text (the follow-up task). Suite 605 pass."
+    },
+    {
+      "id": "remember-a-pdfs-text-between-ope",
+      "title": "Remember a PDF's text between openings, so highlights of an old note do not wait for the text to be read again",
+      "status": "done",
+      "parent": "promote",
+      "dependsOn": ["pdf-highlights-appear-before-the"],
+      "notes": "Done 2026-11-13: src/pdf-text-memory.ts: the text read of a PDF is kept in the app's IndexedDB under the file's path, date and size, with its fingerprint; at most 40 documents, none over six million characters, the oldest let go. At the next opening the remembered text places every annotation for painting at once, while the text is read again as always; the complete pass replaces the provisional one, and a remembered text that differs from what is read is replaced. Only painting uses remembered text: selecting and saving wait for the text as read. No storage, or a failing one, is the same as none. Tests: through the PDF reader with a held-back document (lifecycle), and the storage itself with a small stand-in for IndexedDB (eviction, limits, refusal). Live, a note written by 0.2 on a nine-page paper: first opening, highlights 108 ms after the page's text; later openings, 0–4 ms after. docs/SECURITY.md says what is kept on the device and where."
+    },
+    {
+      "id": "readme-recording",
+      "title": "README: a new recording of the reader and more phone and tablet screenshots",
+      "status": "done",
+      "parent": "promote",
+      "dependsOn": [],
+      "notes": "Asked by the owner 2026-11-13: 'create an updated README with a new gif/recording of what annotator looks like. We can also include more mobile screenshots etc.' NOT STARTED that day. Plan: a GIF made with ffmpeg (/opt/homebrew/bin/ffmpeg is installed) from frames of the design Obsidian instance (tools in ~/Documents/obsidian-annotator-design-vault-profile/tools: obs.mjs shot, dev.sh) showing select, highlight, note, list; shorter ones or stills for books, the live web page with a picture note, video; phone screenshots from the Android 16 emulator (real Obsidian, adb exec-out screencap), maybe one tablet size. Only synthetic or public-domain documents in the pictures (not a Wikipedia page); no personal data. Images under docs/ (the README now has seven JPEGs there, one of a phone), README.md updated around them: the recording at the top, a phones and tablets section with several screenshots.\n\nDone 2026-11-13: Done 2026-11-13 (a subagent recorded; reviewed here): docs/annotator.gif (3.2 MB, the main flow on a PDF, 19 s) opens the README; docs/book.gif and docs/web-picture.gif in their sections; five Android phone screenshots and a tablet one under 'On phones and tablets'. Synthetic or public-domain documents only, no personal data. Scripts to record again are in the session scratch folder (hero.mjs, book.mjs, web.mjs, make-gif.sh). Recording turned up defects, fixed in the same commit: the phone note sheet's empty band above the keyboard (from that day's inset change), the draft highlight over the sheet, picture clicks ignored after a page reload, the page recentring on a passage already in view, the confirm bar wrapping, book quotes shown with the file's line breaks, a source stuck after its note is deleted. Not fixed: on a book that sets its own page background, Sepia and Dark recolour only the surround (by design; reads as broken)."
+    },
+    {
+      "id": "store-release",
+      "title": "Store release: the native reader replaces 0.2.11",
+      "status": "todo",
+      "parent": "release",
+      "dependsOn": ["beta", "ios-pass", "issues-check-pdf-view", "issues-check-notes-editor", "issues-check-books", "sidebar-note-filter", "progress-resume", "worker"],
+      "notes": "After the beta has had testers: tag, release workflow attaches main.js, manifest.json and styles.css, versions.json updated, release notes with the before/after table (promote-measure) and the move from 0.2.11 explained. Done: users of the community store get it as an update."
+    },
+    {
+      "id": "fork-ideas",
+      "title": "After the release: ideas from forks",
+      "dependsOn": [],
+      "notes": "Ideas from forks that add value but are not release work. See docs/dev/ISSUE_PLAN.md, 'Forks and open pull requests'."
+    },
+    {
+      "id": "pdf-citations-panel",
+      "title": "PDF: citations on the current page, with a note per cited work",
+      "status": "todo",
+      "parent": "fork-ideas",
+      "dependsOn": ["store-release"],
+      "notes": "Idea from sparthaje/obsidian-references: a panel that lists the references cited on the current PDF page, in order of appearance (numbered and author–year bibliographies), and can make or open a reference note per cited work with a backlink to the citing source. Needs bibliography parsing from the PDF text layer; design first."
+    },
+    {
+      "id": "scan-text-recognition",
+      "title": "Scanned PDFs: recognise text so pages can be selected and searched",
+      "status": "todo",
+      "parent": "fork-ideas",
+      "dependsOn": ["store-release"],
+      "notes": "Idea from this-scott's fork (tesseract.js, unfinished). Today scanned pages can only take area notes. Optional, on demand per document, fully offline, with the result cached beside the source rather than rewriting the PDF. Weigh the size of a recogniser and language data against the 1.3 MB bundle (download on first use?)."
+    },
+    {
+      "id": "worker",
+      "title": "Off the UI thread: logic runs in a worker",
+      "dependsOn": [],
+      "notes": "Owner's request (2026-11-12): 'move as much as possible of the logic (including all of the bend stuff) into a worker so it doesn't impact the ui thread any more than absolutely necessary.' The UI thread should do DOM work and vault I/O only."
+    },
+    {
+      "id": "worker-measure",
+      "title": "Measure what the logic costs on the UI thread today",
+      "status": "done",
+      "parent": "worker",
+      "dependsOn": [],
+      "estimate": 2,
+      "notes": "Long tasks and script time on the UI thread, desktop and Android emulator: opening a note with 20, 200 and 2000 annotations (the Bend codec reading it), creating/editing/deleting one, finding places in a long PDF (text of every page, anchoring), opening a large book (unzip, publisher styles through css-tree), search across all notes, summary and per-annotation export, PDF export and import. Done: a table that says which of these block for more than a frame, so the order below is by cost.\n\nDone 2026-11-12: Desktop, design vault, a 15-page paper with notes of 20, 200 and 2000 highlights made by the plugin's own writer (Scale/ in the design vault). UI-thread script while opening the note, before any change: 20 → 0.25 s (one 86 ms task); 200 → 0.67 s (7 long tasks); 2000 → 7–8 s (12 long tasks, longest 0.9 s; first highlight after 3.0 s). Where the 2000 case went: painting highlights 5.6 s (a forced layout per highlight: fixed in paint-one-layout, now 0.8 s), sidebar building 2000 cards 0.7–1.2 s (sidebar-incremental), reading the note with the Bend codec 0.39–0.47 s (cold read in Node: 16 ms / 85 ms / 716 ms for 20 / 200 / 2000; re-reading after a small change 0.3 / 1.5 / 14 ms), indexing and finding places 0.5 s. Codec writes at 2000 annotations: create 48–60 ms, edit 7 ms, delete 18 ms (20 annotations: 1.2 / 0.1 / 0.2 ms). After the paint fix: 200 → 0.43 s, 2000 → 2.7 s. Order for the worker by cost: reading a note (codec), finding places, then writes; file work (export, books) not yet profiled and is measured with worker-files. Not measured on Android."
+    },
+    {
+      "id": "worker-host",
+      "title": "A worker that holds the logic: built into the plugin, started on first need, with the same code running in-thread where a worker cannot",
+      "status": "done",
+      "parent": "worker",
+      "dependsOn": ["worker-measure"],
+      "estimate": 5,
+      "notes": "One worker bundle (the compiled Bend modules and the pure TypeScript around them), embedded in main.js and started from a Blob URL, so the release stays main.js, manifest.json, styles.css and works on desktop and mobile. A typed request/reply protocol with ids, cancellation and transferables for bytes. The main bundle must not also carry the Bend modules (check the metafile). If a worker cannot be started (CSP, old WebView), the same module runs in-thread: behaviour identical, tested both ways. Done: the worker starts on desktop and the Android emulator; plugin size and enable time are not worse; tests drive the protocol.\n\nDone 2026-11-12: src/logic.ts is the table of what runs off the UI thread (plain data in, plain data out); src/logic-worker.ts serves it; src/logic-host.ts is the UI thread's side: call(name, …args) → Promise, the worker started from a Blob of the embedded script on first use, stopped with the plugin. build.mjs builds the worker bundle first and hands it to every other bundle as text (module 'logic-worker-source'), so the release is still three files. If a worker cannot start (constructor throws, or it errors before its first answer), the same script runs in this thread behind the same messages, and what was asked is asked again. Tests (test/logic-host.test.mjs) drive it in-thread and through a real thread (a Node worker running the built script), compare every answer with the codec called directly, and cover refusals, unknown operations, a worker that cannot start, and stopping. First client: loading a note (readSome). Live: desktop and the Android emulator both serve from a worker; the emulator shows the document with its highlights. Size for now: main.js 1.35 → 1.54 MB, because the main bundle still carries its own copy of the Bend modules (329 kB) until worker-codec moves the remaining callers; the metafile check that it is gone belongs to worker-codec. Emulator enable 112–195 ms (was 47–133) for the same reason. Also fixed here: on a phone, opening an annotation note slid the drawer over the document."
+    },
+    {
+      "id": "worker-codec",
+      "title": "Reading and writing notes through the worker",
+      "status": "done",
+      "parent": "worker",
+      "dependsOn": ["worker-host"],
+      "estimate": 5,
+      "notes": "Parsing a note, creating, editing and deleting a block, splitting and joining leaves, the video codec: all Bend. Vault writes stay on the UI thread and must stay atomic: Obsidian's vault.process takes a synchronous function, so the new text is computed in the worker from the text that was read and is applied only if the note is still exactly that text; otherwise it is computed again. State that rule as a law (an edit computed for T applied to T' != T is refused) and test the race. Done: no Bend code runs on the UI thread in normal use; every codec test passes through the worker and in-thread.\n\nDone 2026-11-12: Every use of the note codec (read, create, edit, delete, recolour, fragments, tag rename, Hypothesis import/export), the video note's codec and the library scan go through the logic host; the plugin's own bundle no longer contains codec.ts, video-codec.ts, exchange.ts or the bridge (the build refuses it if it does), and its Bend share fell from 329 kB to 58 kB. Writes: src/rewrite.ts computes the new text from the text as read and writes it only if the note still holds exactly that text, otherwise computes again (six tries, then refuses having written nothing); a guard runs at the moment of writing. Tested under arbitrary interference (500 generated interleavings: what is written is always the computation of the text it replaces; a refusal writes nothing), in the video store (a note changed while its text was being computed), and by the whole suite through the in-thread host (611 pass). Compound steps (several annotations at once, a tag renamed across a note) are one request, so a large note is not copied per annotation. Live on the 2000-annotation note: a recolour is written by the worker; the long tasks left around it are the sidebar rebuilding and the repaint (their own tasks). main.js is 1.41 MB including the worker's script (358 kB). Still on the UI thread from the proofs, by design for now: area geometry while dragging, ink keys, moving a drawing (each answers a pointer or key at once, microseconds); sidebar ordering (arrange/tabs) and export text move with sidebar-incremental and worker-anchoring."
+    },
+    {
+      "id": "worker-anchoring",
+      "title": "Finding places, search and summaries in the worker",
+      "status": "done",
+      "parent": "worker",
+      "dependsOn": ["worker-host"],
+      "estimate": 3,
+      "notes": "PDF: page texts are handed to the worker as they are read; anchoring (resolveDocument, resolveSettled) and ordering come back as matches. Books and web copies: the text index and quote search. Sidebar search and filters over many annotations, summary and per-annotation export text, library scan parsing. Painting stays on the UI thread. Done: opening a long PDF with many annotations shows no long task from the plugin.\n\nDone 2026-11-13: Decided by measuring rather than by moving everything. Finding places was made cheap where it is instead of being sent away: plain characters take a short way through normalizing (tested against the reference for every character), so anchoring 2000 annotations costs about 14 ms on the UI thread (it was 0.5 s when this plan was written), and it stays beside the painter, which uses its answers in the same frame. Library scan and search over all notes already read through the worker (worker-codec). The main bundle's share of the proofs is now 18 kB (ink keys, area geometry, sidebar ordering, export titles); the annotation schema no longer comes along (proofs/lists.mjs, proofs/package.json marks the modules free of side effects), and main.js is 1.35 MB with the worker's script inside, the same as before there was a worker. Still on the UI thread, with what they cost: sidebar ordering (Bend arrange/tabs, ~10–20 ms for 2000 annotations, called inside the synchronous rebuild of the list), export text (on request, small), area geometry and moving a drawing while dragging, ink keys (microseconds, answer a pointer or key at once). Moving those would make the list rebuild and dragging asynchronous for no measurable gain; they are listed for the owner to overrule. Also: card dates use one formatter instead of one per card (70 ms at 2000 cards). Opening the 2000-annotation note now: 0.59 s of script, no task over 100 ms."
+    },
+    {
+      "id": "worker-files",
+      "title": "Files in the worker: PDF export and import, unpacking books, publisher styles",
+      "status": "done",
+      "parent": "worker",
+      "dependsOn": ["worker-host"],
+      "estimate": 3,
+      "notes": "annotatePdf and readPdfAnnotations work on bytes (transfer them, do not copy). EPUB: unzip (JSZip), the package and contents, css-tree parsing and rewriting of publisher styles, font de-obfuscation. Remote downloads' checks. Done: exporting a 50 MB PDF and opening a large book keep the UI responsive (no task over 50 ms from the plugin).\n\nDone 2026-11-13: Measured before moving, and left where it is, with one fix. Reading a PDF's own annotations: 2–7 ms for a 2–7 MB paper, 11–20 ms for 189 pages (13 MB). Writing the annotated copy with 300 highlights: 7–22 ms. Both are under a frame or two, and sending the bytes across would cost about as much as doing the work. What was slow in the export was comparing whole files a byte at a time through a callback (80–90 ms for 13 MB): src/bytes.ts compares four bytes at a time, tested against the slow comparison. Books: opening a 190 kB book is 0.1 s of script with no long task; a generated book of 300 chapters with a 445 kB stylesheet has two tasks of 0.15 s, from parsing and checking 16 500 declarations and matching them against the pages. The matching needs the page's DOM and the XML parser, which a worker does not have; an ordinary book's styles take about 25 ms. Unzipping is about 30 ms for 300 chapters. Listed in docs/MEASUREMENTS.md with these numbers. If large stylesheets turn out to matter in practice, parsing them could be split from matching; not done."
+    },
+    {
+      "id": "worker-verify",
+      "title": "Before and after on the UI thread, desktop and Android",
+      "status": "done",
+      "parent": "worker",
+      "dependsOn": ["worker-codec", "worker-anchoring", "worker-files", "sidebar-incremental", "paint-changed-pages"],
+      "estimate": 2,
+      "notes": "The same measurements as worker-measure, after. Add the result to docs/MEASUREMENTS.md and the changelog. Done: the table; anything still on the UI thread is listed with the reason it has to be there.\n\nDone 2026-11-13: docs/MEASUREMENTS.md has 'The interface's own thread': opening a note of 20 / 200 / 2000 highlights on the desktop, script and long tasks before and after (0.25 s → 0.14 s; 0.67 s with seven long tasks → 0.23 s with none; 7–8 s with twelve → 0.59 s with five under 0.1 s; first highlight at 2000: 3.0 s → 0.87 s), the Android emulator after (plugin script 0.06 / 0.09 / 0.11 s; not measured there before), what changed, and a table of what still runs on the UI thread with its cost and the reason. Changelog updated. Reader suite 615 pass; proofs check."
+    },
+    {
+      "id": "paint-one-layout",
+      "title": "PDF highlights are painted in three passes, one layout for all of them",
+      "status": "done",
+      "parent": "worker",
+      "dependsOn": [],
+      "notes": "Found by worker-measure: with 2000 annotations the painter spent 5.6 s forcing a layout for every highlight (a position was read after each mark was added). Overlays are now placed, then every position is read, then the marks are made. Opening the 2000-annotation note: 7–8 s of script → 2.7 s; painting 5.6 s → 0.8 s. 200 annotations: 0.67 s → 0.43 s. This is DOM work and stays on the UI thread."
+    },
+    {
+      "id": "sidebar-incremental",
+      "title": "Sidebar: build cards as they come into view, not all of them at once",
+      "status": "done",
+      "parent": "worker",
+      "dependsOn": [],
+      "estimate": 3,
+      "notes": "Found by worker-measure: with 2000 annotations the sidebar builds 2000 cards (and renders each note's Markdown) in 1.2 s on the UI thread, more than once while the source opens. Build what is visible plus a margin, the rest as the list is scrolled or in idle slices; keep search, sort, filters, keyboard movement, 'go to card' and the position strip working over the whole list; keep the accessibility tree's set size. Done: opening the 2000-annotation test note spends under 100 ms in the sidebar; the design tests pass.\n\nDone 2026-11-12: The sidebar builds the first 40 rows at once, plus everything the same pass goes on to use (the card the list was scrolled to, the selected card, the control that had the focus), and the rest in 8 ms slices when the thread is idle; a rebuilt list drops what was unfinished, which also ends the repeated full builds while a source opens. Counts, search, sort and filters work on the whole list as before. Test: 300 annotations (design.test.mjs). Live, opening the test notes: 200 annotations → no long task at all (was 7), 0.27 s of script (was 0.67 s); 2000 → first highlight 0.87 s (was 3.0 s), 0.93 s of script (was 7–8 s), longest task 132 ms (was 929 ms). The ordering itself (arrange/tabs, Bend) still runs on the UI thread; it moves with worker-anchoring."
+    },
+    {
+      "id": "paint-changed-pages",
+      "title": "Repaint only the pages that changed",
+      "status": "done",
+      "parent": "worker",
+      "dependsOn": [],
+      "estimate": 2,
+      "notes": "Found by worker-measure: every change in the PDF view (a page being drawn, a hover class) removes and repaints the marks of every drawn page; with 2000 annotations that is several passes of ~100 ms each (0.8 s in all while opening). Keep each page's marks while its text layer, size, annotations and active annotation are the same. Done: opening the 2000-annotation note paints each page once; the lifecycle tests (unload, replace, resize) pass.\n\nDone 2026-11-12: A page keeps its marks while its text layer, its text, its size and what is painted on it (annotations, their places, which is selected) are the same; a change repaints that page only. Pages with areas or drawings are always painted afresh, since those follow the hand. Marks left on something that is no longer a drawn page are removed. Test in native-pdf-lifecycle.test.mjs (same elements kept; repaint on changed annotation, selection, size, replaced text layer; removal). Live, opening the test notes, UI-thread script and long tasks: 20 annotations 0.25 s → 0.14 s, none; 200: 0.67 s (7 long tasks) → 0.23 s, none; 2000: 7–8 s (12 long tasks, longest 0.93 s, first highlight 3.0 s) → 0.71 s (3 long tasks of about 0.1 s, first highlight 0.86 s)."
+    }
+  ]
+}

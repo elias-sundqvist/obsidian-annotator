@@ -1,0 +1,61 @@
+{
+  "researched_on": "2026-10-30",
+  "branch": "experiment/obsidian-native-pdf",
+  "base_commit": "5dc91d6",
+  "status": "Plan only; no EPUB/web host test performed. Mac was locked.",
+  "source_inspections": [
+    {
+      "repository": "wanderxuhq/leaf-reader",
+      "commit": "0c9f36010a283e021613aac7e5d36a45a5a85ded",
+      "files": [
+        "src/epub-viewer/epub-resource-processor.ts",
+        "src/epub-viewer/parsers/opf-parser.ts",
+        "src/epub-viewer/primitives/use-highlights.ts",
+        "docs/READER_ARCHITECTURE.md",
+        "LICENSE"
+      ],
+      "use": "Reference/reuse candidate only; no source code copied in this plan."
+    },
+    {
+      "repository": "aoout/obsidian-epub-importer",
+      "commit": "1b69198c636c8d2dea7523edbf309c1b1e81d76c",
+      "files": [
+        "src/parser/ArchiveReader.ts",
+        "src/parser/BookAssembler.ts",
+        "src/transform/HtmlToMarkdown.ts",
+        "README.md",
+        "LICENSE"
+      ],
+      "use": "Reference/reuse candidate only; no source code copied in this plan."
+    },
+    {
+      "repository": "obsidianmd/obsidian-clipper",
+      "commit": "6d56d618b00bd970aa738d6a7a61edee27783e81",
+      "files": [
+        "src/utils/highlighter.ts",
+        "src/utils/highlighter.test.ts",
+        "README.md",
+        "LICENSE"
+      ],
+      "use": "Reference/reuse candidate only; no source code copied in this plan."
+    },
+    {
+      "repository": "DuckTapeKiller/dark-reader-web-viewer",
+      "commit": "f14338a7139349bdfab99deee16fedc69840e035",
+      "files": [
+        "src/main.ts",
+        "README.md",
+        "LICENSE"
+      ],
+      "use": "Reference/reuse candidate only; no source code copied in this plan."
+    }
+  ],
+  "official_references": [
+    "https://obsidian.md/help/plugins/web-viewer",
+    "https://obsidian.md/help/web-clipper/highlight",
+    "https://obsidian.md/help/Files%2Band%2Bfolders/Accepted%2Bfile%2Bformats",
+    "https://www.electronjs.org/docs/latest/api/webview-tag",
+    "https://www.w3.org/TR/epub-33/",
+    "https://w3c.github.io/epub-specs/epub33/epubcfi/"
+  ]
+}

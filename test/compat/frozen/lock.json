@@ -1,0 +1,21 @@
+{
+  "epub-identity.mjs": "ef6d9318646268554716deb5b451a5e421cefb1d69475434ae5fe6ce418be959",
+  "epubjs-reference.cjs": "28fe1d1de7c1a9f7b9d11d35422299b681f7b4e828c1458bcddcb02e99f98f05",
+  "hypothesis-frame-sync.mjs": "c372207827c797a8a498f494a5c386958f0b628d928bd52d4d9cc0d4fc45e609",
+  "hypothesis-html-anchor.mjs": "381189b7df757c3dae1d038a676c7754fcaf05ca93a7d1b063e64bcc3e82bbaf",
+  "hypothesis-html-metadata.mjs": "60f22351f60934e9f9454e96fc6a3adc9161674c05743525c942296304a880c0",
+  "hypothesis-pdf-anchor.mjs": "3524252e88430b43e281a4e86464ff6de117c76df55a37cd6fe38eda0e4fb5c1",
+  "hypothesis-pdf-metadata.mjs": "fd1f2aec9fe7baec75476ac67e7b910e3316ba4324f474160ed99e7efd8250f3",
+  "hypothesis-service.mjs": "b17d3ce607eb7c576978dbeb1d1a8c88180d3a587612fb62bc3ea59e29259c90",
+  "legacy.mjs": "f92cd30f6b68724625b3e62fbb03a0211287c4ce7eb25c1d1d9b43e83b09c1fe",
+  "published-annotation-metadata.mjs": "dead465f5a5ce6c20075ace50e7991f8f827b63c59b8574cc051657840cfa6bd",
+  "published-annotation-service.mjs": "43e5451c23dbdbe76dab5199395153d1ac0e7ea42109e4c08dada193a71f3828",
+  "published-frame-sync.mjs": "a6d487072c225d342030d81b37d86e8d01da00ad28a7688303ba78d72fcb891e",
+  "published-html-anchor.mjs": "c640ea8185a1c160caffa708098331629bdd16703d27e0a486381c09000e5f33",
+  "published-html-metadata.mjs": "34109a375b2618dd877aa2cb29f0246c7f676ffc134e976b07644a1ebcd47b51",
+  "published-search-filter.mjs": "c3a4faec3fb1e7dffdc694f89ccbff58e0725ecf060e0e712149a60b1e308aae",
+  "published-selection-observer.mjs": "09d9d3ae72778d1378e1201b478cbf41be08ad374ab7d1794cbbbcd3f7834700",
+  "published-thread-annotations.mjs": "7ed768ee9675a9a9971b18beaf37b1aa6942597ac31acaa6bcaa58dc76eab6a2",
+  "published-video.mjs": "b3688d2e1cc1ec20d13bd86adfbf6a19f2dd962ad125607cb2694a5f9246ab63",
+  "published-view-filter.mjs": "155f241a3a804ca62590adb7920910ef715e129797b59e94860e71a3c48057f4"
+}

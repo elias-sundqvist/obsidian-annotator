@@ -1,0 +1,63 @@
+{
+  "branch": "experiment/obsidian-native-pdf",
+  "nativeVersion": "0.0.5",
+  "liveUiVerified": false,
+  "liveUiReason": "Completed v0.0.5 live checks before the Mac locked again; the final shared numeric-projection refinement is installed but not reloaded.",
+  "testSuites": {
+    "nativeAndInteroperability": 34,
+    "legacyJest": 3,
+    "bendBridge": 30,
+    "bendLaws": 92,
+    "rejectedMutationControls": 15
+  },
+  "legacyReferenceCommit": "9b8fe21",
+  "currentHypothesisExchangeSource": "a7b7400d0d706d4357ec37c2a3610b25dcca89d5",
+  "artifacts": {
+    "experiments/native-pdf/dist/main.js": {
+      "bytes": 337383,
+      "sha256": "7e84779e6dc7f596bb5b84437437906bea92d5f86a711832eeb4712a251ef288"
+    },
+    "experiments/native-pdf/dist/manifest.json": {
+      "bytes": 299,
+      "sha256": "063c5a79b8a26383019d2281e3ce7329f589cce7896f5e82f5599b91725683da"
+    },
+    "main.js": {
+      "bytes": 29326620,
+      "sha256": "be20943bedd0c81df8c320291da9b4e35fdfd64b07993bddabdb681546fbafd1"
+    },
+    "experiments/bend-codec/fixtures/legacy-annotationUtils.tsx": {
+      "bytes": 8825,
+      "sha256": "8c3056afc5d15b1064dee169704f55f2807c85cdd5fe3c6dcbfedcefd18bee38"
+    }
+  },
+  "liveScope": [
+    "v0.0.3 native page-note/tag/reply controls",
+    "v0.0.4 JSON picker/import/edit/export/self-import and legacy storage adapter writes",
+    "v0.0.5 repeated batch CRUD through real native handlers, final artifact export/self-import, restored highlights and zero iframes"
+  ],
+  "unverified": [
+    "interactive legacy iframe UI",
+    "Hypothesis service import or cloud synchronization",
+    "native EPUB/web rendering"
+  ],
+  "preTestNoteRestoredExactly": true,
+  "coreSources": {
+    "experiments/bend-codec/source-crud.bend": "173ce931808f1addd078982d2b942af40724d622bea0b7c14d4bc20ab78b68b6",
+    "experiments/bend-codec/recognizer.bend": "5e832635434a207931dd0e833feb17d6e3a97ca8d9577aab2fd24fcb9ac793d7",
+    "experiments/bend-codec/LAWS.bend": "54d0f0aa987c89cbc33ad2e57234ad816e36cff6ee87ddd702d622dc20edc53d",
+    "experiments/bend-codec/PROOF.bend": "1fc52a2e258a94e632bdb4b834c8690f881f856500ca3eecb95f2f37a8638376"
+  },
+  "historicalBuilds": {
+    "0.0.3": "4ab9d5bc9d7acfd024efc83ae4147f72421fca51b5e380b2135c704df89ce149",
+    "0.0.4": "fe47ff324439dafd8a809ca718fccc605bed7a1cc4557814d87d1d68409d6795",
+    "0.0.5-live": "bcbf77ac31eeaf359e1a7539eb576b6db3b65e5c69f773167f54aea2f5c27b06"
+  },
+  "completedLiveChecks": true,
+  "finalArtifactLiveReloaded": false,
+  "trustedBoundarySources": {
+    "experiments/bend-codec/bridge.mjs": "91941e5011b75499592dd5ebadd4d4b11fc5df20a7ab6b37a3534c00d96d7689",
+    "experiments/bend-codec/typed-annotations.mjs": "5d1e5ccac06185d12f4ef735635b923a9824760603cead64d77704e3c11c3e3e",
+    "experiments/native-pdf/codec.ts": "44d7f3ceeb07f390b65ab8ead435b97427de12336ae60a065ce819965729df01",
+    "experiments/native-pdf/exchange.ts": "f176b4c0986a72bca35af82df2bd72c3194cbb8eced428a88e51b049d5e7049d"
+  }
+}

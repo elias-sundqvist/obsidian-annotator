@@ -1,0 +1,18 @@
+{
+  "repository": "https://github.com/notofonts/noto-cjk",
+  "commit": "f8d157532fbfaeda587e826d4cd5b21a49186f7c",
+  "files": {
+    "NotoSansCJKjp-Regular.otf": {
+      "url": "https://raw.githubusercontent.com/notofonts/noto-cjk/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Sans/OTF/Japanese/NotoSansCJKjp-Regular.otf",
+      "bytes": 16467736,
+      "sha256": "68a3fc98800b2a27b371f2fb79991daf3633bd89309d4ffaa6946fd587f375b5"
+    },
+    "LICENSE": {
+      "url": "https://raw.githubusercontent.com/notofonts/noto-cjk/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Sans/LICENSE",
+      "bytes": 4301,
+      "sha256": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2"
+    }
+  },
+  "license": "SIL Open Font License 1.1; included unchanged in the private synthetic EPUB.",
+  "distribution": "Reference asset is not checked in or shipped; the browser harness accepts a separately supplied synthetic EPUB."
+}
