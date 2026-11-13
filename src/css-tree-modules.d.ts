@@ -19,4 +19,6 @@ declare module 'css-tree/utils' {
 declare module 'pako' {
     /** Inflate zlib-wrapped data (a PDF FlateDecode stream). Throws on damaged input. */
     export function inflate(data: Uint8Array): Uint8Array;
+    /** Deflate data with a zlib wrapper (what a PDF FlateDecode stream holds). */
+    export function deflate(data: Uint8Array): Uint8Array;
 }
