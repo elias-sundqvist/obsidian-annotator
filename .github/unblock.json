@@ -1281,7 +1281,7 @@
       "parent": "community",
       "dependsOn": ["community-review"],
       "estimate": 2,
-      "notes": "COMMUNITY_REVIEW.md 3.3. People want PDFs in Bases and Dataview with properties and make sidecar notes by hand (forum request 64386, 24 posts, active November 2026; about 6 people on Discord in 2026). 0.3 already has that note per source, and 'Add the PDF's details to the note' makes it before any annotation exists, but the README does not say so and no Base lists the sources. Done looks like: a README paragraph with the Base filter on annotation-target, and a command that makes a Base of all annotated sources (title, author, year, annotation-progress, count, tags). Needs the owner's yes before the command is built."
+      "notes": "COMMUNITY_REVIEW.md 3.3. DONE 2026-11-13, the documentation half: README 'The note is the source's property sheet', with a Base that lists every annotated source (filter on annotation-target; checked in Obsidian 1.13.7, where it listed the 36 annotation notes of the test vault). OPEN, and needing the owner's yes: a command that makes that Base for you (title, author, year, annotation-progress, count, tags)."
     },
     {
       "id": "zotero-guide",
@@ -1295,11 +1295,11 @@
     {
       "id": "core-pdf-annotation",
       "title": "README: what happens when Obsidian adds its own PDF annotation",
-      "status": "todo",
+      "status": "done",
       "parent": "community",
       "dependsOn": ["community-review"],
       "estimate": 1,
-      "notes": "COMMUNITY_REVIEW.md 3.5. PDF annotation is 'Planned' on Obsidian's public roadmap and people recommend waiting for it. Now: one honest paragraph (annotations are notes in the vault; they can be exported as standard PDF annotations and taken in from a PDF; nothing can be said about a feature that does not exist yet). Later, when it ships: check taking in what Obsidian writes and whether exported annotations show in its viewer."
+      "notes": "COMMUNITY_REVIEW.md 3.5. PDF annotation is 'Planned' on Obsidian's public roadmap and people recommend waiting for it. Now: one honest paragraph (annotations are notes in the vault; they can be exported as standard PDF annotations and taken in from a PDF; nothing can be said about a feature that does not exist yet). Later, when it ships: check taking in what Obsidian writes and whether exported annotations show in its viewer.\n\nDone 2026-11-13: 2026-11-13: README section 'If Obsidian adds PDF annotation of its own' (the roadmap entry was read that day: 'PDF annotation' under Planned). No promise is made. When the core feature ships, a new task: take in what Obsidian writes, and see whether exported annotations show in its viewer."
     }
   ]
 }

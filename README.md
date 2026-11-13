@@ -62,6 +62,32 @@ The `annotation-target` may be written in any of the usual ways:
 A name that differs from a file's only by the kind of space in it (a no-break
 space pasted from a web page) still finds that file.
 
+### The note is the source's property sheet
+
+A PDF or a book cannot carry properties of its own, so the annotation note is
+where they go: tags, a status, an author, whatever you list your reading by.
+The note opens its source, and **Add the PDF's details to the note** makes
+the note (with the PDF's title, authors and year) even before the first
+highlight. A Base that lists everything you have annotated needs one filter:
+
+```yaml
+filters:
+  and:
+    - '!note["annotation-target"].isEmpty()'
+views:
+  - type: table
+    name: Sources
+    order:
+      - file.name
+      - note.annotation-target
+      - note.annotation-progress
+      - note.author
+      - note.year
+```
+
+`annotation-progress` is there when
+[reading progress](#reading-progress) is kept in the note.
+
 Nothing is stored anywhere else. If a block in the note is damaged (a sync
 conflict, a slip of the hand), the readable annotations are still shown, the
 sidebar names the damaged part with a button to its line, and nothing is
@@ -454,6 +480,17 @@ and the PDF export is read back with two independent PDF readers. See
   Obsidian for iOS on a device. YouTube may refuse to play there (its Error 153). The
   reader then says so and offers **Open in YouTube**; a note's time opens the
   video there at that time, and notes and the transcript work as before.
+
+## If Obsidian adds PDF annotation of its own
+
+PDF annotation is on Obsidian's public roadmap as planned (November 2026).
+Nothing can be said yet about how it will work, so nothing is promised here about working
+with it. What holds today: your annotations are Markdown in your own notes,
+not in a database; **Export PDF with annotations** writes them into a copy of
+the PDF as standard PDF annotations, which any program that follows the
+standard reads; and **Take in the annotations this PDF already holds** reads
+standard annotations another program wrote. Books, web pages and videos are
+not PDFs and stay as they are.
 
 ## Contributing
 
