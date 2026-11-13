@@ -801,6 +801,31 @@ test('a new annotation note starts as the reader set it: another heading, or a t
   await h.plugin.setDisplay({noteTemplate:'Templates/Gone.md'});await h.plugin.ensureNote('d.pdf');assert.equal(made.at(-1)[1],'---\nannotation-target: "d.pdf"\n---\n\n## Highlights\n');assert.equal(made.length,4);
  }finally{h.dispose();}
 });
+test('a note whose property is nearly annotation-target is told so once, and the button renames the property',async()=>{
+ const {Notice}=await import('./.generated/plugin-boundary.mjs');
+ const h=host();try{const writes=[];h.app.fileManager={processFrontMatter:async(file,change)=>{const meta=h.metadata.get(file.path)||{frontmatter:{}};meta.frontmatter={...meta.frontmatter};change(meta.frontmatter);h.metadata.set(file.path,meta);writes.push(file.path);}};
+  h.plugin.manifest={id:'obsidian-annotator'};h.add('Paper.pdf');
+  const colon=h.add('Colon.md','Text',{title:'Kept','annotation-target:':'Paper.pdf',tags:['a']}),right=h.add('Right.md','',{'annotation-target':'Paper.pdf'}),plain=h.add('Plain.md','',{title:'No target'}),other=h.add('Other.md','',{'annotation-target-type':'pdf','annotation-progress':'3/9'}),inline=h.add('Inline.md','annotation-target:: [[Paper.pdf]]',{'annotator-target':'Paper.pdf'});
+  await h.plugin.onload();h.plugin.autoOpen=false;
+  const open=note=>{const leaf={app:h.app,contentEl:h.dom.window.document.createElement('div'),openFile:async()=>{},setViewState:async()=>{}},view=new MarkdownView(leaf);view.file=note;leaf.view=view;h.app.workspace.getMostRecentLeaf=()=>leaf;h.events.get('file-open')(note);};
+  const before=Notice.messages.length,said=()=>Notice.messages.slice(before);
+  // Notes with their target, with none, or with the reader's other properties: nothing is said.
+  for(const note of [right,plain,other])open(note);assert.equal(said().length,0);
+  // A target given by a Dataview field in the text is a target, whatever the properties say.
+  h.app.plugins={getPlugin:name=>name==='dataview'?{api:{page:path=>path==='Inline.md'?{'annotation-target':{path:'Paper.pdf'}}:{}}}:null};open(inline);assert.equal(said().length,0);h.app.plugins={getPlugin:()=>null};
+  open(colon);assert.equal(said().length,1);
+  const message=said()[0];assert.match(message.textContent,/This note has a property “annotation-target:”\. Annotator reads “annotation-target”/);
+  const button=message.querySelector('button');assert.equal(button.textContent,'Rename the property');
+  // Said once for a note, however often it is opened.
+  open(colon);open(colon);assert.equal(said().length,1);
+  button.onclick();for(let turn=0;turn<5;turn++)await Promise.resolve();
+  assert.deepEqual(writes,['Colon.md']);assert.deepEqual(h.metadata.get('Colon.md').frontmatter,{title:'Kept',tags:['a'],'annotation-target':'Paper.pdf'});assert.equal(h.contents.get('Colon.md'),'Text');
+  assert.match(said()[1],/The property is now “annotation-target”/);
+  // Pressed again after the note was put right: nothing is written over.
+  h.metadata.set('Colon.md',{frontmatter:{'annotation-target':'Other.pdf','annotation-target:':'Paper.pdf'}});button.onclick();for(let turn=0;turn<5;turn++)await Promise.resolve();
+  assert.deepEqual(h.metadata.get('Colon.md').frontmatter,{'annotation-target':'Other.pdf','annotation-target:':'Paper.pdf'});assert.match(said()[2],/Nothing to rename/);
+ }finally{h.dispose();}
+});
 test('where the reader was is written to the note on leaving a source, only when asked, only when it changed, and never by making a note',async()=>{
  const h=host();try{const writes=[];h.app.fileManager={processFrontMatter:async(file,change)=>{const meta=h.metadata.get(file.path)||{frontmatter:{}};meta.frontmatter={...meta.frontmatter};change(meta.frontmatter);h.metadata.set(file.path,meta);writes.push([file.path,meta.frontmatter['annotation-progress']]);}};
   const note=h.add('paper.pdf.annotations.md','',{'annotation-target':'paper.pdf'});h.plugin.notes.set('paper.pdf',{note,records:[]});

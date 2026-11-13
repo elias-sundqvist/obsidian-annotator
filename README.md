@@ -326,7 +326,9 @@ writes it, or as a `file:` address:
 
 The key is `annotation-target`, spelled exactly so and without a colon of its
 own: in Obsidian's Properties editor, type the name alone and the path as its
-value.
+value. A note whose property is a near miss (`annotation-target:`,
+`annotator-target`) is told so when it opens, with a button that renames the
+property.
 
 ## With Zotero
 

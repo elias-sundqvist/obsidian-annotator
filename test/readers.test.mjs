@@ -179,6 +179,24 @@ test('saved marks open from touch click and keyboard activation without double-o
  button.dispatchEvent(new w.MouseEvent('click',{bubbles:true,detail:0}));assert.equal(opens,3);dom.window.close();
 });
 
+test('a property that is nearly annotation-target is recognised, and one that only resembles it is not',async()=>{
+ const {targetKeyNearMiss}=await import('./.generated/readers/preferences.js');
+ // What people wrote: the colon typed into the name in the Properties editor, the plugin's name for the property's, other spacing and case, a slip of a letter.
+ for(const key of ['annotation-target:','annotator-target','Annotation Target','annotation_target','ANNOTATION-TARGET','annotationtarget','anotation-target','annotation-traget','annotation-targets','annotations-target'])assert.equal(targetKeyNearMiss({[key]:'Papers/a.pdf'}),key,key);
+ assert.equal(targetKeyNearMiss({title:'A',' annotation-target ':'[[a.pdf]]',tags:['x']}),' annotation-target ');
+ // The value may be anything a target can be written as.
+ for(const value of ['[[a.pdf]]','![[a.pdf]]','[A](a.pdf)','https://example.org/a.pdf',['a.pdf'],{path:'a.pdf'}])assert.equal(targetKeyNearMiss({'annotator-target':value}),'annotator-target');
+ // Nothing is amiss when the note has its target, whatever else it has.
+ assert.equal(targetKeyNearMiss({'annotation-target':'a.pdf','annotator-target':'b.pdf'}),null);assert.equal(targetKeyNearMiss({'annotation-target':'a.pdf'}),null);
+ // An empty target beside a near miss: the near miss is still what was meant.
+ assert.equal(targetKeyNearMiss({'annotation-target':'','annotator-target':'b.pdf'}),'annotator-target');assert.equal(targetKeyNearMiss({'annotation-target':null,'annotation-target:':'b.pdf'}),'annotation-target:');
+ // The reader's other properties, and unrelated ones, are not near misses.
+ for(const key of ['annotation-target-type','annotation-progress','annotation','target','annotations','annotated','annotation-source','citation-target','notation-get','tags','aliases','cssclasses'])assert.equal(targetKeyNearMiss({[key]:'a.pdf'}),null,key);
+ // A near miss that holds nothing a target could be says nothing.
+ for(const value of ['','   ',null,undefined,0,true,{unrelated:true},[]])assert.equal(targetKeyNearMiss({'annotator-target':value}),null,String(value));
+ for(const value of [null,undefined,'text',3,[],[{'annotator-target':'a.pdf'}]])assert.equal(targetKeyNearMiss(value),null);
+});
+
 test('legacy target shapes and Markdown preferences are preserved when adopting native settings',async()=>{
  const {annotationTarget,markdownPreferences}=await import('./.generated/readers/preferences.js');
  for(const value of ['[[Folder/book.pdf|Book]]',[{path:'Folder/book.pdf'}],{path:'Folder/book.pdf'}])assert.equal(annotationTarget(value),'Folder/book.pdf');

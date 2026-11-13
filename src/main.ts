@@ -119,6 +119,7 @@ import {
     readingPosition,
     annotationReference,
     annotationTarget,
+    targetKeyNearMiss,
     markdownPreferences,
     type ReaderPreferences,
     type ReadingPosition
@@ -920,6 +921,7 @@ export default class AnnotatorPlugin extends Plugin {
                 )
                     return;
                 this.openMarkdownNote(file);
+                this.hintTargetKey(file);
             })
         );
         this.addCommand({
@@ -4145,6 +4147,54 @@ export default class AnnotatorPlugin extends Plugin {
             }
             if (!file || file === pending.note) this.openMarkdownNote(pending.note, false, leaf);
         }
+    }
+    private readonly hintedTargetKeys = new Set<string>();
+    /**
+     * A note whose property is nearly `annotation-target` ("annotation-target:" with the colon in its name,
+     * "annotator-target") opens no source, and nothing used to say why. It is told so once per note, with a
+     * button that renames the property.
+     */
+    private hintTargetKey(note: TFile | null) {
+        if (this.stopped || !note || note.extension !== 'md' || this.hintedTargetKeys.has(note.path)) return;
+        const key = targetKeyNearMiss(this.app.metadataCache.getFileCache(note)?.frontmatter);
+        if (!key) return;
+        try {
+            // A target given another way (a Dataview field in the note's text) is a target: nothing is amiss.
+            if (this.targetKey(note)) return;
+        } catch {
+            /* A target that cannot be read is no reason to keep quiet about the property. */
+        }
+        this.hintedTargetKeys.add(note.path);
+        const document = this.app.workspace.containerEl.ownerDocument,
+            message = document.createDocumentFragment(),
+            rename = document.createElement('button');
+        rename.textContent = 'Rename the property';
+        rename.className = 'annotator-notice-action';
+        message.append(
+            `This note has a property “${key}”. Annotator reads “annotation-target”, so no source opens for it.`,
+            rename
+        );
+        const notice = new Notice(message, 15000) as Notice & { hide?(): void };
+        rename.onclick = () => {
+            notice.hide?.();
+            void this.renameTargetKey(note, key).catch(error => this.fail(error));
+        };
+    }
+    private async renameTargetKey(note: TFile, key: string) {
+        let renamed = false;
+        await this.app.fileManager.processFrontMatter(note, frontmatter => {
+            const record = frontmatter as Record<string, unknown>;
+            // The note may have been put right by hand since the notice was shown.
+            if (!(key in record) || annotationTarget(record['annotation-target'])) return;
+            record['annotation-target'] = record[key];
+            delete record[key];
+            renamed = true;
+        });
+        new Notice(
+            renamed
+                ? 'The property is now “annotation-target”. Open the note again, or run “Switch between reader and Markdown note”.'
+                : 'Nothing to rename: the note has changed since.'
+        );
     }
     private openMarkdownNote(note: TFile | null, explicit = false, destination?: WorkspaceLeaf) {
         if (this.stopped || !note || note.extension !== 'md') return;

@@ -3,6 +3,13 @@
 What changed for someone using Annotator. How to use each thing is in
 [README.md](README.md).
 
+## Unreleased
+
+- A note whose property is nearly `annotation-target` (the colon typed into
+  its name, `annotator-target`, another spelling) opened no source and
+  nothing said why. Opening such a note now says which property was probably
+  meant, with a button that renames it.
+
 ## 0.3.0 (2026-11-13)
 
 A new reader. Versions up to 0.2.11 showed the Hypothesis web client in a

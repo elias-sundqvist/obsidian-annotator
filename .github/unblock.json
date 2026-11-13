@@ -1241,11 +1241,11 @@
     {
       "id": "target-key-hint",
       "title": "A hint when a note's property is a near miss of annotation-target",
-      "status": "todo",
+      "status": "done",
       "parent": "community",
       "dependsOn": ["community-review"],
       "estimate": 1,
-      "notes": "From docs/dev/COMMUNITY_REVIEW.md 3.1. People ended up with a property named 'annotation-target:' (colon inside the key, typed in the Properties editor) or 'annotator-target', and nothing told them why no reader opened. About 6 people on the forum and Discord, 2022 to 2025. Windows drive paths with backslashes, the other half of that report, are already read (test/local-source.test.mjs) and the README now shows them. Done looks like: opening such a note says which property was probably meant and offers to rename it; tests for the near misses; nothing shown for unrelated keys."
+      "notes": "From docs/dev/COMMUNITY_REVIEW.md 3.1. People ended up with a property named 'annotation-target:' (colon inside the key, typed in the Properties editor) or 'annotator-target', and nothing told them why no reader opened. About 6 people on the forum and Discord, 2022 to 2025. Windows drive paths with backslashes, the other half of that report, are already read (test/local-source.test.mjs) and the README now shows them. Done looks like: opening such a note says which property was probably meant and offers to rename it; tests for the near misses; nothing shown for unrelated keys.\n\nDone 2026-11-13: Built 2026-11-13 on branch feature/target-key-hint (not merged, not released): targetKeyNearMiss in src/preferences.ts, the notice and rename in src/main.ts, tests in readers.test.mjs and plugin-boundary.test.mjs (592 reader tests pass), and tried in the running app on Obsidian 1.13.7: the notice shows for 'annotation-target:' and 'annotator-target', and the button renames the property in place. Goes out with the next release."
     },
     {
       "id": "page-text-boxes",

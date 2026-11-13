@@ -820,6 +820,7 @@ body:is(.annotator-compact, .annotator-compact-setting) { --annotator-quote-line
 
 /* Notices, settings fields and the EPUB status line. */
 .notice .annotator-notice-undo { margin-inline-start: var(--size-4-3, 12px); }
+.notice .annotator-notice-action { display: block; margin-top: var(--size-4-2, 8px); }
 .annotator-template-setting { flex-wrap: wrap; }
 .annotator-template-setting .setting-item-control { flex: 1 1 100%; margin-top: var(--size-4-2, 8px); }
 .annotator-template-field { width: 100%; font-family: var(--font-monospace); font-size: var(--font-ui-smaller); }

@@ -99,6 +99,40 @@ export function annotationTarget(value: unknown): string | null {
     if (wiki) return wiki[1].split('|')[0].split('#')[0].trim() || null;
     return text.replace(/^\[\[/, '').replace(/\]\]$/, '').split('|')[0];
 }
+/** How many single letters must be added, dropped or changed to turn one word into the other. */
+function lettersApart(a: string, b: string): number {
+    let row = Array.from({ length: b.length + 1 }, (_, at) => at);
+    for (let i = 1; i <= a.length; i++) {
+        const next = [i];
+        for (let j = 1; j <= b.length; j++)
+            next.push(Math.min(row[j] + 1, next[j - 1] + 1, row[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)));
+        row = next;
+    }
+    return row[b.length];
+}
+/**
+ * The property a note most likely meant as `annotation-target`: one that
+ * reads the same once case, spaces and punctuation are set aside
+ * ("annotation-target:", "Annotation Target", "annotation_target"), or is
+ * within two letters of it ("annotator-target", "anotation-target"). Only
+ * when the note has no usable `annotation-target` of its own, and only when
+ * the property holds something a target could be. A property that merely
+ * starts the same (`annotation-target-type`, `annotation-progress`) is not
+ * a near miss.
+ */
+export function targetKeyNearMiss(frontmatter: unknown): string | null {
+    if (!frontmatter || typeof frontmatter !== 'object' || Array.isArray(frontmatter)) return null;
+    const record = frontmatter as Record<string, unknown>,
+        wanted = 'annotationtarget';
+    if (annotationTarget(record['annotation-target'])) return null;
+    for (const key of Object.keys(record)) {
+        if (key === 'annotation-target') continue;
+        const letters = key.toLowerCase().replace(/[^a-z]/g, '');
+        if (Math.abs(letters.length - wanted.length) > 2 || lettersApart(letters, wanted) > 2) continue;
+        if (annotationTarget(record[key])) return key;
+    }
+    return null;
+}
 /**
  * The places a target that does not resolve on its own is looked for: the
  * target itself, then under each default folder, in the order they are
