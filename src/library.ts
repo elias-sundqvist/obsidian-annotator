@@ -35,7 +35,7 @@ export interface LibraryHost {
 function kindOf(raw: string, key: string | null, type: string | null): SourceKind {
     if (type === 'video' || key?.startsWith('video:')) return 'video';
     if (type === 'pdf' || /\.pdf(?:[?#]|$)/i.test(raw)) return 'pdf';
-    if (type === 'epub' || /\.epub(?:[?#]|$)/i.test(raw)) return 'epub';
+    if (type === 'epub' || /\.(?:epub|fb2|fbz|fb2\.zip)(?:[?#]|$)/i.test(raw)) return 'epub';
     if (key?.startsWith('web:') || /^https?:/i.test(raw)) return 'web';
     return 'other';
 }

@@ -85,6 +85,7 @@ import { annotationThreads } from './annotation-threads';
 import { compareLocations, defaultLocation } from './annotation-search';
 import { NativePdf } from './native-pdf';
 import { EpubView, EPUB_VIEW, type FigureCapture } from './epub';
+import { fictionBookName } from './epub-book';
 import { makeSnapshot, SnapshotHost } from './snapshot';
 import { refreshSnapshotEditors, snapshotEditorExtension } from './snapshot-editor';
 import { LiveWebHost, type GuestElement, type WebFigureCapture } from './live-web';
@@ -478,6 +479,14 @@ export default class AnnotatorPlugin extends Plugin {
             return view;
         });
         this.registerExtensions(['epub'], EPUB_VIEW);
+        // FictionBook files open in the book reader too. Obsidian refuses an extension another plugin has already taken;
+        // the plugin must still start then, and such a book is opened from its menu (Annotate) or its annotation note.
+        for (const extension of ['fb2', 'fbz'])
+            try {
+                this.registerExtensions([extension], EPUB_VIEW);
+            } catch {
+                /* Another plugin opens these files by default. */
+            }
         this.registerView(VIDEO_VIEW, leaf => new VideoView(leaf, this.videoCallbacks()));
         // Side-by-side installs must not claim the old plugin's view.
         this.registerView(
@@ -817,15 +826,13 @@ export default class AnnotatorPlugin extends Plugin {
         );
         this.registerEvent(
             this.app.workspace.on('file-menu', (menu, file) => {
-                if (file instanceof TFile && /^(pdf|epub)$/i.test(file.extension))
+                if (file instanceof TFile && (/^(pdf|epub)$/i.test(file.extension) || fictionBookName(file.path)))
                     menu.addItem(item =>
                         item
                             .setTitle('Annotate')
                             .setIcon('highlighter')
                             .onClick(() => {
-                                void this.app.workspace
-                                    .getLeaf(false)
-                                    .openFile(file)
+                                void this.openSourceFile(this.app.workspace.getLeaf(false), file)
                                     .then(() => this.openSidebar())
                                     .catch(error => this.fail(error));
                             })
@@ -4388,7 +4395,7 @@ export default class AnnotatorPlugin extends Plugin {
         else {
             const source = this.app.vault.getAbstractFileByPath(key);
             if (!(source instanceof TFile)) throw new Error('Source is missing.');
-            await leaf.openFile(source, { active: shouldActivate() });
+            await this.openSourceFile(leaf, source, shouldActivate());
         }
         this.bindSources();
         if (shouldActivate()) {
@@ -4401,6 +4408,15 @@ export default class AnnotatorPlugin extends Plugin {
             if (!row) throw new Error('Annotation block was not found.');
             this.openAnnotation(context, row);
         }
+    }
+    /**
+     * Open a source file in a pane. A FictionBook is opened in the book reader by name: a zipped one ends in `.zip`,
+     * which is not the reader's to claim for every archive, and `.fb2` may be another plugin's by default.
+     */
+    private async openSourceFile(leaf: WorkspaceLeaf, file: TFile, active = true) {
+        if (fictionBookName(file.path))
+            await leaf.setViewState({ type: EPUB_VIEW, state: { file: file.path }, active });
+        else await leaf.openFile(file, { active });
     }
     /** A pane that already shows this source with this note's annotations, if there is one in the workspace. */
     private leafShowing(source: string, note: string): WorkspaceLeaf | null {
