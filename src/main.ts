@@ -1875,6 +1875,11 @@ export default class AnnotatorPlugin extends Plugin {
         citeList: (pages, top, fromLabel) => this.logic.call('citeList', pages, top, fromLabel),
         citePage: (page, runs, links, lists) => this.logic.call('citePage', page, runs, links, lists)
     };
+    /** The reader of a PDF that is open, or null for any other source. */
+    pdfFor(source: string | null): NativePdf | null {
+        const host: unknown = source ? this.bindingFor(source)?.host : undefined;
+        return host instanceof NativePdf ? host : null;
+    }
     /** A source's annotation note, made if it has none (as "Add the PDF's details" makes it). */
     annotationNote(source: string): Promise<TFile> {
         return this.ensureNote(source);

@@ -7,7 +7,7 @@
  */
 import { ItemView, Keymap, Menu, Notice, Platform, TFile, normalizePath, setIcon, type WorkspaceLeaf } from 'obsidian';
 import type AnnotatorPlugin from './main';
-import { NativePdf } from './native-pdf';
+import type { NativePdf } from './native-pdf';
 import { showing } from './rest';
 import { displayTitle } from './library';
 import { Codes, plain, type Entry, type Proposal, type Row } from './citations';
@@ -43,18 +43,18 @@ interface Found {
 export class CitationsView extends ItemView {
     private timer: ReturnType<typeof setInterval> | null = null;
     private closed = true;
-    private file: string | null = null;
+    private source: string | null = null;
     private reader: PdfCitations | null = null;
     private page = 0;
     private waiting: { page: number; since: number } | null = null;
     private serial = 0;
-    private view: PageView | null = null;
-    private state: 'idle' | 'not-pdf' | 'text' | 'reading' | 'shown' | 'failed' = 'idle';
+    private shown: PageView | null = null;
+    private phase: 'idle' | 'not-pdf' | 'text' | 'reading' | 'shown' | 'failed' = 'idle';
     private progress = '';
     private held = false;
     private mode: 'page' | 'all' = 'page';
     private filter = '';
-    private open = new Set<string>();
+    private unfolded = new Set<string>();
     private othersOpen = false;
     private form: Form | null = null;
     private marked = '';
@@ -97,7 +97,7 @@ export class CitationsView extends ItemView {
         this.timer = null;
         this.listen(false);
         this.reader = null;
-        this.view = null;
+        this.shown = null;
         this.index = null;
         this.contentEl.empty();
     }
@@ -116,7 +116,7 @@ export class CitationsView extends ItemView {
             const stale = () => {
                 this.index = null;
                 this.found.clear();
-                if (this.view && !this.form) void this.findNotes().then(() => this.render());
+                if (this.shown && !this.form) void this.findNotes().then(() => this.render());
             };
             this.refs = [
                 [cache, cache.on('changed', stale)],
@@ -131,14 +131,7 @@ export class CitationsView extends ItemView {
         }
     }
     private get host(): NativePdf | null {
-        const file = this.plugin.currentFile;
-        let host: unknown;
-        try {
-            host = file ? this.plugin.hostFor(file) : null;
-        } catch {
-            host = null;
-        }
-        return host instanceof NativePdf ? host : null;
+        return this.plugin.pdfFor(this.plugin.currentFile);
     }
     /** Whether the list stays as it is: by the reader's choice, or because a hand is on it. */
     private get holding(): boolean {
@@ -156,8 +149,8 @@ export class CitationsView extends ItemView {
         if (!shown) return;
         const file = this.plugin.currentFile,
             host = this.host;
-        if (file !== this.file) {
-            this.file = file;
+        if (file !== this.source) {
+            this.source = file;
             this.reset();
         }
         if (!host) {
@@ -175,7 +168,7 @@ export class CitationsView extends ItemView {
         }
         const page = host.currentPage();
         if (!reader || !page) return;
-        if (page === this.page && this.state !== 'text' && this.state !== 'idle' && this.state !== 'not-pdf') return;
+        if (page === this.page && this.phase !== 'text' && this.phase !== 'idle' && this.phase !== 'not-pdf') return;
         if (this.holding && this.page) return;
         // A page is read once it has stayed in view for a moment: scrolling past pages reads none of them.
         if (this.waiting?.page !== page) this.waiting = { page, since: Date.now() };
@@ -185,19 +178,19 @@ export class CitationsView extends ItemView {
     private reset() {
         this.serial++;
         this.reader = null;
-        this.view = null;
+        this.shown = null;
         this.page = 0;
         this.waiting = null;
         this.form = null;
-        this.open.clear();
+        this.unfolded.clear();
         this.proposals.clear();
         this.found.clear();
         this.marked = '';
         this.filter = '';
     }
-    private showState(state: CitationsView['state']) {
-        if (this.state === state) return;
-        this.state = state;
+    private showState(state: CitationsView['phase']) {
+        if (this.phase === state) return;
+        this.phase = state;
         this.render();
     }
     private async readPage(page: number) {
@@ -205,7 +198,7 @@ export class CitationsView extends ItemView {
             serial = ++this.serial;
         if (!reader) return;
         this.page = page;
-        this.state = 'reading';
+        this.phase = 'reading';
         this.progress = '';
         this.render();
         try {
@@ -216,14 +209,14 @@ export class CitationsView extends ItemView {
                 if (line) line.textContent = words;
             });
             if (serial !== this.serial || this.closed) return;
-            this.view = view;
-            this.state = view ? 'shown' : 'failed';
+            this.shown = view;
+            this.phase = view ? 'shown' : 'failed';
             this.render();
             await this.findNotes();
             if (serial === this.serial && !this.form) this.render();
         } catch (error) {
             if (serial !== this.serial) return;
-            this.state = 'failed';
+            this.phase = 'failed';
             this.progress = String(error);
             this.render();
         }
@@ -255,7 +248,7 @@ export class CitationsView extends ItemView {
     }
     /** For every entry on show: the notes that are its work's, and the notes that only share its title. */
     private async findNotes() {
-        const view = this.view;
+        const view = this.shown;
         if (!view) return;
         const wanted: [number, Entry][] = [];
         for (const row of view.citations.rows)
@@ -312,12 +305,12 @@ export class CitationsView extends ItemView {
     }
     // ── Showing ─────────────────────────────────────────────────────────────
     private statusWords(): string {
-        if (this.state === 'idle') return '';
-        if (this.state === 'not-pdf') return 'Citations are read from PDFs.';
-        if (this.state === 'text') return 'Reading the PDF’s text…';
-        if (this.state === 'reading') return this.progress || 'Reading…';
-        if (this.state === 'failed') return `The citations could not be read. ${this.progress}`.trim();
-        const view = this.view,
+        if (this.phase === 'idle') return '';
+        if (this.phase === 'not-pdf') return 'Citations are read from PDFs.';
+        if (this.phase === 'text') return 'Reading the PDF’s text…';
+        if (this.phase === 'reading') return this.progress || 'Reading…';
+        if (this.phase === 'failed') return `The citations could not be read. ${this.progress}`.trim();
+        const view = this.shown,
             reader = this.reader;
         if (!view || !reader) return '';
         if (!reader.hasText) return 'This PDF has no text to read (it is a scan), so its citations cannot be listed.';
@@ -366,7 +359,7 @@ export class CitationsView extends ItemView {
         const root = this.contentEl,
             scroll = root.querySelector('.annotator-card-list')?.scrollTop ?? 0;
         root.empty();
-        const state = this.file ? this.plugin.notes.get(this.file) : undefined,
+        const state = this.source ? this.plugin.notes.get(this.source) : undefined,
             total = this.host?.whereabouts().split('/')[1] || '';
         const head = root.createDiv({ cls: 'annotator-head' }),
             row = head.createDiv({ cls: 'annotator-head-row' }),
@@ -375,8 +368,8 @@ export class CitationsView extends ItemView {
             cls: 'annotator-head-name annotator-citation-source',
             text: state?.note
                 ? displayTitle(state.note.basename)
-                : this.file
-                  ? this.file.split('/').pop() || 'Citations'
+                : this.source
+                  ? this.source.split('/').pop() || 'Citations'
                   : 'Citations'
         });
         if (this.page && this.reader)
@@ -398,7 +391,7 @@ export class CitationsView extends ItemView {
             hold.setAttribute('aria-pressed', String(this.held));
             hold.toggleClass('is-active', this.held);
         }
-        if (this.view && this.view.lists.some(list => list.read?.entries.length)) {
+        if (this.shown && this.shown.lists.some(list => list.read?.entries.length)) {
             const tabs = head.createDiv({ cls: 'annotator-tab-row' }).createDiv({
                 cls: 'annotator-sidebar-tabs',
                 attr: { role: 'tablist', 'aria-label': 'What is listed' }
@@ -426,19 +419,19 @@ export class CitationsView extends ItemView {
         }).toggleAttribute('hidden', !words);
         const list = root.createDiv({ cls: 'annotator-card-list annotator-citation-list', attr: { role: 'list' } });
         if (this.form?.key === 'selection') this.renderForm(list);
-        const view = this.view;
-        if (this.state === 'idle' || this.state === 'not-pdf') {
+        const view = this.shown;
+        if (this.phase === 'idle' || this.phase === 'not-pdf') {
             const empty = list.createDiv({ cls: 'annotator-empty-state' });
             setIcon(empty.createDiv({ cls: 'annotator-empty-icon' }), 'book-marked');
             empty.createDiv({
                 cls: 'annotator-empty-title',
-                text: this.state === 'idle' ? 'No PDF open' : 'Citations are read from PDFs'
+                text: this.phase === 'idle' ? 'No PDF open' : 'Citations are read from PDFs'
             });
             empty.createDiv({
                 cls: 'annotator-empty-hint',
                 text: 'Open a paper as a PDF: the works cited on the page you are reading are listed here.'
             });
-        } else if (view && this.state === 'shown') {
+        } else if (view && this.phase === 'shown') {
             if (this.mode === 'all') this.renderAll(list, view);
             else if (view.own) {
                 list.createDiv({ cls: 'annotator-citation-heading', text: 'References on this page' });
@@ -516,7 +509,8 @@ export class CitationsView extends ItemView {
                     ? ` · from the list on page ${view.lists[row.list].start}`
                     : '';
             this.renderEntry(list, row.list, entries[0], {
-                marker: row.marker,
+                // A numbered work is shown by its own label: one bracket may cite several.
+                marker: entries[0].label ? `[${entries[0].label}]` : row.marker,
                 count: row.count,
                 witness: WITNESS[row.how] + from,
                 places
@@ -599,15 +593,15 @@ export class CitationsView extends ItemView {
                 });
         }
         // The reference as the PDF has it: three lines, and all of it when opened.
-        const opened = this.open.has(key),
+        const opened = this.unfolded.has(key),
             text = item.createEl('button', {
                 cls: `annotator-citation-entry${opened ? ' is-open' : ''}`,
                 text: entry.text,
                 attr: { type: 'button', 'aria-expanded': String(opened), 'aria-label': `Reference: ${entry.text}` }
             });
         text.onclick = () => {
-            if (opened) this.open.delete(key);
-            else this.open.add(key);
+            if (opened) this.unfolded.delete(key);
+            else this.unfolded.add(key);
             this.render();
         };
         if (entry.long)
@@ -741,7 +735,7 @@ export class CitationsView extends ItemView {
                 text: 'The DOI ran to the end of a line in the PDF and may be incomplete.'
             });
         field('Note name', form.name, value => (form.name = value));
-        const source = this.file,
+        const source = this.source,
             hasNote = !!(source && this.plugin.notes.get(source)?.note),
             pdf = this.host?.view.file;
         if (source && !hasNote) {
@@ -786,7 +780,7 @@ export class CitationsView extends ItemView {
     /** Make the note. Nothing is overwritten, and the reader stays where they are. */
     private async create() {
         const form = this.form,
-            source = this.file;
+            source = this.source;
         if (!form || form.busy) return;
         form.busy = true;
         form.error = '';
@@ -835,7 +829,7 @@ export class CitationsView extends ItemView {
     /** Add the source to a note's `cited-by`, on the reader's click. Links are compared by the files they lead to. */
     private async linkNote(path: string) {
         const note = this.app.vault.getAbstractFileByPath(path),
-            source = this.file;
+            source = this.source;
         if (!(note instanceof TFile) || !source) return;
         const pdf = this.host?.view.file;
         const target = this.plugin.notes.get(source)?.note || (pdf instanceof TFile ? pdf : null);

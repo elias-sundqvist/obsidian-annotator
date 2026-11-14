@@ -98,7 +98,31 @@ export function linesOf(page: number, runs: readonly Run[]): Line[] {
     return lines.filter(made => made.text);
 }
 
-/** Where a stretch of a line's text is across the page, in proportion to the characters of the runs it lies in. */
+/** How wide a character usually is, in parts of its size: enough to say where in a run a word is. */
+function usual(character: string): number {
+    if (character === ' ') return 0.25;
+    if (/[iljtfI.,;:'’!|()[\]]/.test(character)) return 0.3;
+    if (/[mwMW—]/.test(character)) return 0.82;
+    if (/\p{Lu}/u.test(character)) return 0.68;
+    return 0.5;
+}
+/** Where the characters of a run begin across the page: by their usual widths at the run's size, and what the run is wider than that is given to its spaces (as justified lines are set). */
+function places(text: string, x: number, width: number, size: number): number[] {
+    const widths = text.split('').map(character => usual(character) * size),
+        natural = widths.reduce((sum, one) => sum + one, 0) || 1,
+        spaces = text.split('').filter(character => character === ' ').length,
+        stretched = spaces > 0 && width > natural * 1.06,
+        scale = stretched ? 1 : width / natural,
+        each = stretched ? (width - natural) / spaces : 0;
+    const out: number[] = [x];
+    let at = x;
+    text.split('').forEach((character, index) => {
+        at += widths[index] * scale + (character === ' ' ? each : 0);
+        out.push(at);
+    });
+    return out;
+}
+/** Where a stretch of a line's text is across the page, by the usual widths of the characters of the runs it lies in. */
 function span(line: Line, from: number, to: number): Rect | null {
     let x0 = Infinity,
         x1 = -Infinity;
@@ -106,8 +130,9 @@ function span(line: Line, from: number, to: number): Rect | null {
         const a = Math.max(from, part.at),
             b = Math.min(to, part.at + part.len);
         if (a >= b) continue;
-        x0 = Math.min(x0, part.x + (part.w * (a - part.at)) / part.len);
-        x1 = Math.max(x1, part.x + (part.w * (b - part.at)) / part.len);
+        const at = places(line.text.slice(part.at, part.at + part.len), part.x, part.w, line.h);
+        x0 = Math.min(x0, at[a - part.at]);
+        x1 = Math.max(x1, at[b - part.at]);
     }
     return x1 > x0 ? [x0, line.y - 0.25 * line.h, x1, line.y + 0.85 * line.h] : null;
 }
@@ -173,8 +198,11 @@ const HEADINGS = new Set(
 export function isListHeading(text: string): boolean {
     const clean = text.trim();
     if (clean.length > 48) return false;
-    const words = clean.replace(/^(?:\d{1,2}|[ivxlc]{1,6}|[A-Z])[.):]?\s+(?=\p{L})/iu, '').replace(/[.:]$/, '');
-    return HEADINGS.has(plain(words)) && !/\d\s*$/.test(clean);
+    if (/\d\s*$/.test(clean)) return false;
+    // With its section number, or without one (a small capital's first letter stands apart and is no number).
+    const bare = clean.replace(/[.:]$/, ''),
+        numbered = bare.replace(/^(?:\d{1,2}|[ivxlc]{1,6}|[A-Z])[.):]?\s+(?=\p{L})/iu, '');
+    return HEADINGS.has(plain(bare)) || HEADINGS.has(plain(numbered));
 }
 
 export interface Entry {
@@ -519,15 +547,16 @@ export function readList(
         if (!found.labelled || !found.numbers.length) return true;
         return !('wrong' in checked.labelSequence(found.numbers));
     };
-    if (!sound(divided)) {
-        // The PDF may give columns out of order: read each page column by column, top to bottom.
+    // The PDF may give columns out of order. Then the labels do not go up, or do not begin at the list's first: read each page column by column, top to bottom, and keep that reading if it finds more.
+    const counted = (found: Dividing | null) => (found && sound(found) ? found.starts.filter(Boolean).length : -1);
+    if (!sound(divided) || (divided?.labelled && (divided.numbers[0] ?? 1) > 1)) {
         const { of } = columns(kept);
         const sorted = kept
             .map((line, index) => ({ line, column: of[index] }))
             .sort((a, b) => a.line.page - b.line.page || a.column - b.column || b.line.y - a.line.y)
             .map(item => item.line);
         const again = divide(sorted);
-        if (sound(again)) {
+        if (counted(again) > counted(divided)) {
             lines = sorted;
             divided = again;
         }
@@ -898,10 +927,12 @@ export function pageCitations(
 ): PageCitations {
     const out: PageCitations = { page, rows: [], others: [], offsets: [], highest: 0 };
     // Lines of a reference list on this page are not text that cites.
-    const inList = (at: number, y: number) =>
+    const inList = (at: number, y: number, slack = 2) =>
         lists.findIndex(
-            list => at >= list.start && at <= list.end && (at > list.start || list.top === null || y < list.top + 2)
+            list => at >= list.start && at <= list.end && (at > list.start || list.top === null || y < list.top + slack)
         );
+    // A link to the first entry may land as high as the heading's own top (one program puts it there).
+    const HEADING = 30;
     const citing = lines.filter(line => inList(page, line.y) < 0);
     if (!citing.length || !lists.length) return out;
     // The page's flowing text, and where each of its characters is.
@@ -933,7 +964,7 @@ export function pageCitations(
             list:
                 link[4] === page && inList(page, (link[1] + link[3]) / 2) >= 0
                     ? -1
-                    : inList(link[4], link[5] ?? -Infinity)
+                    : inList(link[4], link[5] ?? -Infinity, HEADING)
         }))
         .filter(item => item.list >= 0 && inList(page, (item.link[1] + item.link[3]) / 2) < 0);
     // Which list text without a link belongs to.
@@ -994,6 +1025,20 @@ export function pageCitations(
                         best = each;
                     }
                 }
+            // Where a place inside a run is only estimated, a link may lie just beside its item: the nearest on its line, within a few letters.
+            if (!best) {
+                let nearest = 2.5 * (citing[0]?.h || 10);
+                for (const each of all)
+                    for (const rect of each.rects) {
+                        const middle = (rect[1] + rect[3]) / 2;
+                        if (middle < candidate[1] - 1 || middle > candidate[3] + 1) continue;
+                        const apart = Math.max(rect[0] - candidate[2], candidate[0] - rect[2], 0);
+                        if (apart < nearest) {
+                            nearest = apart;
+                            best = each;
+                        }
+                    }
+            }
             best?.over.push(candidate);
         }
         const prepared = all.map(({ one, rects, over }) => {
@@ -1018,8 +1063,9 @@ export function pageCitations(
             for (const part of line.parts) {
                 let from = -1,
                     to = -1;
+                const where = places(line.text.slice(part.at, part.at + part.len), part.x, part.w, line.h);
                 for (let at = 0; at < part.len; at++) {
-                    const middle = part.x + (part.w * (at + 0.5)) / part.len;
+                    const middle = (where[at] + where[at + 1]) / 2;
                     if (middle < link[0] - 0.3 || middle > link[2] + 0.3) continue;
                     if (from < 0) from = part.at + at;
                     to = part.at + at + 1;
@@ -1500,9 +1546,13 @@ export function proposal(text: string, lineEnds: number[] = []): Proposal {
             return found ? `${found[2].split('').join('. ')}. ${found[1]}` : name.trim();
         });
     } else names = authors.split(/\s*,\s*(?:and\s+|&\s*)?|\s+(?:and|&)\s+|\s*;\s*/);
-    out.authors = [
-        ...new Set(names.map(name => name.replace(/\s+/g, ' ').trim()).filter(name => name && !dropped(name)))
-    ].slice(0, 60);
+    // An initial is written with its stop ("G Hinton" at the end of the authors lost it with the sentence's).
+    const whole = (name: string) =>
+        name
+            .replace(/\s+/g, ' ')
+            .trim()
+            .replace(/(^|\s)(\p{Lu})(?=\s)/gu, '$1$2.');
+    out.authors = [...new Set(names.map(whole).filter(name => name && !dropped(name)))].slice(0, 60);
     // The title.
     const rest = clean.slice(end);
     const quoted = /[“"«]\s*([^”"»]{6,400}?)[,.]?\s*[”"»]/.exec(clean);
