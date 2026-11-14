@@ -348,6 +348,11 @@ writes it, or as a `file:` address:
 | A path on Windows | `annotation-target: C:\Users\me\Papers\Attention.pdf` |
 | A file address | `annotation-target: file:///C:/Users/me/Papers/Attention.pdf` |
 
+A path may also be written from the vault's own folder: `../papers/a.pdf` is
+the folder `papers` beside the vault. As a default folder in the settings
+(`../papers/`) that names the same place on every computer the vault syncs
+to, whatever the folders above it are called.
+
 The key is `annotation-target`, spelled exactly so and without a colon of its
 own: in Obsidian's Properties editor, type the name alone and the path as its
 value. A note whose property is a near miss (`annotation-target:`,

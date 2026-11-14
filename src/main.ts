@@ -1669,6 +1669,18 @@ export default class AnnotatorPlugin extends Plugin {
                 if (!followed) return `applink:${value.trim()}`;
                 value = followed;
             }
+            // A path that starts with "../" or "./" is taken from the vault's own folder on this computer, so one
+            // setting ("../papers/") names the same place beside the vault on every computer it syncs to. Written as
+            // the target itself, it is first a file of the vault, found the way Obsidian finds a link's file.
+            if (/^\.\.?[\\/]/.test(value)) {
+                const inVault = index === 0 ? this.app.metadataCache.getFirstLinkpathDest(value, note.path) : null;
+                if (inVault) return inVault.path;
+                const base = (
+                    this.app.vault.adapter as typeof this.app.vault.adapter & { getBasePath?: () => string }
+                ).getBasePath?.();
+                if (!base) continue;
+                value = `${base.replace(/[\\/]+$/, '')}/${value}`;
+            }
             if (/^https?:/i.test(value)) {
                 try {
                     const url = httpUrl(value),
@@ -5355,7 +5367,7 @@ class NativeSettings extends PluginSettingTab {
         new Setting(root)
             .setName('Default target folders')
             .setDesc(
-                'Where an annotation-target that does not resolve on its own is looked for: one folder to a line, tried in order. A folder outside the vault is asked about before it is read. Several lines let one synced setting name the library folder of each computer.'
+                "Where an annotation-target that does not resolve on its own is looked for: one folder to a line, tried in order. A folder outside the vault is asked about before it is read. Several lines let one synced setting name the library folder of each computer. A folder may be written from the vault's own folder (../papers/), which names the same place on every computer the vault syncs to."
             )
             .addTextArea(control =>
                 control

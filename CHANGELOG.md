@@ -20,6 +20,9 @@ What changed for someone using Annotator. How to use each thing is in
 - A PDF embedded in a note or placed on a Canvas now shows its highlights,
   and a click on one opens it in the sidebar. Highlights are still made in
   the PDF's own tab. A setting turns it off.
+- A default folder, or a target, may be written from the vault's own folder
+  (`../papers/`), so one synced setting names a folder beside the vault on
+  every computer.
 
 ## 0.3.1 (2026-11-13)
 

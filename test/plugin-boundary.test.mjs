@@ -801,6 +801,28 @@ test('a new annotation note starts as the reader set it: another heading, or a t
   await h.plugin.setDisplay({noteTemplate:'Templates/Gone.md'});await h.plugin.ensureNote('d.pdf');assert.equal(made.at(-1)[1],'---\nannotation-target: "d.pdf"\n---\n\n## Highlights\n');assert.equal(made.length,4);
  }finally{h.dispose();}
 });
+test('a default folder written from the vault\'s own folder ("../papers/") names the same place beside the vault on every computer',async()=>{
+ const h=host();try{h.plugin.manifest={id:'obsidian-annotator'};await h.plugin.onload();
+  const named=h.add('Named.md','',{'annotation-target':'a.pdf'}),direct=h.add('Direct.md','',{'annotation-target':'../papers/b.pdf'}),inner=h.add('Notes/Inner.md','',{'annotation-target':'../Kept.pdf'});h.add('Kept.pdf');
+  h.app.metadataCache.getFirstLinkpathDest=(path,from)=>path==='../Kept.pdf'&&from==='Notes/Inner.md'?h.files.get('Kept.pdf'):h.files.get(path)||null;
+  // Without a folder on this computer to start from (a phone), such a path names nothing.
+  h.plugin.customDefaultPath='../papers/';assert.equal(h.plugin.targetKey(named),null);assert.equal(h.plugin.targetKey(direct),null);
+  for(const [base,address] of [['/home/user/Dropbox/Vault','file:///home/user/Dropbox/papers/'],['/home/user/Dropbox/Vault/','file:///home/user/Dropbox/papers/'],['C:\\Users\\user\\Dropbox\\Vault','file:///C:/Users/user/Dropbox/papers/']]){
+   h.app.vault.adapter.getBasePath=()=>base;Platform.isWin=base.startsWith('C:');
+   try{
+    assert.equal(h.plugin.targetKey(named),`remote:${address}a.pdf`,base);
+    // The same as the target itself.
+    assert.equal(h.plugin.targetKey(direct),`remote:${address}b.pdf`,base);
+    // Several folders, tried in order; one written for the other kind of computer is passed over.
+    h.plugin.customDefaultPath='Papers/\n../papers/';assert.equal(h.plugin.targetKey(named),`remote:${address}a.pdf`);h.plugin.customDefaultPath='../papers/';
+    // A relative target that is a file of the vault is that file, as before.
+    assert.equal(h.plugin.targetKey(inner),'Kept.pdf');
+   }finally{Platform.isWin=false;}
+  }
+  // "./" stays inside the vault's folder, and is then simply a file of the vault when it is there.
+  h.app.vault.adapter.getBasePath=()=>'/home/user/Dropbox/Vault';h.plugin.customDefaultPath='./';assert.equal(h.plugin.targetKey(h.add('Root.md','',{'annotation-target':'Kept.pdf'})),'Kept.pdf');
+ }finally{h.dispose();}
+});
 test('a PDF embedded in a note or on a Canvas gets its highlights when it has an annotation note, and is let go with its embed',async()=>{
  const h=host();try{h.plugin.manifest={id:'obsidian-annotator'};const doc=h.dom.window.document,settle=async()=>{for(let turn=0;turn<30;turn++)await new Promise(resolve=>setTimeout(resolve,0));};
   h.dom.window.ResizeObserver=class{observe(){}unobserve(){}disconnect(){}};
