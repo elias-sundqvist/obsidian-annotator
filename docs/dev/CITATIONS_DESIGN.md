@@ -1,6 +1,7 @@
 # Citations on the page in view: design
 
-Status: design, not built. Written 2026-11-13, after the 0.3.0 release. It
+Status: built on 2026-11-14; what was found and where the build differs is in
+[CITATIONS_RESULTS.md](CITATIONS_RESULTS.md). Written 2026-11-13, after the 0.3.0 release. It
 was reviewed once by a critic before anything was built;
 [what the critic found](#what-the-critic-found-and-what-changed) is at the
 end, and the text above it is the design after those changes.

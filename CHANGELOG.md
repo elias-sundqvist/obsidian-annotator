@@ -3,6 +3,20 @@
 What changed for someone using Annotator. How to use each thing is in
 [README.md](README.md).
 
+## Unreleased
+
+- **Citations.** For PDFs, a view of the works cited on the page being
+  read, in order of appearance, each with its reference; a citation can be
+  shown on the page and its entry gone to. A cited work gets a note of its
+  own on request (title, authors, year, DOI, the reference as printed, and
+  a link back to the citing source), or the note already in the vault is
+  found. Numbered and author–year citations are read from the PDF's text
+  and, where it has them, its own links; raised numbers where the PDF links
+  them. Nothing is looked up online, and nothing is read until the view is
+  shown. The idea is from the fork `sparthaje/obsidian-references`. See
+  "The works a page cites" in the README.
+- A setting names the folder reference notes are made in.
+
 ## 0.3.1 (2026-11-13)
 
 - A note whose property is nearly `annotation-target` (the colon typed into

@@ -184,6 +184,69 @@ The original file is never changed: the copy is the original with the
 annotations added after it. Exporting again replaces the earlier copy.
 Encrypted PDFs cannot be exported this way; the reader says so.
 
+### The works a page cites
+
+While you read a paper, the **Citations** view lists the works cited on the
+page in view, in the order they appear, each with its reference as the PDF
+has it. So `[12]` or `(Vaswani et al., 2017)` can be looked up without
+leaving the page (part of what was asked for as Sioyek-style reading in
+[issue 282](https://github.com/elias-sundqvist/obsidian-annotator/issues/282)).
+Open it with **Citations on this page** in the sidebar's menu or the command
+*Citations: show the works cited on this page*. It opens in a part of the
+right sidebar of its own, under the annotations, and can be moved like any
+Obsidian view.
+
+![The Citations view beside a paper](docs/dev/evidence/citations-page-list.png)
+
+- A row has the citation's label or wording, the reference, how often the
+  page cites it, and in small print how it was matched: **Linked in the
+  PDF** (the PDF's own link leads to that reference, and the words agree),
+  **Matched by its number**, or **Matched by author and year**.
+- **Show on the page** flashes the citation where it stands; again for the
+  next place. **Go to the entry** goes to the reference in the list; the
+  reader's **Back to page N** returns.
+- **Make a note** opens a small form with the title, authors, year and DOI
+  as read from the reference, and a name for the note
+  (`Vaswani et al. 2017 - Attention is all you need`). Reading those out of
+  a reference is the least certain thing here, so correct what is wrong;
+  `Ctrl/Cmd+Enter` creates the note and you stay on the paper.
+- **All references** lists the whole reference list, with a field to narrow
+  it. **Hold** keeps the list on its page while you scroll.
+
+A reference note holds properties only: `title`, `author`, `year`, `doi`
+where the reference prints one, `reference` (the reference exactly as the
+PDF has it) and `cited-by`, a link back to the source's annotation note. No
+word from the PDF is written as Markdown, the note's text is yours, and a
+note is never overwritten. The note goes where Obsidian puts new notes, or
+into the folder named in the settings. If the source has no annotation note
+yet, the form has a ticked box that makes it; unticked, the link goes to the
+PDF file itself.
+
+If a note for the work is already in your vault, the row links to it
+instead: a note with the same DOI, or with the same title, year and first
+author (so a paper you have annotated and given its details is found). A
+note that only shares the title is shown as "Possibly: …" and does not stand
+in the way. **Link this note to the source** (the row's menu) adds this
+source to that note's `cited-by`.
+
+Everything is read from the PDF. Nothing is looked up online, and nothing is
+read at all until the view is first shown for a PDF. What it reads:
+
+| In the paper | Listed |
+| --- | --- |
+| `[12]`, `[2, 35]`, `[3–5]`, letter labels like `[Vas17]` | yes |
+| `(Vaswani et al., 2017)`, `Vaswani et al. (2017)`, several in one bracket | yes, when exactly one reference has that first author and year |
+| Raised numbers, and numbers in round brackets | only where the PDF links them to the reference list |
+
+When it cannot tell, it says so and names no work: "Two entries fit" (the
+same author and year twice, and no link to decide), "Not found in the
+reference list", "No reference list was found in this PDF" (footnote-style
+citations, a scan), "The reference list could not be divided into entries".
+For those cases, select a reference in the PDF and run *Citations: make a
+reference note from the selection*: the same form, by hand. What it was
+tried on, and what it gets wrong, is in
+[CITATIONS_RESULTS.md](docs/dev/CITATIONS_RESULTS.md).
+
 ### The PDF's own details
 
 **Add the PDF's details to the note** (sidebar menu or command palette) reads
@@ -501,6 +564,10 @@ and the PDF export is read back with two independent PDF readers. See
 - A frame of a paused YouTube video includes the player's own controls; take
   it while the video plays.
 - Text in scanned PDFs is not recognised (no OCR).
+- Citations are listed for PDFs only, and matching a citation to its
+  reference is reading, not knowing: raised numbers need the PDF's links,
+  and a reference list set in an unusual way is refused rather than guessed.
+  It has been tried on desktop, not yet on a phone.
 - A PDF placed on a Canvas is shown without its highlights; open it in a tab
   to see and make them.
 - Drawing is for PDFs; books have highlights, notes and picture notes, videos

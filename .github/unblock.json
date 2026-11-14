@@ -1134,10 +1134,10 @@
     {
       "id": "pdf-citations-panel",
       "title": "PDF: citations on the current page, with a note per cited work",
-      "status": "doing",
+      "status": "done",
       "parent": "fork-ideas",
       "dependsOn": ["store-release"],
-      "notes": "Idea from sparthaje/obsidian-references: a panel that lists the references cited on the current PDF page, in order of appearance (numbered and author–year bibliographies), and can make or open a reference note per cited work with a backlink to the citing source. Needs bibliography parsing from the PDF text layer; design first."
+      "notes": "Idea from sparthaje/obsidian-references: a panel that lists the references cited on the current PDF page, in order of appearance (numbered and author–year bibliographies), and can make or open a reference note per cited work with a backlink to the citing source. Needs bibliography parsing from the PDF text layer; design first.\n\nDone 2026-11-14: Built 2026-11-14 on a branch, not merged or released: the Citations view, reference notes, 61 proved laws. Verified: proofs with the kernel, 33 new tests, the whole reader suite, lint, format, a survey of 36 PDFs, and a trial in Obsidian on macOS. Not tried: phone or tablet, Windows, Elsevier and Wiley PDFs. See docs/dev/CITATIONS_RESULTS.md."
     },
     {
       "id": "scan-text-recognition",

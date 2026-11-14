@@ -1593,7 +1593,6 @@ body.annotator-reading-fullscreen .workspace-leaf.mod-active > .workspace-leaf-c
    small print saying how a row was matched. */
 .annotator-citations {
     --annotator-citation-marker-color: var(--text-accent);
-    --annotator-citation-flash: var(--text-accent);
     --annotator-citation-lines: 3;
     display: flex; flex-direction: column; height: 100%;
 }
