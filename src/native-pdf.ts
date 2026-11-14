@@ -2149,6 +2149,91 @@ export class NativePdf {
     get withoutText(): boolean {
         return !this.error && !this.disposed && this.pages.length > 0 && this.pages.every(page => !page.text.trim());
     }
+    /** The pages (numbers from 1) that have no text of their own, once the PDF has been read through; null until then. Those are the pages a recogniser can read. */
+    get pagesWithoutText(): number[] | null {
+        if (this.error || this.disposed || !this.pages.length) return null;
+        return this.pages.filter(page => !page.text.trim()).map(page => page.number);
+    }
+    /** What says which document is open here: a run of the recogniser that began on another one is over. */
+    get documentToken(): string {
+        return this.disposed ? '' : `${revision(this.view)}:${this.generation}`;
+    }
+    /**
+     * The picture of a page for a recogniser to read: the whole page as the
+     * PDF itself turns it (not as the viewer's own rotation shows it), at
+     * about 300 dots per inch and at most `long` pixels on its long side,
+     * drawn on a canvas of the reader's own. Null when the page cannot be drawn.
+     */
+    async pagePicture(number: number, long = 3600): Promise<ImageBitmap | ImageData | null> {
+        const doc = nativeViewer(this.view)?.pdfDocument as unknown as
+            | {
+                  getPage?(number: number): Promise<{
+                      rotate?: number;
+                      getViewport(options: { scale: number; rotation?: number }): { width: number; height: number };
+                      render?(options: object): { promise: Promise<unknown> };
+                      cleanup?(): unknown;
+                  }>;
+              }
+            | undefined;
+        if (this.disposed || !doc || doc !== (this.document as unknown) || typeof doc.getPage !== 'function')
+            return null;
+        try {
+            const source = await doc.getPage(number);
+            if (typeof source.render !== 'function') return null;
+            const rotation = (((source.rotate || 0) % 360) + 360) % 360,
+                base = source.getViewport({ scale: 1, rotation }),
+                side = Math.max(base.width, base.height);
+            if (!(side > 0)) return null;
+            const viewport = source.getViewport({ scale: Math.min(300 / 72, long / side), rotation }),
+                document = this.view.contentEl.ownerDocument,
+                canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(viewport.width));
+            canvas.height = Math.max(1, Math.round(viewport.height));
+            const context = canvas.getContext('2d');
+            if (!context) return null;
+            try {
+                context.fillStyle = '#ffffff';
+                context.fillRect(0, 0, canvas.width, canvas.height);
+                await source.render({ canvasContext: context, viewport, background: '#ffffff' }).promise;
+                const win = document.defaultView;
+                return win && typeof win.createImageBitmap === 'function'
+                    ? await win.createImageBitmap(canvas)
+                    : context.getImageData(0, 0, canvas.width, canvas.height);
+            } finally {
+                // The canvas and what the page decoded for it are let go at once: one page is held at a time.
+                canvas.width = 0;
+                canvas.height = 0;
+                source.cleanup?.();
+            }
+        } catch {
+            return null;
+        }
+    }
+    private runStrip: HTMLElement | null = null;
+    /** Say, over the page, how far a run of the recogniser is, with a way to stop it. Called again, it changes the words. */
+    showRun(words: string, stop: () => void) {
+        if (this.disposed) return;
+        if (!this.runStrip?.isConnected) {
+            this.runStrip?.remove();
+            const strip = this.view.contentEl.createDiv({
+                cls: 'annotator-area-hint annotator-scan-strip',
+                attr: { role: 'status' }
+            });
+            strip.createEl('span');
+            const button = strip.createEl('button', { text: 'Stop', attr: { type: 'button' } });
+            button.onclick = () => {
+                button.disabled = true;
+                stop();
+            };
+            this.runStrip = strip;
+        }
+        const span = this.runStrip.querySelector('span');
+        if (span && span.textContent !== words) span.textContent = words;
+    }
+    endRun() {
+        this.runStrip?.remove();
+        this.runStrip = null;
+    }
     get markingArea() {
         return !!this.stopArea;
     }
@@ -2528,6 +2613,7 @@ export class NativePdf {
         this.paintedRanges = [];
         this.appearance?.dispose();
         this.closeAppearance?.();
+        this.endRun();
         this.stopArea?.();
         this.areaAction?.remove();
         this.areaAction = null;

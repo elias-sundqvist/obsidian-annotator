@@ -55,8 +55,21 @@ export interface SearchableResult {
 /** The name this plugin's data goes by in a page's own record of private data, and the font's name among the page's fonts. */
 export const SCAN_OWNER = 'Annotator',
     SCAN_FONT = 'AnnotatorScanText';
+/**
+ * The font goes by two names among a page's fonts, and each word is set under the other name than the word before
+ * it. A PDF reader gathers text into runs and starts a new run where the font's name changes, so every word is a
+ * run of its own, placed and sized by its own box, and not a share of its line's length.
+ */
+export const SCAN_FONTS = [SCAN_FONT, `${SCAN_FONT}B`] as const;
 const FULL = 10000,
-    /** Every glyph of the font is this wide, in thousandths of the text size. */ ADVANCE = 500;
+    /** Every glyph of the font is this wide, in thousandths of the text size. */ ADVANCE = 500,
+    /**
+     * How far the font reaches above and below the line it stands on, in thousandths of the text size. Its glyphs
+     * draw nothing, so this is only what it says of itself; it says what the fonts say that readers show selected
+     * text in, so that a selection covers the word's box in a reader that asks the font (Apple's) and in one that
+     * asks its own stand-in font (pdf.js) alike.
+     */ ASCENT = 800,
+    DESCENT = 200;
 
 // ── A font without glyphs ───────────────────────────────────────────────────
 /**
@@ -76,10 +89,10 @@ export function glyphlessFont(): Uint8Array {
                 ...u32(0x00010000, 0x00010000, 0, 0x5f0f3cf5),
                 ...u16(0x000b, 1000),
                 ...u32(0, 0, 0, 0),
-                ...u16(0, 0, ADVANCE, 1000, 0, 8, 2, 0, 0)
+                ...u16(0, -DESCENT, ADVANCE, ASCENT, 0, 8, 2, 0, 0)
             ]
         ],
-        ['hhea', [...u32(0x00010000), ...u16(1000, 0, 0, ADVANCE, 0, 0, ADVANCE, 1, 0, 0, 0, 0, 0, 0, 0, 2)]],
+        ['hhea', [...u32(0x00010000), ...u16(ASCENT, -DESCENT, 0, ADVANCE, 0, 0, ADVANCE, 1, 0, 0, 0, 0, 0, 0, 0, 2)]],
         ['hmtx', u16(ADVANCE, 0, ADVANCE, 0)],
         ['loca', u16(0, 0, 0)],
         ['maxp', [...u32(0x00010000), ...u16(2, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0)]]
@@ -158,7 +171,7 @@ function fontObjects(next: () => number): { font: number; objects: PdfObject[] }
             ),
             plain(
                 descriptor,
-                `<< /Type /FontDescriptor /FontName /${SCAN_FONT} /Flags 5 /FontBBox [0 0 ${ADVANCE} 1000] /ItalicAngle 0 /Ascent 1000 /Descent -1 /CapHeight 1000 /StemV 80 /FontFile2 ${program} 0 R >>`
+                `<< /Type /FontDescriptor /FontName /${SCAN_FONT} /Flags 5 /FontBBox [0 -${DESCENT} ${ADVANCE} ${ASCENT}] /ItalicAngle 0 /Ascent ${ASCENT} /Descent -${DESCENT} /CapHeight ${ASCENT} /StemV 80 /FontFile2 ${program} 0 R >>`
             ),
             { number: program, gen: 0, body: stream(`/Length1 ${file.length}`, file) },
             { number: glyphs, gen: 0, body: stream('', map) },
@@ -237,8 +250,8 @@ const hex = (text: string) => {
 };
 /**
  * The page's words as PDF text operators: invisible, each line of words on
- * its own straight line, each word starting where its box starts, as tall as
- * its line and stretched to be as wide as its box. `view` is the page's
+ * its own straight line, each word a run of its own that starts where its box
+ * starts, is as tall as its line and is stretched to be as wide as its box. `view` is the page's
  * visible box and `rotate` its own turn, so the words lie on the page as it
  * is shown, whichever way it is stored.
  */
@@ -248,8 +261,7 @@ export function scanTextOperators(
     rotate: number
 ): string {
     const out: string[] = ['q', 'BT', '3 Tr'];
-    let size = NaN,
-        written = 0;
+    let written = 0;
     const at = (x: number, y: number) => pagePoint(view, rotate, x / FULL, y / FULL);
     for (const line of setLines(lines)) {
         const first = line.words[0],
@@ -265,12 +277,12 @@ export function scanTextOperators(
             ay = (ey - by) / long,
             // Square to the line, on the side its top is on.
             side = -ay * (tx - bx) + ax * (ty - by) >= 0 ? 1 : -1;
-        if (tall !== size) {
-            size = tall;
-            out.push(`/${SCAN_FONT} ${number(tall, 2)} Tf`);
-        }
+        // The line the glyphs stand on lies above the foot of the boxes by as much as the font reaches below it.
+        const lift = (tall * DESCENT) / 1000,
+            ux = -ay * side,
+            uy = ax * side;
         out.push(
-            `${number(ax, 5)} ${number(ay, 5)} ${number(-ay * side, 5)} ${number(ax * side, 5)} ${number(bx, 2)} ${number(by, 2)} Tm`
+            `${number(ax, 5)} ${number(ay, 5)} ${number(ux, 5)} ${number(uy, 5)} ${number(bx + lift * ux, 2)} ${number(by + lift * uy, 2)} Tm`
         );
         // How far along the line a place across the page is.
         const along = (x: number) => {
@@ -293,6 +305,7 @@ export function scanTextOperators(
             // A space after every word, also the last of a line: where one line ends and the next begins, the words
             // are still two. It fills the gap to the next word and no more, so that no two words overlap.
             out.push(
+                `/${SCAN_FONTS[written % 2]} ${number(tall, 2)} Tf`,
                 `${stretch(end - start, word.text.length)} Tz`,
                 `<${hex(word.text)}> Tj`,
                 `${stretch(Math.max(0, next ? along(next.x) - end : tall / 4), 1)} Tz`,
@@ -493,10 +506,10 @@ export function searchablePdf(
             ascii(' /Font <<'),
             ...(fonts instanceof Dict
                 ? [...fonts.spans.keys()]
-                      .filter(key => key !== SCAN_FONT)
+                      .filter(key => !(SCAN_FONTS as readonly string[]).includes(key))
                       .flatMap(key => [ascii(' '), entry(fonts, key)!])
                 : []),
-            ascii(` /${SCAN_FONT} ${font} 0 R >>`)
+            ascii(`${SCAN_FONTS.map(name => ` /${name} ${font} 0 R`).join('')} >>`)
         ]);
         const pieces = file.resolve(page.get('PieceInfo'));
         const body = rewritten(

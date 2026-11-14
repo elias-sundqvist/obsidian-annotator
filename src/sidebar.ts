@@ -500,6 +500,15 @@ export class AnnotationView extends ItemView {
                             void plugin.importPdfAnnotations(file).catch(error => new Notice(String(error)));
                         })
                 );
+            if (file && plugin.canRecogniseText(file))
+                menu.addItem(item =>
+                    item
+                        .setTitle('Recognise text…')
+                        .setIcon('scan-text')
+                        .onClick(() => {
+                            void plugin.recogniseText(file).catch(error => new Notice(String(error)));
+                        })
+                );
             if (file && plugin.canExportPdf(file))
                 menu.addItem(item =>
                     item
@@ -1901,6 +1910,13 @@ export class AnnotationView extends ItemView {
             mark.onclick = () => this.plugin.markAreaOn(file);
             const draw = actions.createEl('button', { text: 'Draw on the page', attr: { type: 'button' } });
             draw.onclick = () => this.plugin.drawOn(file);
+            // Or have the words read: a dialog asks first, and says what it needs.
+            if (this.plugin.canRecogniseText(file)) {
+                const read = actions.createEl('button', { text: 'Recognise text…', attr: { type: 'button' } });
+                read.onclick = () => {
+                    void this.plugin.recogniseText(file).catch(error => new Notice(String(error)));
+                };
+            }
             return;
         }
         empty.createDiv({ cls: 'annotator-empty-title', text: 'Select text to highlight it' });

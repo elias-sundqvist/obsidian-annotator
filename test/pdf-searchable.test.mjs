@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { deflateSync, inflateSync } from 'node:zlib';
-import { searchablePdf, recognisedPages, withoutRecognisedText, glyphlessFont, setLines, scanTextOperators, pageFrame, SCAN_FONT, SCAN_OWNER, PdfFile, Dict, List, Ref, PdfExportError, readPdfText } from './.generated/readers/pdf-searchable.js';
+import { searchablePdf, recognisedPages, withoutRecognisedText, glyphlessFont, setLines, scanTextOperators, pageFrame, SCAN_FONT, SCAN_FONTS, SCAN_OWNER, PdfFile, Dict, List, Ref, PdfExportError, readPdfText } from './.generated/readers/pdf-searchable.js';
 import { pagePoint } from './.generated/readers/pdf-export.js';
 
 const bytes = text => Uint8Array.from(text, c => c.charCodeAt(0) & 255);
@@ -16,12 +16,12 @@ const near = (a, b, by, what) => assert.ok(Math.abs(a - b) <= by, `${what}: ${a}
 /** The words of a page's recognised text as the operators place them: where each starts along its line, how wide and how tall it is set. */
 function setWords(content) {
     const words = [], lines = content.split('\n');
-    let size = NaN, matrix = null, moved = 0, stretch = 100, line = -1;
+    let size = NaN, font = '', matrix = null, moved = 0, stretch = 100, line = -1;
     assert.deepEqual(lines.slice(0, 4), ['Q', 'q', 'BT', '3 Tr'], 'what the page drew is closed off, and the text is invisible');
     assert.deepEqual(lines.slice(-3), ['ET', 'Q', ''], 'the text ends and leaves the page as it found it');
     for (const row of lines.slice(4, -3)) {
         const parts = row.split(' '), op = parts[parts.length - 1];
-        if (op === 'Tf') { assert.equal(parts[0], `/${SCAN_FONT}`); size = Number(parts[1]); }
+        if (op === 'Tf') { assert.ok(SCAN_FONTS.includes(parts[0].slice(1)), parts[0]); assert.notEqual(parts[0], font, 'each word is set under the other name than the word before it, so each is a run of its own'); font = parts[0]; size = Number(parts[1]); }
         else if (op === 'Tm') { matrix = parts.slice(0, 6).map(Number); moved = 0; line++; }
         else if (op === 'Td') { assert.equal(parts[1], '0', 'words move along their line only'); moved += Number(parts[0]); }
         else if (op === 'Tz') stretch = Number(parts[0]);
@@ -30,7 +30,8 @@ function setWords(content) {
             for (let i = 0; i < hex.length; i += 4) text += String.fromCharCode(parseInt(hex.slice(i, i + 4), 16));
             const width = (text.length * size * stretch) / 200, [a, b, c, d, e, f] = matrix;
             if (text === ' ') words[words.length - 1].gap = width;
-            else words.push({ text, line, size, width, start: [e + moved * a, f + moved * b], along: [a, b], up: [c, d] });
+            // The glyphs stand a fifth of their size above the foot of the word's box, which is how far the font says it reaches below its line: `start` is the box's foot.
+            else words.push({ text, line, size, width, start: [e + moved * a - 0.2 * size * c, f + moved * b - 0.2 * size * d].map(value => Math.round(value * 100) / 100), along: [a, b], up: [c, d] });
         } else assert.fail(`an operator that should not be there: ${row}`);
     }
     return words;
@@ -107,15 +108,16 @@ test('the recognised text can be taken off again, and what is left is the origin
 test('the copy the suite makes is the copy two other PDF readers were given, and what they read is the page', () => {
     const made = searchablePdf(FIXTURE, PAGES, undefined, WHEN);
     assert.equal(createHash('sha256').update(made.bytes).digest('hex'), READ_BACK.copy.sha256, 'run test/support/searchable-copy-check.mjs again after changing what is written');
-    // pdf.js, as Obsidian ships it: the same document, one run of text per line, each line's words in order.
+    // pdf.js, as Obsidian ships it: the same document, and a run of text for every word, in order, each where its box is.
     assert.equal(READ_BACK.pdfjs.fingerprint, latin(new PdfFile(FIXTURE).trailer.get('ID').items[0]).split('').map(c => c.charCodeAt(0).toString(16).padStart(2, '0')).join(''));
     for (const page of GEOMETRY.pages) {
-        const read = READ_BACK.pdfjs.pages[page.page - 1];
-        assert.deepEqual(read.items.map(item => item.str), page.lines.map(line => line.map(word => word.text).join(' ')));
-        read.items.forEach((item, index) => {
-            const line = page.lines[index], [lx, ly] = pagePoint(read.view, read.rotate, line[0].x / 10000, 0), last = line[line.length - 1], [rx, ry] = pagePoint(read.view, read.rotate, (last.x + last.w) / 10000, 0);
-            near(item.width, Math.hypot(rx - lx, ry - ly), 0.05, `pdf.js: the line "${item.str.slice(0, 20)}…" is as wide as its print`);
-            near(read.rotate === 90 ? item.transform[5] : item.transform[4], read.rotate === 90 ? ly : lx, 0.05, 'pdf.js: it starts where its print starts');
+        const read = READ_BACK.pdfjs.pages[page.page - 1], runs = read.items.filter(item => item.str.trim()), words = page.lines.flat();
+        assert.deepEqual(runs.map(item => item.str), words.map(word => word.text));
+        assert.equal(read.items.map(item => item.str).join(''), page.lines.map(line => line.map(word => word.text).join(' ')).join(''), 'as the reader joins them: words a space apart, lines end to end');
+        runs.forEach((item, index) => {
+            const word = words[index], [lx, ly] = pagePoint(read.view, read.rotate, word.x / 10000, 0), [rx, ry] = pagePoint(read.view, read.rotate, (word.x + word.w) / 10000, 0);
+            near(item.width, Math.hypot(rx - lx, ry - ly), 0.05, `pdf.js: "${item.str}" is as wide as its box`);
+            near(read.rotate === 90 ? item.transform[5] : item.transform[4], read.rotate === 90 ? ly : lx, 0.05, `pdf.js: "${item.str}" starts where its box starts`);
         });
     }
     // Apple's PDFKit: the upright page reads line by line as printed, and a phrase is found where it is printed.
@@ -187,7 +189,8 @@ for (const [label, make] of [['a classic cross-reference table', classic], ['obj
         // Resources: the page's own or the page tree's, written into the page with the font added to the fonts it had.
         const resources = pages.map(page => page.get('Resources')), fonts = resources.map(each => each.get('Font'));
         for (const each of resources) assert.ok(each instanceof Dict, 'written in the page, so a shared object is not changed for other pages');
-        assert.deepEqual(fonts.map(names), [['F7', SCAN_FONT], ['F1', SCAN_FONT], ['F2', SCAN_FONT], ['F1', SCAN_FONT]]);
+        assert.deepEqual(fonts.map(names), [['F7', ...SCAN_FONTS], ['F1', ...SCAN_FONTS], ['F2', ...SCAN_FONTS], ['F1', ...SCAN_FONTS]]);
+        for (const each of fonts) assert.deepEqual(each.get(SCAN_FONTS[1]), each.get(SCAN_FONTS[0]), 'one font under two names');
         assert.deepEqual(names(resources[0]), ['XObject', 'Font']); assert.deepEqual(resources[0].get('XObject').get('Im0'), new Ref(12, 0));
         assert.deepEqual(names(resources[1]), ['ProcSet', 'Font']); assert.deepEqual(fonts[1].get('F1'), new Ref(9, 0));
         assert.equal(new Set(fonts.map(each => each.get(SCAN_FONT).num)).size, 1, 'one font for the whole file');
@@ -204,7 +207,7 @@ for (const [label, make] of [['a classic cross-reference table', classic], ['obj
         // The font: a composite font whose characters are UTF-16 code units, with its program inside the file.
         const font = file.resolve(fonts[0].get(SCAN_FONT)), descendant = file.resolve(font.get('DescendantFonts').items[0]), descriptor = file.resolve(descendant.get('FontDescriptor'));
         assert.equal(font.get('Subtype').value, 'Type0'); assert.equal(font.get('Encoding').value, 'Identity-H'); assert.equal(descendant.get('DW'), 500);
-        assert.deepEqual([descriptor.get('Ascent'), descriptor.get('Descent')], [1000, -1], 'a reader that asks the font how tall it stands gets an answer');
+        assert.deepEqual([descriptor.get('Ascent'), descriptor.get('Descent')], [800, -200], 'a reader that asks the font how far it reaches above and below its line gets an ordinary answer');
         const program = file.object(descriptor.get('FontFile2').num), unicode = file.object(font.get('ToUnicode').num), glyphs = file.object(descendant.get('CIDToGIDMap').num);
         assert.deepEqual(new Uint8Array(inflateSync(program.stream)), glyphlessFont()); assert.equal(program.value.get('Length1'), glyphlessFont().length);
         assert.match(latin(inflateSync(unicode.stream)), /1 beginbfrange\n<0000> <FFFF> <0000>\nendbfrange/);
@@ -291,7 +294,7 @@ test('the font without glyphs is a well-formed TrueType font: its tables are whe
     }
     const head = tables.get('head').offset, hhea = tables.get('hhea').offset, maxp = tables.get('maxp').offset, hmtx = tables.get('hmtx').offset, loca = tables.get('loca').offset;
     assert.equal(tables.get('head').length, 54); assert.equal(view.getUint32(head + 12), 0x5f0f3cf5); assert.equal(view.getUint16(head + 18), 1000, 'a thousand units to the em');
-    assert.equal(tables.get('hhea').length, 36); assert.equal(view.getInt16(hhea + 4), 1000); assert.equal(view.getUint16(hhea + 34), 2);
+    assert.equal(tables.get('hhea').length, 36); assert.deepEqual([view.getInt16(hhea + 4), view.getInt16(hhea + 6)], [800, -200], 'it says what the descriptor in the PDF says'); assert.equal(view.getUint16(hhea + 34), 2);
     assert.equal(tables.get('maxp').length, 32); assert.equal(view.getUint16(maxp + 4), 2, 'two glyphs');
     assert.deepEqual([view.getUint16(hmtx), view.getUint16(hmtx + 4)], [500, 500]); assert.deepEqual([view.getUint16(loca), view.getUint16(loca + 2), view.getUint16(loca + 4)], [0, 0, 0], 'neither glyph has an outline');
 });

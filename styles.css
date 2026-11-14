@@ -1160,6 +1160,8 @@ body:is(.annotator-compact, .annotator-compact-setting) { --annotator-quote-line
 }
 .annotator-area-hint button { flex: none; height: 26px; padding-inline: 10px; font-size: var(--font-ui-small); cursor: pointer; }
 .is-mobile .annotator-area-hint button { height: 36px; }
+/* How far the recogniser is with a scan, and a way to stop it: at the foot of the page, clear of the modes' strips at its head. */
+.annotator-area-hint.annotator-scan-strip { top: auto; bottom: 16px; }
 .annotator-area-band.is-keyboard { border-style: solid; }
 /* Controls drawn without the host's button chrome get their focus ring back. */
 .annotator-epub-reader .annotator-book-toolbar .annotator-reader-icon:focus-visible, .annotator-epub-reader .annotator-book-primary > select:focus-visible,
