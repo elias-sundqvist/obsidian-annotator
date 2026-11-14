@@ -9,15 +9,22 @@
  * anchored, so both are rules rather than choices made per book
  * (docs/dev/FB2_DESIGN.md):
  *
- * - A chapter is a section with no sections inside it, in the book's order.
- *   What a section says before its first inner section (its title, epigraph,
- *   picture) opens the chapter of the first section inside it. A body after
- *   the first (notes, comments) is one chapter outside the reading order.
+ * - A chapter is a section of the first body that has text of its own and no
+ *   titled section inside it, in the book's order. (Untitled sections inside
+ *   a chapter are its scenes and stay in it.) What a section says before its
+ *   first inner section, and a section that says nothing but its heading,
+ *   opens the chapter that follows. A body after the first (notes, comments)
+ *   is one chapter outside the reading order.
  * - A chapter's text is the book's own text, character for character, in the
  *   book's order. The only characters added are one line break after each
- *   paragraph, heading, line of verse and table row and one tab after each
- *   table cell; white space between blocks, which is how the file happens to
- *   be indented, is not text.
+ *   paragraph, heading line, line of verse and table row and one tab after
+ *   each table cell; white space between blocks, which is how the file
+ *   happens to be indented, is not text, and neither is a comment.
+ * - A chapter has two names in an annotation: its place (`s3-2`, the second
+ *   section of the third) and, where it has a title, a name made from the
+ *   titles around it. A section added before it changes the first and not the
+ *   second, and the reader then looks for the passage by its words instead of
+ *   trusting the place.
  */
 import type JSZip from 'jszip';
 import { bounded, pictureMime, type Chapter, type Publication } from './epub-book';
@@ -51,6 +58,7 @@ export const FB2_STYLE = `
 .fb2-align-center { text-align: center; }
 .fb2-align-right { text-align: right; }
 `;
+const LANGUAGE = /^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/;
 // Languages written from right to left, by their primary subtag.
 const RTL = new Set('ar he iw fa ur yi ji ps sd ug dv ckb syr nqo'.split(' '));
 const INLINE: Record<string, string> = {
@@ -62,6 +70,8 @@ const INLINE: Record<string, string> = {
     code: 'code',
     style: 'span'
 };
+// What a section may say before its text.
+const HEADER = new Set(['title', 'epigraph', 'image', 'annotation']);
 const PARAGRAPH: Record<string, string> = { subtitle: 'subtitle', 'text-author': 'text-author', date: 'date' };
 const CONTAINER: Record<string, [string, string]> = {
     epigraph: ['blockquote', 'epigraph'],
@@ -103,7 +113,10 @@ export function fb2Text(bytes: Uint8Array): string {
 async function unzipped(bytes: ArrayBuffer): Promise<Uint8Array> {
     const { default: Zip } = await import('jszip');
     const zip = await Zip.loadAsync(bytes, { checkCRC32: false, createFolders: false });
-    const files = Object.values(zip.files).filter((entry: JSZip.JSZipObject) => !entry.dir),
+    // What a Mac adds beside the files it zips, and hidden files, are not books.
+    const files = Object.values(zip.files).filter(
+            (entry: JSZip.JSZipObject) => !entry.dir && !/(?:^|\/)__MACOSX\/|(?:^|\/)\.[^/]*$/.test(entry.name)
+        ),
         books = files.filter(entry => /\.fb2$/i.test(entry.name));
     if (books.length > 1) throw new Error('This archive holds more than one book. Unpack it and open one of them.');
     const entry = books[0] || (files.length === 1 ? files[0] : null);
@@ -115,6 +128,20 @@ const escapes: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;'
 const esc = (text: string) => text.replace(/[&<>\r]/g, char => escapes[char]);
 const attr = (text: string) => text.replace(/[&<>"\r]/g, char => escapes[char]);
 const blank = (text: string) => !/[^ \t\r\n]/.test(text);
+const isText = (node: Node) => node.nodeType === 3 || node.nodeType === 4;
+/** Whether a node is something of the book: an element, or text that is more than indentation. Comments and processing instructions are not. */
+const matters = (node: Node) => node.nodeType === 1 || (isText(node) && !blank(node.textContent || ''));
+/**
+ * Whether a node of a section is text of the section itself: words, or something that holds words. Its heading
+ * (title, epigraph, picture, annotation), empty lines and empty paragraphs are not.
+ */
+const says = (node: Node): boolean =>
+    isText(node)
+        ? !blank(node.textContent || '')
+        : node.nodeType === 1 &&
+          !HEADER.has((node as Element).localName) &&
+          (node as Element).localName !== 'empty-line' &&
+          !blank(node.textContent || '');
 const named = (element: Element, name: string) =>
     Array.from(element.children).filter(child => child.localName === name);
 const first = (element: Element | undefined | null, name: string) =>
@@ -124,19 +151,54 @@ function hrefOf(element: Element): string {
     for (const item of Array.from(element.attributes)) if (item.localName === 'href') return item.value.trim();
     return '';
 }
+/** The language an element says it is in (`xml:lang`), as an HTML attribute; nothing where it says none or not a language. */
+function langOf(element: Element): string {
+    const said = (element.getAttribute('xml:lang') || '').trim();
+    return LANGUAGE.test(said) ? ` lang="${said}"` : '';
+}
 /** A heading's words on one line. */
 function plain(element: Element | undefined): string {
     if (!element) return '';
     const lines = named(element, 'p').map(line => line.textContent || '');
     return (lines.length ? lines.join(' ') : element.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 200);
 }
-/** A binary's name as a file name: letters, digits, dot, dash and underscore stay; anything else is an underscore. */
-function pictureName(id: string): string {
-    const name = id
-        .replace(/[^\p{L}\p{N}._-]/gu, '_')
-        .replace(/^\.+/, '_')
-        .slice(0, 200);
-    return name || '_';
+/**
+ * A binary's id as a file name. Letters, digits, dash, underscore and a dot that is not the first character stay;
+ * every other character is written as its bytes (`%20`). No two ids have one name, whatever order they come in.
+ */
+export function pictureName(id: string): string {
+    return id.replace(/[^\p{L}\p{N}._-]|^\./gu, char =>
+        Array.from(new TextEncoder().encode(char), byte => `%${byte.toString(16).toUpperCase().padStart(2, '0')}`).join(
+            ''
+        )
+    );
+}
+interface Held {
+    data: string;
+    type: string;
+}
+/** A binary's bytes, if they are a picture that can be shown: known by how they begin, whatever the file calls them. */
+function pictureBytes(held: Held | undefined, doc: Document): { bytes: Uint8Array; mime: string } | null {
+    if (!held) return null;
+    let data: Uint8Array;
+    try {
+        const clean = held.data.replace(/[^A-Za-z0-9+/]/g, '');
+        if (clean.length > (PICTURE_LIMIT * 4) / 3 + 4) return null;
+        const raw = atob(clean + '='.repeat((4 - (clean.length % 4)) % 4));
+        data = new Uint8Array(raw.length);
+        for (let i = 0; i < raw.length; i++) data[i] = raw.charCodeAt(i);
+    } catch {
+        return null;
+    }
+    const mime = pictureMime(data);
+    if (mime) return { bytes: data, mime };
+    if (held.type !== 'image/svg+xml') return null;
+    try {
+        const safe = passiveSvgImage(new TextDecoder('utf-8', { fatal: true }).decode(data), doc);
+        return safe ? { bytes: new TextEncoder().encode(safe), mime: 'image/svg+xml' } : null;
+    } catch {
+        return null;
+    }
 }
 
 interface Piece {
@@ -145,13 +207,12 @@ interface Piece {
     depth: number;
 }
 interface Draft {
-    idref: string;
+    /** The chapter's place in the book (`s3-2`, `body2`): its file name. */ place: string;
+    /** Its name in an annotation: made from its titles where it has them, else its place. */ idref: string;
     pieces: Piece[];
     linear: boolean;
     notes: boolean;
-    /** Titles of the sections around this chapter, outermost first. */ trail: string[];
-    html?: string;
-    title?: string;
+    /** Titles of the sections around this chapter and its own, outermost first. */ trail: string[];
 }
 
 export async function openFictionBook(source: ArrayBuffer, doc: Document): Promise<Publication> {
@@ -159,11 +220,16 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
     const start = new Uint8Array(source, 0, Math.min(4, source.byteLength));
     const zipped = start[0] === 0x50 && start[1] === 0x4b && start[2] === 3 && start[3] === 4;
     const bytes = zipped ? await unzipped(source) : new Uint8Array(source);
-    const text = fb2Text(bytes),
-        opens = text.search(/<(?:[A-Za-z_][\w.-]*:)?FictionBook[\s>]/);
-    if (opens < 0) throw new Error('This file is not a FictionBook (it has no FictionBook element).');
-    if (/<!ENTITY/i.test(text.slice(0, opens)))
-        throw new Error('A FictionBook that declares its own XML entities is not supported.');
+    const text = fb2Text(bytes);
+    if (!/<(?:[A-Za-z_][\w.-]*:)?FictionBook[\s>]/.test(text))
+        throw new Error('This file is not a FictionBook (it has no FictionBook element).');
+    // No entity of the file's own is ever expanded and nothing outside it is named: an entity declaration anywhere,
+    // or a document type that is more than the bare name, is refused before the file is parsed.
+    if (
+        /<!ENTITY/i.test(text) ||
+        (text.match(/<!DOCTYPE[^>]*>?/gi) || []).some(found => !/^<!DOCTYPE\s+[A-Za-z_][\w:.-]*\s*>$/i.test(found))
+    )
+        throw new Error('A FictionBook that declares XML entities or an external document type is not supported.');
     const xml = new doc.defaultView!.DOMParser().parseFromString(text, 'application/xml'),
         failure = xml.getElementsByTagName('parsererror')[0];
     if (failure || xml.documentElement?.localName !== 'FictionBook') {
@@ -179,96 +245,127 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
     if (!bodies.length) throw new Error('This FictionBook has no text (no body).');
     const title = (first(titleInfo, 'book-title')?.textContent || '').replace(/\s+/g, ' ').trim(),
         said = (first(titleInfo, 'lang')?.textContent || '').trim(),
-        language = /^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/.test(said) ? said : '',
+        language = LANGUAGE.test(said) ? said : '',
         identifier = (first(first(description, 'document-info'), 'id')?.textContent || '').trim().slice(0, 512);
 
-    // Pictures: each binary is a file under images/, named by its id.
-    const pictures = new Map<string, { data: string; type: string }>(),
-        pictureOf = new Map<string, string>();
+    // Pictures: each binary is a file under images/, named by its id. (A name too long to keep with a note is no picture.)
+    const pictures = new Map<string, Held>();
     for (const binary of Array.from(root.getElementsByTagName('*')).filter(item => item.localName === 'binary')) {
-        const id = binary.getAttribute('id');
-        if (!id || pictureOf.has(id)) continue;
-        const name = pictureName(id);
-        let path = `images/${name}`;
-        for (let copy = 2; pictures.has(path); copy++) path = `images/${name}~${copy}`;
+        const id = binary.getAttribute('id'),
+            path = id ? `images/${pictureName(id)}` : '';
+        if (!id || path.length > 400 || pictures.has(path)) continue;
         pictures.set(path, {
             data: binary.textContent || '',
             type: (binary.getAttribute('content-type') || '').toLowerCase()
         });
-        pictureOf.set(id, path);
     }
-    const pictureSrc = (element: Element) => {
+    /** The path a picture element names: a binary's (whether or not the book has it), or what it says where that is no binary. */
+    const picturePath = (element: Element) => {
         const href = hrefOf(element);
-        if (!href.startsWith('#')) return href;
-        const path = pictureOf.get(href.slice(1)) || `images/${pictureName(href.slice(1))}`;
-        return path.split('/').map(encodeURIComponent).join('/');
+        return href.startsWith('#') ? `images/${pictureName(href.slice(1))}` : '';
+    };
+    const pictureSrc = (element: Element) => {
+        const path = picturePath(element);
+        return path ? path.split('/').map(encodeURIComponent).join('/') : hrefOf(element);
     };
 
-    // Chapters: the sections of the first body that hold no sections, in order; then each later body as one chapter.
+    // Every section of the first body has a place (its number among its siblings, under its parent's), and is
+    // divided into chapters only where a section inside it, at any depth, has a title.
+    const main = bodies[0],
+        placeOfSection = new Map<Element, string>(),
+        divided = new Set<Element>();
+    const survey = (element: Element, place: string): boolean => {
+        placeOfSection.set(element, place);
+        let inside = false;
+        named(element, 'section').forEach((child, index) => {
+            if (survey(child, `${place}-${index + 1}`)) inside = true;
+        });
+        if (inside) divided.add(element);
+        return inside || !!first(element, 'title');
+    };
+    named(main, 'section').forEach((section, index) => survey(section, `s${index + 1}`));
+
     const plan = (splitBelow: number): Draft[] => {
         const drafts: Draft[] = [];
         let waiting: Piece[] = [];
-        const open = (idref: string, trail: string[]): Draft => {
-            const draft: Draft = { idref, pieces: waiting, linear: true, notes: false, trail };
+        const open = (place: string, trail: string[]): Draft => {
+            const draft: Draft = { place, idref: place, pieces: waiting, linear: true, notes: false, trail };
             waiting = [];
             drafts.push(draft);
             return draft;
         };
         const stray = (node: Node, depth: number) => {
-            if (node.nodeType !== 1 && blank(node.textContent || '')) return;
+            if (!matters(node)) return;
             if (drafts.length) drafts[drafts.length - 1].pieces.push({ nodes: [node], depth });
             else waiting.push({ nodes: [node], depth });
         };
-        const section = (element: Element, address: number[], trail: string[]) => {
-            const inner = named(element, 'section'),
-                depth = address.length,
+        const section = (element: Element, depth: number, trail: string[]) => {
+            const all = Array.from(element.childNodes),
                 here = plain(first(element, 'title')),
                 around = here ? [...trail, here] : trail;
-            if (!inner.length || depth >= splitBelow) {
-                open(`s${address.join('-')}`, around).pieces.push({
-                    owner: element,
-                    nodes: Array.from(element.childNodes),
-                    depth
-                });
-                return;
-            }
-            const all = Array.from(element.childNodes),
-                at = all.indexOf(inner[0]);
-            waiting.push({ owner: element, nodes: all.slice(0, at), depth });
-            let count = 0;
-            for (const node of all.slice(at))
-                if (node.nodeType === 1 && (node as Element).localName === 'section')
-                    section(node as Element, [...address, ++count], around);
-                else stray(node, depth);
+            if (divided.has(element) && depth < splitBelow) {
+                const inner = named(element, 'section'),
+                    at = all.indexOf(inner[0]);
+                waiting.push({ owner: element, nodes: all.slice(0, at), depth });
+                for (const node of all.slice(at))
+                    if (node.nodeType === 1 && (node as Element).localName === 'section')
+                        section(node as Element, depth + 1, around);
+                    else stray(node, depth);
+            } else if (all.some(says))
+                open(placeOfSection.get(element)!, around).pieces.push({ owner: element, nodes: all, depth });
+            // A section that says nothing but its heading opens the chapter that follows it.
+            else if (all.some(matters) || element.getAttribute('id'))
+                waiting.push({ owner: element, nodes: all, depth });
         };
-        const main = bodies[0],
-            all = Array.from(main.childNodes),
+        const all = Array.from(main.childNodes),
             sections = named(main, 'section');
         if (!sections.length) open('s0', []).pieces.push({ owner: main, nodes: all, depth: 0 });
         else {
             waiting.push({ owner: main, nodes: all.slice(0, all.indexOf(sections[0])), depth: 0 });
-            let count = 0;
             for (const node of all.slice(all.indexOf(sections[0])))
-                if (node.nodeType === 1 && (node as Element).localName === 'section')
-                    section(node as Element, [++count], []);
+                if (node.nodeType === 1 && (node as Element).localName === 'section') section(node as Element, 1, []);
                 else stray(node, 0);
-        }
-        bodies.slice(1).forEach((body, index) => {
+            // Headings with no chapter after them close the last chapter; a book of headings alone is one chapter.
+            if (waiting.some(piece => piece.nodes.some(matters) || piece.owner?.getAttribute('id'))) {
+                if (drafts.length) drafts[drafts.length - 1].pieces.push(...waiting);
+                else open('s0', []);
+            }
             waiting = [];
-            const draft = open(`body${index + 2}`, []);
-            draft.linear = false;
-            draft.notes = true;
-            draft.pieces.push({ owner: body, nodes: Array.from(body.childNodes), depth: 0 });
-        });
+        }
         return drafts;
     };
     let drafts = plan(Infinity);
     // A book cut finer than the reader can list is read by its outermost sections instead.
     if (drafts.length > CHAPTER_LIMIT) drafts = plan(1);
     if (drafts.length > CHAPTER_LIMIT) throw new Error('This book has more sections than can be listed (2000).');
+    // A titled chapter's name in an annotation is made from its titles (and which of several with the same titles it is).
+    const met = new Map<string, number>();
+    await Promise.all(
+        drafts.map(draft => {
+            if (!draft.trail.length) return null;
+            const key = JSON.stringify(draft.trail),
+                nth = (met.get(key) || 0) + 1;
+            met.set(key, nth);
+            return digest(`${key}\n${nth}`).then(hash => {
+                draft.idref = `t${hash.slice(0, 12)}`;
+            });
+        })
+    );
+    // Each later body is one chapter outside the reading order, whatever the book's size.
+    bodies.slice(1).forEach((body, index) => {
+        const place = `body${index + 2}`;
+        drafts.push({
+            place,
+            idref: place,
+            pieces: [{ owner: body, nodes: Array.from(body.childNodes), depth: 0 }],
+            linear: false,
+            notes: true,
+            trail: []
+        });
+    });
 
     // Where every id of the book lands, so a link written before its target can still name it.
-    const pathOf = (draft: Draft) => `${draft.idref}.xhtml`,
+    const pathOf = (draft: Draft) => `${draft.place}.xhtml`,
         placeOf = new Map<string, string>();
     for (const draft of drafts)
         for (const piece of draft.pieces) {
@@ -296,22 +393,27 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
             given.add(id);
             return ` id="${attr(id)}"`;
         };
+        /** Somewhere to go to, for an id on an element that is read through or has a place of its own already. */
+        const mark = (element: Element, tag = 'span') => {
+            const id = idOf(element.getAttribute('id'));
+            if (id) out.push(`<${tag}${id}></${tag}>`);
+        };
         const inline = (nodes: Node[], inLink = false) => {
             for (const node of nodes) {
-                if (node.nodeType === 3 || node.nodeType === 4) out.push(esc(node.textContent || ''));
+                if (isText(node)) out.push(esc(node.textContent || ''));
                 if (node.nodeType !== 1) continue;
                 const element = node as Element,
                     name = element.localName,
                     children = Array.from(element.childNodes);
                 if (INLINE[name]) {
-                    out.push(`<${INLINE[name]}>`);
+                    out.push(`<${INLINE[name]}${idOf(element.getAttribute('id'))}${langOf(element)}>`);
                     inline(children, inLink);
                     out.push(`</${INLINE[name]}>`);
                 } else if (name === 'image')
                     out.push(
-                        `<img src="${attr(pictureSrc(element))}" alt="${attr(element.getAttribute('alt') || '')}"/>`
+                        `<img${idOf(element.getAttribute('id'))} src="${attr(pictureSrc(element))}" alt="${attr(element.getAttribute('alt') || '')}"/>`
                     );
-                else if (name === 'empty-line') out.push('<br/>');
+                else if (name === 'empty-line') out.push(`<br${idOf(element.getAttribute('id'))}/>`);
                 else if (name === 'a' && !inLink) {
                     const href = hrefOf(element),
                         target = href.startsWith('#') ? placeOf.get(href.slice(1)) : undefined,
@@ -325,30 +427,37 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
                         !!target &&
                         (element.getAttribute('type') === 'note' || notePaths.has(target)) &&
                         !Array.from(element.getElementsByTagName('*')).some(inside => inside.localName === 'sup');
-                    if (to) out.push(`<a href="${attr(to)}"${note ? ' class="fb2-noteref"' : ''}>`);
+                    if (to)
+                        out.push(
+                            `<a${idOf(element.getAttribute('id'))} href="${attr(to)}"${note ? ' class="fb2-noteref"' : ''}>`
+                        );
+                    else mark(element);
                     inline(children, true);
                     if (to) out.push('</a>');
-                } else inline(children, inLink);
+                } else {
+                    mark(element);
+                    inline(children, inLink);
+                }
             }
         };
         const paragraph = (tag: string, cls: string, element: Element | null, nodes: Node[]) => {
-            out.push(`<${tag}${cls ? ` class="fb2-${cls}"` : ''}${element ? idOf(element.getAttribute('id')) : ''}>`);
+            out.push(
+                `<${tag}${cls ? ` class="fb2-${cls}"` : ''}${element ? idOf(element.getAttribute('id')) + langOf(element) : ''}>`
+            );
             inline(nodes);
             out.push(`</${tag}>\n`);
         };
-        /** A title's lines, one below another. */
+        /** A title's lines, one below another: each is a line of the chapter's text. */
         const lines = (element: Element) => {
-            const rows = Array.from(element.childNodes).filter(
-                node =>
-                    (node.nodeType === 1 && (node as Element).localName !== 'empty-line') ||
-                    !blank(node.textContent || '')
-            );
-            rows.forEach((row, index) => {
-                if (index) out.push('<br/>');
-                out.push('<span>');
-                inline(row.nodeType === 1 ? Array.from(row.childNodes) : [row]);
-                out.push('</span>');
-            });
+            mark(element);
+            Array.from(element.childNodes)
+                .filter(node => matters(node) && !(node.nodeType === 1 && (node as Element).localName === 'empty-line'))
+                .forEach((row, index) => {
+                    if (index) out.push('<br/>\n');
+                    out.push(`<span${row.nodeType === 1 ? idOf((row as Element).getAttribute('id')) : ''}>`);
+                    inline(row.nodeType === 1 ? Array.from(row.childNodes) : [row]);
+                    out.push('</span>');
+                });
         };
         const picture = (element: Element) => {
             const alt = element.getAttribute('alt') || element.getAttribute('title') || '',
@@ -373,29 +482,48 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
                 inline(nodes);
                 out.push(`</${tag}>\t`);
             };
-            out.push(`<table${idOf(element.getAttribute('id'))}><tbody>`);
-            for (const row of Array.from(element.childNodes)) {
-                if (row.nodeType !== 1 && blank(row.textContent || '')) continue;
-                out.push('<tr>');
-                if (row.nodeType === 1 && (row as Element).localName === 'tr') {
-                    for (const item of Array.from(row.childNodes)) {
-                        if (item.nodeType !== 1 && blank(item.textContent || '')) continue;
-                        const name = item.nodeType === 1 ? (item as Element).localName : '';
-                        if (name === 'td' || name === 'th')
-                            cell(name, item as Element, Array.from(item.childNodes), row as Element);
-                        else cell('td', null, [item]);
+            const rows = (parent: Element) => {
+                for (const row of Array.from(parent.childNodes).filter(matters)) {
+                    const name = row.nodeType === 1 ? (row as Element).localName : '';
+                    // Row groups borrowed from HTML are read through to their rows.
+                    if (name === 'tbody' || name === 'thead' || name === 'tfoot') {
+                        rows(row as Element);
+                        continue;
                     }
-                } else cell('td', null, [row]);
-                out.push('</tr>\n');
-            }
+                    out.push(`<tr${name === 'tr' ? idOf((row as Element).getAttribute('id')) : ''}>`);
+                    if (name === 'tr')
+                        for (const item of Array.from(row.childNodes).filter(matters)) {
+                            const kind = item.nodeType === 1 ? (item as Element).localName : '';
+                            if (kind === 'td' || kind === 'th')
+                                cell(kind, item as Element, Array.from(item.childNodes), row as Element);
+                            else cell('td', null, [item]);
+                        }
+                    else cell('td', null, [row]);
+                    out.push('</tr>\n');
+                }
+            };
+            out.push(`<table${idOf(element.getAttribute('id'))}><tbody>`);
+            rows(element);
             out.push('</tbody></table>');
         };
+        /** Whether a node, met among blocks, is part of a run of words: text, or an element that belongs inside a paragraph. */
+        const runs = (node: Node) =>
+            isText(node) ||
+            (node.nodeType === 1 && (!!INLINE[(node as Element).localName] || (node as Element).localName === 'a'));
         const blocks = (nodes: Node[], depth: number, owner?: Element) => {
             let headed = false;
-            for (const node of nodes) {
-                if (node.nodeType === 3 || node.nodeType === 4) {
-                    // Words written straight into a section are a paragraph of it; how the file is indented is not.
-                    if (!blank(node.textContent || '')) paragraph('p', '', null, [node]);
+            for (let at = 0; at < nodes.length; at++) {
+                const node = nodes[at];
+                if (runs(node)) {
+                    // Words written straight into a section are one paragraph of it, however they are marked up;
+                    // how the file is indented around them is not text.
+                    let end = at;
+                    while (end + 1 < nodes.length && (runs(nodes[end + 1]) || nodes[end + 1].nodeType !== 1)) end++;
+                    const run = nodes.slice(at, end + 1);
+                    while (run.length && !matters(run[0])) run.shift();
+                    while (run.length && !matters(run[run.length - 1])) run.pop();
+                    if (run.length) paragraph('p', '', null, run);
+                    at = end;
                     continue;
                 }
                 if (node.nodeType !== 1) continue;
@@ -410,7 +538,7 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
                     if (opens && !draft.notes) {
                         // The heading of a section: as deep as the section is, and where its entry in the contents leads.
                         const level = Math.min(6, depth + 1),
-                            made = `fb2-${draft.idref}-${depth}`;
+                            made = `fb2-${placeOfSection.get(owner) || 'body'}`;
                         let anchor = '';
                         const own = owner.localName === 'section' ? owner.getAttribute('id') : null;
                         if (own && idOf(own)) anchor = own;
@@ -440,28 +568,29 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
                     }
                 } else if (CONTAINER[name]) {
                     const [tag, cls] = CONTAINER[name];
-                    out.push(`<${tag} class="fb2-${cls}"${idOf(element.getAttribute('id'))}>`);
+                    out.push(`<${tag} class="fb2-${cls}"${idOf(element.getAttribute('id'))}${langOf(element)}>`);
                     blocks(children, depth);
                     out.push(`</${tag}>`);
-                } else if (name === 'empty-line') out.push('<br/>');
+                } else if (name === 'empty-line') out.push(`<br${idOf(element.getAttribute('id'))}/>`);
                 else if (name === 'image') picture(element);
                 else if (name === 'table') table(element);
                 else if (name === 'section') {
-                    // A section that is not a chapter of its own: a note, or one inside a chapter that is not divided further.
+                    // A section that is not a chapter of its own: a note, or a scene inside a chapter.
                     out.push(`<div${draft.notes ? ' class="fb2-note"' : ''}${idOf(element.getAttribute('id'))}>`);
                     blocks(children, depth + 1, draft.notes ? undefined : element);
                     out.push('</div>');
-                } else if (INLINE[name] || name === 'a' || name === 'td' || name === 'th')
-                    paragraph('p', '', null, [element]);
-                // Anything the format does not name is read through: its words are kept, in place.
-                else blocks(children, depth);
+                } else if (name === 'td' || name === 'th') paragraph('p', '', element, children);
+                else {
+                    // Anything the format does not name is read through: its words are kept, in place.
+                    mark(element, 'div');
+                    blocks(children, depth);
+                }
             }
         };
         for (const piece of draft.pieces) {
             const owner = piece.owner;
             // A section with an id but no title of its own is still somewhere a link can go.
-            if (owner?.localName === 'section' && owner.getAttribute('id') && !first(owner, 'title'))
-                out.push(`<div${idOf(owner.getAttribute('id'))}></div>`);
+            if (owner?.localName === 'section' && !first(owner, 'title')) mark(owner, 'div');
             blocks(piece.nodes, piece.depth, owner);
         }
         return out.join('');
@@ -472,16 +601,24 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
             `<!DOCTYPE html><html${language ? ` lang="${attr(language)}"` : ''}${direction}><head>${title ? `<title>${esc(title)}</title>` : ''}<link rel="stylesheet" type="text/css" href="${STYLE_PATH}"/></head><body>${body}</body></html>`;
     const texts = new Map<string, string>([[STYLE_PATH, FB2_STYLE]]),
         chapters: Chapter[] = [];
-    const add = (idref: string, name: string, linear: boolean, body: string) => {
-        const href = `${idref}.xhtml`;
+    const add = (place: string, idref: string, name: string, linear: boolean, body: string) => {
+        const href = `${place}.xhtml`;
         texts.set(href, wrap(body));
         chapters.push({ idref, href, path: href, title: name, linear });
     };
     // The cover is the book's first page, where it has one that can be shown.
     const coverpage = first(titleInfo, 'coverpage'),
-        cover = coverpage ? named(coverpage, 'image').find(image => pictureOf.has(hrefOf(image).slice(1))) : undefined;
+        cover = coverpage
+            ? named(coverpage, 'image').find(image => pictureBytes(pictures.get(picturePath(image)), doc))
+            : undefined;
     if (cover)
-        add('cover', 'Cover', true, `<div class="fb2-cover"><img src="${attr(pictureSrc(cover))}" alt="Cover"/></div>`);
+        add(
+            'cover',
+            'cover',
+            'Cover',
+            true,
+            `<div class="fb2-cover"><img src="${attr(pictureSrc(cover))}" alt="Cover"/></div>`
+        );
     drafts.forEach((draft, index) => {
         const body = render(draft);
         let name: string;
@@ -494,11 +631,13 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
             // Named by the sections it is in; a chapter no section names is named by how it begins.
             const begins = draft.pieces
                 .flatMap(piece => piece.nodes)
-                .map(node => (node.textContent || '').replace(/\s+/g, ' ').trim())
+                .map(node =>
+                    (node.nodeType === 1 || isText(node) ? node.textContent || '' : '').replace(/\s+/g, ' ').trim()
+                )
                 .find(Boolean);
             name = draft.trail.join(' · ') || (begins ? begins.slice(0, 60) : `Section ${index + 1}`);
         }
-        add(draft.idref, name, draft.linear, body);
+        add(draft.place, draft.idref, name, draft.linear, body);
     });
 
     return shelve(
@@ -520,7 +659,7 @@ function shelve(
         nav: Publication['nav'];
         hash: string;
         texts: Map<string, string>;
-        pictures: Map<string, { data: string; type: string }>;
+        pictures: Map<string, Held>;
     },
     doc: Document
 ): Publication {
@@ -538,31 +677,6 @@ function shelve(
             const found = texts.get(path);
             return found === undefined ? Promise.reject(new Error('Missing book resource')) : Promise.resolve(found);
         },
-        image: path => {
-            const held = pictures.get(path);
-            if (!held) return Promise.resolve(null);
-            let data: Uint8Array;
-            try {
-                const clean = held.data.replace(/[^A-Za-z0-9+/]/g, '');
-                if (clean.length > (PICTURE_LIMIT * 4) / 3 + 4) return Promise.resolve(null);
-                const raw = atob(clean + '='.repeat((4 - (clean.length % 4)) % 4));
-                data = new Uint8Array(raw.length);
-                for (let i = 0; i < raw.length; i++) data[i] = raw.charCodeAt(i);
-            } catch {
-                return Promise.resolve(null);
-            }
-            const mime = pictureMime(data);
-            if (mime) return Promise.resolve({ bytes: data, mime });
-            if (held.type === 'image/svg+xml') {
-                let safe: string | null = null;
-                try {
-                    safe = passiveSvgImage(new TextDecoder('utf-8', { fatal: true }).decode(data), doc);
-                } catch {
-                    safe = null;
-                }
-                return Promise.resolve(safe ? { bytes: new TextEncoder().encode(safe), mime: 'image/svg+xml' } : null);
-            }
-            return Promise.resolve(null);
-        }
+        image: path => Promise.resolve(pictureBytes(pictures.get(path), doc))
     };
 }

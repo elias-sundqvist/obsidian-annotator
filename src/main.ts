@@ -63,6 +63,7 @@ import { DEFAULT_INK, INKS, INK_NAMES, inkLabel, inkLabels, inkOf, isInk, type I
 import {
     AnnotationSearch,
     LibrarySwitcher,
+    FictionBookSwitcher,
     MigrationModal,
     PromptModal,
     displayTitle,
@@ -844,6 +845,21 @@ export default class AnnotatorPlugin extends Plugin {
             name: 'Open annotated source…',
             callback: () => {
                 void this.openLibrary().catch(error => this.fail(error));
+            }
+        });
+        this.addCommand({
+            id: 'open-fictionbook',
+            name: 'Open a FictionBook (FB2) from this vault…',
+            callback: () => {
+                new FictionBookSwitcher(
+                    this.app,
+                    this.app.vault.getFiles().filter(file => fictionBookName(file.path)),
+                    file => {
+                        void this.openSourceFile(this.app.workspace.getLeaf(false), file)
+                            .then(() => this.openSidebar())
+                            .catch(error => this.fail(error));
+                    }
+                ).open();
             }
         });
         this.addCommand({

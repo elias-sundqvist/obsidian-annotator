@@ -103,7 +103,7 @@ export function displayTitle(basename: string) {
     return (
         basename
             .replace(/(?:-[0-9a-f]{8})?\.md\.annotations$/i, '')
-            .replace(/\.(pdf|epub)\.annotations$/i, '')
+            .replace(/\.(pdf|epub|fb2\.zip|fb2|fbz)\.annotations$/i, '')
             .replace(/\.annotations$/i, '') || basename
     );
 }
@@ -111,6 +111,30 @@ const count = (value: number, noun: string) => `${value} ${noun}${value === 1 ? 
 const when = (time: number) =>
     new Date(time).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 
+/**
+ * Quick switcher over the FictionBook files of the vault. A zipped one ends in `.zip`, which Obsidian's file list
+ * does not show unless every file type is shown, so this is the way to it.
+ */
+export class FictionBookSwitcher extends FuzzySuggestModal<TFile> {
+    constructor(
+        app: App,
+        private books: TFile[],
+        private choose: (file: TFile) => void
+    ) {
+        super(app);
+        this.setPlaceholder('Open a FictionBook…');
+        this.emptyStateText = 'No FictionBook files (.fb2, .fb2.zip, .fbz) in this vault.';
+    }
+    getItems() {
+        return this.books;
+    }
+    getItemText(file: TFile) {
+        return file.path;
+    }
+    onChooseItem(file: TFile) {
+        this.choose(file);
+    }
+}
 /** Quick switcher over everything you have annotated. */
 export class LibrarySwitcher extends FuzzySuggestModal<LibraryEntry> {
     constructor(

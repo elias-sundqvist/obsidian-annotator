@@ -926,7 +926,13 @@ test('the plugin starts when another plugin already opens .fb2 files, and opens 
   const states=[];h.app.workspace.getLeaf=()=>({openFile:async file=>h.opened.push({file}),setViewState:async state=>{states.push(state);}});
   for(const name of ['Books/Dama.fb2.zip','Books/Dama.fb2','Books/Dama.fbz']){h.add(name);const note=h.add(name+'.md','',{'annotation-target':name});await h.plugin.openNoteTarget(note);}
   assert.deepEqual(states.map(state=>[state.type,state.state.file]),[['annotator-native-epub','Books/Dama.fb2.zip'],['annotator-native-epub','Books/Dama.fb2'],['annotator-native-epub','Books/Dama.fbz']]);assert.equal(h.opened.length,0);
+  // A zipped book is not in Obsidian's file list unless every file type is shown; a command lists the vault's FictionBooks and opens the one chosen.
+  h.app.vault.getFiles=()=>[...h.files.values()];let sidebar=0;h.plugin.openSidebar=async()=>{sidebar++;};
+  const command=h.plugin.commands.find(item=>item.id==='open-fictionbook');assert.equal(command.name,'Open a FictionBook (FB2) from this vault…');
+  let chooser;const {Modal}=await import('./.generated/plugin-boundary.mjs'),open=Modal.prototype.open;Modal.prototype.open=function(){chooser=this;};try{command.callback();}finally{Modal.prototype.open=open;}
+  assert.deepEqual(chooser.getItems().map(file=>file.path),['Books/Dama.fb2.zip','Books/Dama.fb2','Books/Dama.fbz']);assert.equal(chooser.getItemText(chooser.getItems()[0]),'Books/Dama.fb2.zip');
+  chooser.onChooseItem(chooser.getItems()[0]);await new Promise(resolve=>setTimeout(resolve,0));assert.deepEqual([states.at(-1).type,states.at(-1).state.file],['annotator-native-epub','Books/Dama.fb2.zip']);assert.equal(states.length,4);assert.equal(sidebar,1);
   // An EPUB and any other archive open as they always have.
-  h.add('Books/Other.epub');await h.plugin.openNoteTarget(h.add('Other.md','',{'annotation-target':'Books/Other.epub'}));assert.equal(h.opened.length,1);assert.equal(h.opened[0].file.path,'Books/Other.epub');assert.equal(states.length,3);
+  h.add('Books/Other.epub');await h.plugin.openNoteTarget(h.add('Other.md','',{'annotation-target':'Books/Other.epub'}));assert.equal(h.opened.length,1);assert.equal(h.opened[0].file.path,'Books/Other.epub');assert.equal(states.length,4);
  }finally{h.dispose();}
 });

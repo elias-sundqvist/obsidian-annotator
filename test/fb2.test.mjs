@@ -9,7 +9,7 @@ import JSZip from 'jszip';
 const dom = new JSDOM('<html><body></body></html>', { url: 'https://reader.example/book', pretendToBeVisual: true });
 for (const key of ['window', 'document', 'Node', 'NodeFilter', 'Range', 'XPathResult', 'Element', 'HTMLElement', 'Text', 'location'])
     globalThis[key] = key === 'window' ? dom.window : key === 'document' ? dom.window.document : dom.window[key];
-const { openFictionBook, fb2Text, FB2_STYLE } = await import('./.generated/readers/fb2-book.js');
+const { openFictionBook, fb2Text, pictureName, FB2_STYLE } = await import('./.generated/readers/fb2-book.js');
 const { fictionBookName } = await import('./.generated/readers/epub-book.js');
 const { EpubResolver, publicationSections } = await import('./.generated/readers/epub-resolver.js');
 const { describeRange, projectHtml } = await import('./.generated/readers/dom-source.js');
@@ -74,23 +74,36 @@ const NESTED = `<body>
   </section>
 </body>`;
 
-test('a FictionBook\'s chapters are its sections that hold no sections, in order, each opened by the headings of the sections around it', async () => {
+test('a FictionBook\'s chapters are its sections with text and no titled section inside, in order, each opened by the headings before it', async () => {
     const { book, texts, sections } = await read(fb2(NESTED));
-    assert.deepEqual(book.chapters.map(chapter => [chapter.href, chapter.idref, chapter.linear]), [['s1-1.xhtml', 's1-1', true], ['s1-2.xhtml', 's1-2', true], ['s2.xhtml', 's2', true]]);
+    assert.deepEqual(book.chapters.map(chapter => [chapter.href, chapter.linear]), [['s1-1.xhtml', true], ['s1-2.xhtml', true], ['s2.xhtml', true]]);
+    // A chapter's second name is made from its titles; one with no title has only its place.
+    assert.match(book.chapters[0].idref, /^t[0-9a-f]{12}$/); assert.match(book.chapters[1].idref, /^t[0-9a-f]{12}$/); assert.notEqual(book.chapters[0].idref, book.chapters[1].idref); assert.equal(book.chapters[2].idref, 's2');
     assert.deepEqual(book.chapters.map(chapter => chapter.path), book.chapters.map(chapter => chapter.href));
     // What the body and the part say before their first section opens the first chapter: nothing is without a chapter.
-    assert.ok(texts[0].startsWith('A Small Book\nAll beginnings are small.\nSomeone\nPart One\nOf parts.\nChapter 1The Start\n'), JSON.stringify(texts[0].slice(0, 90)));
+    assert.ok(texts[0].startsWith('A Small Book\nAll beginnings are small.\nSomeone\nPart One\nOf parts.\nChapter 1\nThe Start\n'), JSON.stringify(texts[0].slice(0, 90)));
     assert.ok(texts[1].startsWith('Chapter 2\n'));
     // Headings are as deep as their sections: the book, the part, the chapter.
     const headings = [...sections[0].root.querySelectorAll('h1,h2,h3')].map(heading => [heading.localName, heading.textContent]);
-    assert.deepEqual(headings, [['h1', 'A Small Book'], ['h2', 'Part One'], ['h3', 'Chapter 1The Start']]);
+    assert.deepEqual(headings, [['h1', 'A Small Book'], ['h2', 'Part One'], ['h3', 'Chapter 1\nThe Start']]);
     assert.equal(book.title, 'A Small Book'); assert.equal(book.language, 'en');
     assert.deepEqual(book.identifiers, ['doc-1']); assert.equal(book.legacyIdentifier, 'doc-1'); assert.match(book.hash, /^[0-9a-f]{64}$/);
+    // Untitled sections inside a chapter are its scenes: one chapter, not one each with the same name.
+    const scenes = await read(fb2('<body><section><title><p>Chapter 1</p></title><section><p>Scene one.</p></section><section><p>Scene two.</p></section></section><section><title><p>Chapter 2</p></title><p>Two.</p></section></body>'));
+    assert.deepEqual(scenes.book.chapters.map(chapter => [chapter.href, chapter.title]), [['s1.xhtml', 'Chapter 1'], ['s2.xhtml', 'Chapter 2']]); assert.equal(scenes.texts[0], 'Chapter 1\nScene one.\nScene two.\n');
+    // A section that says nothing but its heading (a part's title among its chapters) opens the chapter after it; an empty one is no chapter;
+    // a heading with nothing after it closes the last chapter.
+    const flat = await read(fb2('<body><section><title><p>PART ONE</p></title><epigraph><p>Motto.</p></epigraph><empty-line/><p> </p></section><section/><section><title><p>I</p></title><p>First.</p></section><section><title><p>THE END</p></title></section></body>'));
+    assert.deepEqual(flat.book.chapters.map(chapter => [chapter.href, chapter.title]), [['s3.xhtml', 'I']]); assert.equal(flat.texts[0], 'PART ONE\nMotto.\n \nI\nFirst.\nTHE END\n');
+    assert.deepEqual(flat.book.nav, [{ title: 'PART ONE', path: 's3.xhtml', fragment: '', depth: 0 }, { title: 'I', path: 's3.xhtml', fragment: 'fb2-s3', depth: 0 }, { title: 'THE END', path: 's3.xhtml', fragment: 'fb2-s4', depth: 0 }]);
+    // A titled section deep inside untitled ones still divides the book there.
+    const deep = await read(fb2('<body><section><section><title><p>A</p></title><p>a</p></section><section><title><p>B</p></title><p>b</p></section></section></body>'));
+    assert.deepEqual(deep.book.chapters.map(chapter => chapter.href), ['s1-1.xhtml', 's1-2.xhtml']);
 });
 
 test('a chapter\'s text is the book\'s text: nothing dropped, reordered or rewritten, however the file is indented', async () => {
     const { texts } = await read(fb2(NESTED));
-    assert.equal(texts[0], 'A Small Book\nAll beginnings are small.\nSomeone\nPart One\nOf parts.\nChapter 1The Start\nFirst paragraph, with stress and weight.\nSecond paragraph & an ampersand, a <tag>.\n* * *\nA quoted line.\nIts author\n');
+    assert.equal(texts[0], 'A Small Book\nAll beginnings are small.\nSomeone\nPart One\nOf parts.\nChapter 1\nThe Start\nFirst paragraph, with stress and weight.\nSecond paragraph & an ampersand, a <tag>.\n* * *\nA quoted line.\nIts author\n');
     // Words written straight into a section are kept as they stand; an element the format does not name is read through.
     assert.equal(texts[1], 'Chapter 2\n\n      Words written straight into the section.\n      \nAfter the stray words.\nInside an element the format does not name.\nSong\nLine one\nLine two\nA poet\n1900\n');
     assert.equal(texts[2], 'A chapter no section names, flat at the top.\nHead A\tHead B\t\nWide cell\t\n');
@@ -105,43 +118,61 @@ test('a chapter\'s text is the book\'s text: nothing dropped, reordered or rewri
     // Characters an HTML parser would treat specially arrive as themselves; a carriage return written as a reference stays one.
     const odd = await read(fb2('<body><section><p>a &amp;amp; b &lt;p&gt; c&#13;d &quot;e&quot;  f</p><p><![CDATA[<raw> & more]]></p></section></body>'));
     assert.equal(odd.texts[0], 'a &amp; b <p> c\rd "e"  f\n<raw> & more\n');
+    // A comment or a processing instruction is not text and moves nothing; a table's row groups are read through to its rows.
+    const table = '<table><tr><td>a</td><td>b</td></tr><tr><td>c</td></tr></table>', expected = 'a\tb\t\nc\t\n';
+    for (const variant of [table, table.replace('<tr>', '<!-- c --><tr><!-- d -->'), table.replace('<table>', '<table><?pi x?><tbody>').replace('</table>', '</tbody></table>'), table.replace('<td>b</td>', '<!-- e --> <td>b</td>')])
+        assert.equal((await read(fb2(`<body><section>${variant}</section></body>`))).texts[0], expected, variant);
+    assert.equal((await read(fb2('<body><section><p>one</p><!-- note to self --><p>two<!-- inside -->!</p></section></body>'))).texts[0], 'one\ntwo!\n');
+    // Words written straight into a section are one paragraph however they are marked up, with the space between them kept.
+    const marked = await read(fb2('<body><section><p>before</p>\n  Some <strong>bold</strong> <emphasis>text</emphasis> here.\n  <p>after</p></section></body>'));
+    assert.equal(marked.texts[0], 'before\n\n  Some bold text here.\n  \nafter\n'); assert.equal(marked.sections[0].root.querySelectorAll('p').length, 3);
 });
 
-test('generated books: the chapters\' text together is the body\'s text', async () => {
-    // A small generator with a fixed seed: trees of sections with titles, paragraphs, verse, quotes, stray words and unknown elements.
+test('generated books: the chapters\' text together is the body\'s text with its separators, and every chapter has its own place', async () => {
+    // A small generator with a fixed seed: trees of sections with titles, paragraphs, verse, quotes, tables, comments and unknown elements.
+    // Beside the book it writes down the text the book must have: every word in order, a line break after each paragraph, title line,
+    // verse line and table row, a tab after each cell, and nothing for indentation, comments or empty lines.
     let seed = 20261114;
     const random = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32,
         pick = list => list[Math.floor(random() * list.length)],
         expected = [];
     let serial = 0;
-    const word = () => { const text = `w${++serial}${pick(['', ' &amp; x', ' y z', ' '])}`; expected.push(text.replace('&amp;', '&')); return text; };
-    const inline = () => pick([() => word(), () => `<emphasis>${word()}</emphasis>`, () => `${word()}<strong>${word()}<sup>${word()}</sup></strong>`, () => `<a l:href="#nowhere">${word()}</a>`, () => `<style name="x">${word()}</style>${word()}`])();
+    const word = () => { const text = `w${++serial}${pick(['', ' &amp; x', ' y z', '\u00a0'])}`; expected.push(text.replace('&amp;', '&')); return text; };
+    const inline = () => pick([() => word(), () => `<emphasis>${word()}</emphasis>`, () => `${word()}<strong>${word()}<sup>${word()}</sup></strong>`, () => `<a l:href="#nowhere">${word()}</a>`, () => `<style name="x">${word()}</style><!-- c -->${word()}`])();
+    // Each of these writes its opening first, so what is noted down beside it is in the book's order.
+    const para = (tag = 'p') => { const inside = inline(); expected.push('\n'); return `<${tag}>${inside}</${tag}>`; };
+    const title = () => { let lines = para(); if (random() < 0.5) lines += `<empty-line/>${para()}`; return `<title>${lines}</title>`; };
+    const cellOf = () => { const inside = inline(); expected.push('\t'); return `<td>${inside}</td>`; };
+    const row = count => { let cells = ''; for (let i = 0; i < count; i++) cells += cellOf(); expected.push('\n'); return `<tr>${cells}</tr>`; };
     const block = () => pick([
-        () => `<p>${inline()}</p>`, () => `<p>${inline()}</p>`, () => `<subtitle>${inline()}</subtitle>`,
-        () => `<poem><stanza><v>${inline()}</v><v>${inline()}</v></stanza><text-author>${inline()}</text-author></poem>`,
-        () => `<cite><p>${inline()}</p><text-author>${inline()}</text-author></cite>`, () => '<empty-line/>',
-        () => `<table><tr><td>${inline()}</td><td>${inline()}</td></tr></table>`, () => `<unknown><p>${inline()}</p></unknown>`, () => `<epigraph><p>${inline()}</p></epigraph>`
+        () => para(), () => para(), () => para('subtitle'),
+        () => { const head = title(), one = para('v'), two = para('v'), author = para('text-author'); return `<poem>${head}<stanza>${one}${two}</stanza>${author}</poem>`; },
+        () => { const one = para(), author = para('text-author'); return `<cite>${one}${author}</cite>`; }, () => '<empty-line/>', () => '<!-- a comment -->',
+        () => { const one = row(2), two = row(1); return `<table><!-- t -->${one}${two}</table>`; }, () => `<unknown>${para()}</unknown>`, () => `<epigraph>${para()}</epigraph>`
     ])();
     const section = depth => {
-        const head = `${random() < 0.7 ? `<title><p>${word()}</p></title>` : ''}${random() < 0.3 ? `<epigraph><p>${word()}</p></epigraph>` : ''}`;
-        if (depth < 3 && random() < 0.45) return `<section>\n${head}\n${Array.from({ length: 1 + Math.floor(random() * 3) }, () => section(depth + 1)).join('\n  ')}\n</section>`;
-        return `<section>\n ${head}\n ${Array.from({ length: Math.floor(random() * 5) }, block).join('\n   ')}\n</section>`;
+        let head = random() < 0.7 ? title() : '';
+        if (random() < 0.3) head += `<epigraph>${para()}</epigraph>`;
+        const parts = [];
+        if (depth < 3 && random() < 0.45) { for (let i = 0, count = 1 + Math.floor(random() * 3); i < count; i++) parts.push(section(depth + 1)); return `<section>\n${head}\n${parts.join('\n  ')}\n</section>`; }
+        for (let i = 0, count = Math.floor(random() * 5); i < count; i++) parts.push(block());
+        return `<section>\n ${head}\n ${parts.join('\n   ')}\n</section>`;
     };
-    for (let round = 0; round < 40; round++) {
+    for (let round = 0; round < 60; round++) {
         expected.length = 0;
-        const body = `<body>${random() < 0.5 ? `<title><p>${word()}</p></title>` : ''}\n${Array.from({ length: 1 + Math.floor(random() * 4) }, () => section(1)).join('\n')}\n</body>`;
-        const { texts, book } = await read(fb2(body));
-        // Less the separators the converter adds, the chapters in order are every word of the body in order.
-        assert.equal(texts.join('').replace(/[\n\t]/g, ''), expected.join(''), `round ${round}`);
-        // Every chapter has its own address.
+        const head = random() < 0.5 ? title() : '', parts = [];
+        for (let i = 0, count = 1 + Math.floor(random() * 4); i < count; i++) parts.push(section(1));
+        const { texts, book } = await read(fb2(`<body>${head}\n${parts.join('\n')}\n</body>`));
+        assert.equal(texts.join(''), expected.join(''), `round ${round}`);
         assert.equal(new Set(book.chapters.map(chapter => chapter.href)).size, book.chapters.length);
+        assert.equal(new Set(book.chapters.map(chapter => chapter.idref)).size, book.chapters.length);
     }
 });
 
 test('the contents follow the section tree, and a chapter no section names is named by how it begins', async () => {
     const { book } = await read(fb2(NESTED));
     assert.deepEqual(book.nav, [
-        { title: 'Part One', path: 's1-1.xhtml', fragment: 'fb2-s1-1-1', depth: 0 },
+        { title: 'Part One', path: 's1-1.xhtml', fragment: 'fb2-s1', depth: 0 },
         { title: 'Chapter 1 The Start', path: 's1-1.xhtml', fragment: 'ch1', depth: 1 },
         { title: 'Chapter 2', path: 's1-2.xhtml', fragment: '', depth: 1 }
     ]);
@@ -149,7 +180,7 @@ test('the contents follow the section tree, and a chapter no section names is na
     assert.deepEqual(book.chapters.map(chapter => chapter.title), ['Part One · Chapter 1 The Start', 'Part One · Chapter 2', 'A chapter no section names, flat at the top.']);
     // The place a contents entry leads to is in its chapter.
     const { sections } = await read(fb2(NESTED));
-    assert.equal(sections[0].root.querySelector('#ch1').localName, 'h3'); assert.equal(sections[0].root.querySelector('#fb2-s1-1-1').textContent, 'Part One');
+    assert.equal(sections[0].root.querySelector('#ch1').localName, 'h3'); assert.equal(sections[0].root.querySelector('#fb2-s1').textContent, 'Part One');
     assert.equal(sections[0].root.querySelector('#p2').textContent, 'Second paragraph & an ampersand, a <tag>.');
 });
 
@@ -189,6 +220,9 @@ test('a zipped book opens as the book inside it and is the same revision as the 
     // A cover file beside the book is not the book; two books are not one; none is none.
     const beside = new JSZip(); beside.file('cover.jpg', PNG('c')); beside.file('dir/Book.FB2', source);
     assert.equal((await open(await beside.generateAsync({ type: 'arraybuffer' }))).hash, bare.hash);
+    // What a Mac's Finder puts beside the file it zips is not a second book.
+    const finder = new JSZip(); finder.file('book.fb2', source); finder.file('__MACOSX/._book.fb2', 'resource fork'); finder.file('.DS_Store', 'x');
+    assert.equal((await open(await finder.generateAsync({ type: 'arraybuffer' }))).hash, bare.hash);
     const two = new JSZip(); two.file('a.fb2', source); two.file('b.fb2', source);
     await assert.rejects(open(await two.generateAsync({ type: 'arraybuffer' })), /more than one book/);
     const none = new JSZip(); none.file('a.txt', 'x'); none.file('b.txt', 'y');
@@ -226,6 +260,12 @@ test('a footnote reference leads to its note in the notes body; a dangling refer
     assert.equal(notes.querySelector('[id="n1"]').textContent, '1\nThe first note.\n'); assert.equal(notes.querySelector('[id="n 2"] .fb2-note-title').textContent, '2');
     assert.equal(notes.querySelectorAll('h2,h3').length, 0); assert.equal(notes.querySelector('.fb2-title').textContent, 'Notes');
     assert.equal(sections[3].root.textContent, 'A comment.\n');
+    // An id is somewhere to go wherever the book put it: on a title, inside a paragraph, on an element the format does not name.
+    const anchored = await read(fb2('<body><section><title id="t1"><p id="t2">One</p></title><p>See <a l:href="#t1">a</a> <a l:href="#i1">b</a> <a l:href="#u1">c</a> <a l:href="#t2">d</a>. <strong id="i1">Here</strong>.</p><odd id="u1"><p>Odd.</p></odd></section></body>'));
+    const root = anchored.sections[0].root;
+    assert.deepEqual([...root.querySelectorAll('a')].map(link => link.getAttribute('href')), ['#t1', '#i1', '#u1', '#t2']);
+    for (const id of ['t1', 't2', 'i1', 'u1']) assert.ok(root.querySelector(`[id="${id}"]`), id);
+    assert.equal(root.querySelector('#i1').localName, 'strong'); assert.equal(root.textContent, 'One\nSee a b c d. Here.\nOdd.\n');
 });
 
 const PICTURED = fb2(`<body><image l:href="#cover.png"/><section><title><p>Plates</p></title>
@@ -246,18 +286,26 @@ test('pictures are the book\'s binaries by id, known by their bytes; a missing o
     const { book, sections, resolver } = await read(PICTURED);
     assert.deepEqual(book.chapters.map(chapter => [chapter.href, chapter.title]), [['cover.xhtml', 'Cover'], ['s1.xhtml', 'Plates']]);
     assert.equal(sections[0].root.querySelector('img').getAttribute('src'), 'images/cover.png');
-    assert.deepEqual(resolver.pictures(1).map(picture => picture.src), ['images/cover.png', 'images/chart.png', 'images/орнамент_1.png', 'images/absent.png', 'images/wrong.png', 'images/huge.png', 'images/a_b.png', 'images/a_b.png~2']);
+    assert.deepEqual(resolver.pictures(1).map(picture => picture.src), ['images/cover.png', 'images/chart.png', 'images/орнамент%201.png', 'images/absent.png', 'images/wrong.png', 'images/huge.png', 'images/a%2Fb.png', 'images/a_b.png']);
     // Known by its bytes whatever its type says, and with its base64 broken over lines.
     const chart = await book.image('images/chart.png'); assert.equal(chart.mime, 'image/png'); assert.deepEqual([...chart.bytes], [...PNG('chart')]);
-    assert.deepEqual([...(await book.image('images/орнамент_1.png')).bytes], [...PNG('ornament')]);
-    // Two ids that would be one file name are two files.
-    assert.deepEqual([...(await book.image('images/a_b.png')).bytes], [...PNG('slash')]); assert.deepEqual([...(await book.image('images/a_b.png~2')).bytes], [...PNG('underscore')]);
+    assert.deepEqual([...(await book.image('images/орнамент%201.png')).bytes], [...PNG('ornament')]);
+    // No two ids have one file name, whatever order the book holds them in, and a name never leaves images/.
+    assert.deepEqual([...(await book.image('images/a%2Fb.png')).bytes], [...PNG('slash')]); assert.deepEqual([...(await book.image('images/a_b.png')).bytes], [...PNG('underscore')]);
+    const names = ['a b', 'a/b', 'a_b', 'a%20b', 'a?b', '..', '.', '../x', 'a\\b', '~', 'é', 'a.b', '.a'].map(pictureName);
+    assert.equal(new Set(names).size, names.length); for (const name of names) assert.match(name, /^(?!\.)[^/\\ ]+$/u, name);
+    assert.deepEqual(names.slice(0, 5), ['a%20b', 'a%2Fb', 'a_b', 'a%2520b', 'a%3Fb']);
+    // A reference to a binary the book does not have is unavailable, never another binary whose name is like it.
+    const near = await read(fb2('<body><section><p><image l:href="#a?b"/></p></section></body>', { binaries: `<binary id="a b" content-type="image/png">${base64(PNG('space'))}</binary>` }));
+    assert.equal(await near.book.image(near.resolver.pictures(0)[0].src), null); assert.ok(await near.book.image('images/a%20b'));
     for (const path of ['images/absent.png', 'images/wrong.png', 'images/huge.png', 'images/../s1.xhtml', 'cover.png']) assert.equal(await book.image(path), null, path);
     // What the book says of a picture is on the picture, not in the chapter's text.
     const figure = sections[1].root.querySelector('#fig1 img'); assert.equal(figure.getAttribute('alt'), 'Bar chart of six trials'); assert.equal(figure.getAttribute('title'), 'Figure 1');
     assert.equal(sections[1].root.textContent, 'Plates\nBefore the chart.\nInline  ornament, and a missing  one, and a far  one.\n');
-    // A book without a cover begins with its text.
+    // A book without a cover, or whose cover is not a picture that can be shown, begins with its text.
     assert.equal((await open(fb2(NESTED))).chapters[0].href, 's1-1.xhtml');
+    const bmp = fb2(NESTED, { cover: '<coverpage><image l:href="#c.bmp"/></coverpage>', binaries: `<binary id="c.bmp" content-type="image/bmp">${base64(new TextEncoder().encode('BM not shown'))}</binary>` });
+    assert.equal((await open(bmp)).chapters[0].href, 's1-1.xhtml');
 });
 
 /** The book reader over a FictionBook's bytes, as Obsidian would open it. */
@@ -307,8 +355,9 @@ test('a highlight made in a FictionBook is stored as a book annotation, and is r
         const annotation = await view.payload(capture, 'A thought', 'h1');
         // The same shape as an EPUB annotation: an address, the book and chapter it is part of, and the three selectors.
         assert.match(annotation.uri, /\?loc=s1-1\.xhtml$/); assert.equal(annotation.target[0].source, annotation.uri);
-        assert.deepEqual(annotation.document.dc, { identifier: ['s1-1'], 'relation.ispartof': ['doc-1'] }); assert.equal(annotation.document.documentFingerprint, 'urn:x-dc:doc-1/s1-1');
-        assert.deepEqual(annotation.document.link.map(link => link.href.replace(/[0-9a-f]{64}$/, 'HASH')), [annotation.uri, 'urn:x-dc:doc-1/s1-1', 'urn:sha256:HASH']);
+        const name = view.book.chapters[0].idref; assert.match(name, /^t[0-9a-f]{12}$/);
+        assert.deepEqual(annotation.document.dc, { identifier: [name], 'relation.ispartof': ['doc-1'] }); assert.equal(annotation.document.documentFingerprint, `urn:x-dc:doc-1/${name}`);
+        assert.deepEqual(annotation.document.link.map(link => link.href.replace(/[0-9a-f]{64}$/, 'HASH')), [annotation.uri, `urn:x-dc:doc-1/${name}`, 'urn:sha256:HASH']);
         assert.deepEqual(annotation.target[0].selector.map(selector => selector.type), ['RangeSelector', 'TextPositionSelector', 'TextQuoteSelector']);
         assert.deepEqual(Object.keys(annotation).sort(), ['created', 'document', 'id', 'tags', 'target', 'text', 'updated', 'uri']);
         view.setAnnotations([annotation]); await frames();
@@ -346,6 +395,14 @@ test('the same document in a new version keeps its highlights; with a section ad
         moved = grown.resolver.resolve(note);
     assert.deepEqual(grown.book.chapters.map(chapter => chapter.href), ['s1-1.xhtml', 's1-2.xhtml', 's1-3.xhtml', 's2.xhtml']);
     assert.equal(moved.chapter, 2); assert.equal(moved.range.toString(), 'After the stray words.'); assert.match(moved.method, /^Recovered unique/);
+    // A note on the chapter itself has no words to be found by. Its chapter's place is now another chapter's and its name is not:
+    // the two disagree, and it is kept and said rather than put on the wrong chapter.
+    const identity = first.resolver.identity(1), chapterNote = { id: 'c1', text: 'On this chapter', tags: [], ...identity, target: [{ source: identity.uri }] };
+    assert.equal(first.resolver.resolve(chapterNote).method, 'Chapter note'); assert.equal(corrected.resolver.resolve(chapterNote).chapter, 1);
+    assert.equal(grown.resolver.resolve(chapterNote).error, 'Conflicting chapter identities; annotation retained.');
+    // A chapter whose title was corrected keeps its notes by its place.
+    const retitled = await read(fb2(NESTED.replace('<p>Chapter 2</p>', '<p>Chapter Two</p>'), { version: '1.3' }));
+    assert.equal(retitled.resolver.resolve(chapterNote).chapter, 1); assert.equal(retitled.resolver.resolve(note).range.toString(), 'After the stray words.');
     // The same words elsewhere in the book are told apart by the words around them.
     const echoed = await read(fb2(NESTED.replace('<section id="ch1">', '<section><p>After the stray words.</p></section><section id="ch1">')));
     assert.equal(echoed.resolver.resolve(note).chapter, 2); assert.match(echoed.resolver.resolve(note).method, /^Recovered unique/);
@@ -417,7 +474,12 @@ test('find, the contents, a footnote and back, and the reading position work on 
 test('files that are not FictionBooks are refused with a reason: malformed XML, entity declarations, no body, another kind of file', async () => {
     await assert.rejects(open(fb2('<body><section><p>A bare & ampersand</p></section></body>')), /not well-formed XML and cannot be read.*Calibre can repair it\./s);
     await assert.rejects(open(fb2('<body><section><p>Never closed</section></body>')), /not well-formed XML/);
-    await assert.rejects(open(`<?xml version="1.0"?><!DOCTYPE FictionBook [<!ENTITY a "aaaaaaaaaa"><!ENTITY b "&a;&a;&a;&a;">]><FictionBook ${NS}><body><section><p>&b;</p></section></body></FictionBook>`), /declares its own XML entities is not supported/);
+    await assert.rejects(open(`<?xml version="1.0"?><!DOCTYPE FictionBook [<!ENTITY a "aaaaaaaaaa"><!ENTITY b "&a;&a;&a;&a;">]><FictionBook ${NS}><body><section><p>&b;</p></section></body></FictionBook>`), /declares XML entities or an external document type is not supported/);
+    // The same hidden behind a comment that looks like the book's start, and a document type that names something outside the file.
+    await assert.rejects(open(`<?xml version="1.0"?><!-- <FictionBook > --><!DOCTYPE FictionBook [<!ENTITY a "aaaa">]><FictionBook ${NS}><body><section><p>&a;</p></section></body></FictionBook>`), /declares XML entities/);
+    await assert.rejects(open(`<!DOCTYPE FictionBook SYSTEM "http://example.org/fb2.dtd"><FictionBook ${NS}><body><section><p>x</p></section></body></FictionBook>`), /external document type/);
+    // A bare document type declares nothing and is read.
+    assert.equal((await read(`<!DOCTYPE FictionBook><FictionBook ${NS}><body><section><p>plain</p></section></body></FictionBook>`)).texts[0], 'plain\n');
     await assert.rejects(open(`<FictionBook ${NS}><description/></FictionBook>`), /has no text/);
     await assert.rejects(open('<html><body><p>A page</p></body></html>'), /not a FictionBook/);
     await assert.rejects(open(new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31]).buffer), /not a FictionBook/);
@@ -460,6 +522,9 @@ test('a right-to-left book\'s chapters say so', async () => {
         assert.equal(sections[0].root.ownerDocument.documentElement.getAttribute('dir'), direction, lang); assert.equal(sections[0].root.ownerDocument.documentElement.getAttribute('lang'), lang); assert.equal(book.language, lang);
     }
     assert.equal((await open(fb2('<body><section><p>x</p></section></body>', { lang: 'not a language' }))).language, undefined);
+    // A passage in another language says so (its glyphs, hyphenation and a screen reader's voice follow); nonsense is not passed on.
+    const mixed = await read(fb2('<body><section><p xml:lang="fr">Eh bien, <emphasis xml:lang="de">Fürst</emphasis>.</p><cite xml:lang="la"><p>Veni.</p></cite><p xml:lang="x y">z</p></section></body>', { lang: 'ru' }));
+    assert.deepEqual([...mixed.sections[0].root.querySelectorAll('[lang]')].map(element => [element.localName, element.getAttribute('lang')]), [['p', 'fr'], ['em', 'de'], ['blockquote', 'la']]);
 });
 
 test('a book cut into more than 2,000 sections is read by its outermost sections', async () => {
@@ -470,6 +535,12 @@ test('a book cut into more than 2,000 sections is read by its outermost sections
     assert.deepEqual(many.book.chapters.map(chapter => chapter.href), ['s1.xhtml', 's2.xhtml', 's3.xhtml']);
     // Its inner sections are laid out inside it, each with its heading, and the contents still lead to them.
     assert.equal(many.sections[2].root.textContent, 'Part\n0\nt0\n'); assert.equal(many.sections[0].root.querySelectorAll('h3').length, 1000);
-    assert.equal(many.book.nav.length, 2004); assert.deepEqual(many.book.nav.at(-1), { title: '0', path: 's3.xhtml', fragment: 'fb2-s3-2', depth: 1 });
+    assert.equal(many.book.nav.length, 2004); assert.deepEqual(many.book.nav.at(-1), { title: '0', path: 's3.xhtml', fragment: 'fb2-s3-1', depth: 1 });
+    // Every entry of the contents leads to its own heading.
+    const inFirst = many.book.nav.filter(entry => entry.path === 's1.xhtml'); assert.equal(inFirst.length, 1001); assert.equal(new Set(inFirst.map(entry => entry.fragment)).size, 1001);
+    for (const entry of [inFirst[1], inFirst[1000]]) assert.equal(many.sections[0].root.querySelector(`[id="${entry.fragment}"]`).textContent, entry.title);
+    // A notes body is not counted: adding one to a book that is at the limit changes no chapter's place.
+    const noted = await open(fb2(`<body>${part(1000)}${part(1000)}</body><body name="notes"><section id="n1"><p>n</p></section></body>`));
+    assert.equal(noted.chapters.length, 2001); assert.deepEqual(noted.chapters.slice(0, 2000).map(chapter => chapter.href), fine.chapters.map(chapter => chapter.href)); assert.equal(noted.chapters.at(-1).href, 'body2.xhtml');
     await assert.rejects(open(fb2(`<body>${Array.from({ length: 2001 }, () => '<section><p>x</p></section>').join('')}</body>`)), /more sections than can be listed/);
 });
