@@ -144,6 +144,32 @@ for (const [name, file, oldCode, brokenCode] of [
     ['a place past the end of a one-chapter book', 'book.bend', 'Place{0n, Nat.min(at, length)}', 'Place{0n, at}'],
     ['a place found without taking off the chapters before it', 'book.bend', 'later(place(Con{next, more}, Nat.sub(at, length)))', 'later(place(Con{next, more}, at))'],
     ['the characters before a place leave out an earlier chapter', 'book.bend', 'Nat.add(length, before(rest, Place{chapter, offset}))', 'before(rest, Place{chapter, offset})'],
+    ["a name and year fit whatever the year", 'citations.bend', "Bool.and(all_in(named, Con{first, others}), member(year, years))", "all_in(named, Con{first, others})"],
+    ["\"no label\" fits an entry with no label", 'citations.bend', "      Bool.and(some(label), Nat.is_eq(own, label))\n    case Bare", "      Nat.is_eq(own, label)\n    case Bare"],
+    ["an entry that does not fit is taken as fitting", 'citations.bend', "      Con{entry, tail}\n    case False{}:\n      tail", "      Con{entry, tail}\n    case False{}:\n      Con{entry, tail}"],
+    ["a link that lands on another entry is passed over", 'citations.bend', "    case False{}:\n      Conflict{entry, link}", "    case False{}:\n      Named{entry}"],
+    ["an untrusted link picks among several entries", 'citations.bend', "    case Some{k} False{}:\n      Several{entries}", "    case Some{k} False{}:\n      several_found(find(k, entries), entries)"],
+    ["a bare number names an entry without its link", 'citations.bend', "    case Con{entry, Nil{}} None{}:\n      NotFound{}", "    case Con{entry, Nil{}} None{}:\n      Named{entry}"],
+    ["one agreement is enough to trust a page's links", 'citations.bend', "    case 1n 0n:\n      False{}", "    case 1n 0n:\n      True{}"],
+    ["a list before the citing page is chosen", 'citations.bend', "    case True{} _:\n      later", "    case True{} _:\n      Some{span}"],
+    ["a list is chosen for a page inside the list before", 'citations.bend', "    case False{} False{}:\n      None{}", "    case False{} False{}:\n      Some{span}"],
+    ["a label out of order passes", 'citations.bend', "    case LT{}:\n      Back{}", "    case LT{}:\n      Step{}"],
+    ["missing labels are not reported", 'citations.bend', "    case Skip{missing}:\n      skip_onto(missing, later)", "    case Skip{missing}:\n      later"],
+    ["a line before the first entry is lost", 'citations.bend', "Split{Con{Line{False{}, id}, lead}, entries}", "Split{lead, entries}"],
+    ["a beginning line continues the entry before", 'citations.bend', "Split{Nil{}, Con{Con{Line{True{}, id}, lead}, entries}}", "Split{Con{Line{True{}, id}, lead}, entries}"],
+    ["a work cited twice is listed twice", 'citations.bend', "Con{Row{id, 1n+tally(id, rows)}, without(id, rows)}", "Con{Row{id, 1n+tally(id, rows)}, rows}"],
+    ["a second citation of a work is not counted", 'citations.bend', "Con{Row{id, 1n+tally(id, rows)}, without(id, rows)}", "Con{Row{id, 1n}, without(id, rows)}"],
+    ["a letter label is read as a number", 'citations.bend', "      go(rest, Got{Label{n}})", "      go(rest, Got{One{n}})"],
+    ["a separator before nothing is accepted", 'citations.bend', "    case Nil{} Got{piece}:\n      Some{Parsed{piece, Nil{}}}\n", "    case Nil{} Got{piece}:\n      Some{Parsed{piece, Nil{}}}\n    case Con{Sep{}, Nil{}} Got{piece}:\n      Some{Parsed{piece, Nil{}}}\n"],
+    ["a range wider than fifty is expanded", 'citations.bend', "Nat.is_le(Nat.sub(b, a), 50n)", "Nat.is_le(Nat.sub(b, a), 500n)"],
+    ["a range written backwards is expanded", 'citations.bend', "within(Bool.and(Nat.is_le(a, b), Nat.is_le(Nat.sub(b, a), 50n)),", "within(Nat.is_le(Nat.sub(b, a), 50n),"],
+    ["a slash is kept in a note's name", 'citations.bend', "Bool.or(Char.is_eq(c, '/'), Bool.or(Char.is_eq(c, ':'),", "Bool.or(Char.is_eq(c, ':'), Bool.or(Char.is_eq(c, ':'),"],
+    ["a note's name may end with a full stop", 'citations.bend', "    case True{}:\n      SNil{}\n    case False{}:\n      SCon{c, SNil{}}", "    case True{}:\n      SCon{c, SNil{}}\n    case False{}:\n      SCon{c, SNil{}}"],
+    ["a note's name is cut by characters, not bytes", 'citations.bend', "take_put(Nat.is_le(width(c), budget), c,", "take_put(True{}, c,"],
+    ["a name a system keeps for a device is left as it is", 'citations.bend', "final(long(text, 5n), text)", "final(True{}, text)"],
+    ["a title alone makes a note the work's note", 'citations.bend', "Bool.and(both(title, title2), Bool.and(both(year, year2), both(first, first2)))", "both(title, title2)"],
+    ["a DOI that may be cut is taken as a key", 'citations.bend', "Bool.and(Bool.not(cut), Bool.and(Bool.not(cut2), both(doi, doi2)))", "both(doi, doi2)"],
+    ["a source is added to cited-by a second time", 'citations.bend', "    case True{}:\n      list\n", "    case True{}:\n      append(list, [source])\n"],
 ]) {
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'annotator-bend-proof-'));
     try {
@@ -163,7 +189,7 @@ for (const [name, file, oldCode, brokenCode] of [
         fs.rmSync(temporary, { recursive: true, force: true });
     }
 }
-const tests = run(process.execPath, ['--import', loader, '--test', 'bridge.test.mjs', 'typed.test.mjs', 'video.test.mjs', 'video-document.test.mjs', 'reader.test.mjs'], { timeout: 180000 });
+const tests = run(process.execPath, ['--import', loader, '--test', 'bridge.test.mjs', 'typed.test.mjs', 'video.test.mjs', 'video-document.test.mjs', 'reader.test.mjs', 'citations.test.mjs'], { timeout: 180000 });
 process.stdout.write(tests.stdout);
 process.stderr.write(tests.stderr);
 assert.equal(tests.status, 0, 'JavaScript bridge tests failed');

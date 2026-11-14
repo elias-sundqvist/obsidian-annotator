@@ -1,3 +1,4 @@
+import ./citations.bend as Cite
 import ./book.bend as Book
 import ./stroke.bend as Stroke
 import ./area.bend as Area
@@ -3666,3 +3667,1407 @@ def video_errors_seen_fold(+reversed: List<&2, VideoDocument.Part>, +later: List
 
 def Laws.video_errors_pairwise(parts):
   Equal.trans(Bool, VideoDocument.errors(parts), VideoDocument.errors_pairwise(List.reverse.go(&2, VideoDocument.Part, List.reverse.go(&2, VideoDocument.Part, parts, Nil{}), Nil{})), VideoDocument.errors_pairwise(parts), video_errors_seen_fold(List.reverse.go(&2, VideoDocument.Part, parts, Nil{}), Nil{}), Equal.cong(List<&2, VideoDocument.Part>, Bool, x => VideoDocument.errors_pairwise(x), List.reverse.go(&2, VideoDocument.Part, List.reverse.go(&2, VideoDocument.Part, parts, Nil{}), Nil{}), parts, video_reverse_twice(parts, Nil{})))
+
+# ── Citations ───────────────────────────────────────────────────────────────
+def cite_cmp_refl(a: Nat) -> {Nat.cmp(a, a) == EQ{} : Cmp}:
+  match a:
+    case 0n:
+      {==}
+    case 1n+p:
+      cite_cmp_refl(p)
+
+def cite_eq_refl(a: Nat) -> {Nat.is_eq(a, a) == True{} : Bool}:
+  %Equal.sym(Cmp, Nat.cmp(a, a), EQ{}, cite_cmp_refl(a)) : {Cmp.is_eq(_) == True{} : Bool}
+  {==}
+
+# a < a+1+d, whichever side it is asked from.
+def cite_cmp_below(a: Nat, -d: Nat) -> {Nat.cmp(a, Nat.add(a, 1n+d)) == LT{} : Cmp}:
+  match a:
+    case 0n:
+      {==}
+    case 1n+p:
+      cite_cmp_below(p, d)
+
+def cite_cmp_above(a: Nat, -d: Nat) -> {Nat.cmp(Nat.add(a, 1n+d), a) == GT{} : Cmp}:
+  match a:
+    case 0n:
+      {==}
+    case 1n+p:
+      cite_cmp_above(p, d)
+
+def Laws.cite_fits_label(label, own, first, others, years):
+  {==}
+
+def Laws.cite_fits_own_label(label, first, others, years):
+  cite_eq_refl(label)
+
+def Laws.cite_fits_nothing(key, others, year):
+  match key:
+    case Cite.Traits{own, first, more, years}:
+      {==}
+
+def Laws.cite_fits_name(name, named, year, own, first, others, years):
+  {==}
+
+def cite_sound_keep(hit: Bool, -item: Cite.Item, -entry: Cite.Entry, -tail: List<&2, Cite.Entry>, same: {hit == Cite.fits(item, Cite.key_of(entry)) : Bool}, ih: {Cite.all_fit(item, tail) == True{} : Bool}) -> {Cite.all_fit(item, Cite.keep(hit, entry, tail)) == True{} : Bool}:
+  match hit:
+    case True{}:
+      %same : {Bool.and(_, Cite.all_fit(item, tail)) == True{} : Bool}
+      ih
+    case False{}:
+      ih
+
+def Laws.cite_fitting_sound(item, entries):
+  match entries:
+    case Nil{}:
+      {==}
+    case Con{entry, rest}:
+      cite_sound_keep(Cite.fits(item, Cite.key_of(entry)), item, entry, Cite.fitting(item, rest), {==}, Laws.cite_fitting_sound(item, rest))
+
+def cite_complete_keep(hit: Bool, -item: Cite.Item, -entry: Cite.Entry, -tail: List<&2, Cite.Entry>, same: {hit == Cite.fits(item, Cite.key_of(entry)) : Bool}, ih: {Cite.none_fit(item, tail) == True{} : Bool}) -> {Cite.none_fit(item, Cite.keep(Bool.not(hit), entry, tail)) == True{} : Bool}:
+  match hit:
+    case True{}:
+      ih
+    case False{}:
+      %same : {Bool.and(Bool.not(_), Cite.none_fit(item, tail)) == True{} : Bool}
+      ih
+
+def Laws.cite_fitting_complete(item, entries):
+  match entries:
+    case Nil{}:
+      {==}
+    case Con{entry, rest}:
+      cite_complete_keep(Cite.fits(item, Cite.key_of(entry)), item, entry, Cite.rejected(item, rest), {==}, Laws.cite_fitting_complete(item, rest))
+
+def cite_all_keep(hit: Bool, -entry: Cite.Entry, taken: List<&2, Cite.Entry>, -left: List<&2, Cite.Entry>, -n: Nat, ih: {Nat.add(Cite.count(taken), Cite.count(left)) == n : Nat}) -> {Nat.add(Cite.count(Cite.keep(hit, entry, taken)), Cite.count(Cite.keep(Bool.not(hit), entry, left))) == 1n+n : Nat}:
+  match hit:
+    case True{}:
+      %ih : {1n+Nat.add(Cite.count(taken), Cite.count(left)) == 1n+_ : Nat}
+      {==}
+    case False{}:
+      %ih : {Nat.add(Cite.count(taken), 1n+Cite.count(left)) == 1n+_ : Nat}
+      nat_add_succ(Cite.count(taken), Cite.count(left))
+
+def Laws.cite_fitting_all(item, entries):
+  match entries:
+    case Nil{}:
+      {==}
+    case Con{entry, rest}:
+      cite_all_keep(Cite.fits(item, Cite.key_of(entry)), entry, Cite.fitting(item, rest), Cite.rejected(item, rest), Cite.count(rest), Laws.cite_fitting_all(item, rest))
+
+# The one rule: whatever a verdict shows fits.
+def cite_maybe_fits(+item: Cite.Item, landed: Maybe<&2, Cite.Entry>) -> Bool:
+  match landed:
+    case None{}:
+      True{}
+    case Some{entry}:
+      Cite.fits(item, Cite.key_of(entry))
+
+def cite_found_fits(hit: Bool, -item: Cite.Item, -entry: Cite.Entry, -later: Maybe<&2, Cite.Entry>, first: {Cite.fits(item, Cite.key_of(entry)) == True{} : Bool}, ih: {cite_maybe_fits(item, later) == True{} : Bool}) -> {cite_maybe_fits(item, Cite.found(hit, entry, later)) == True{} : Bool}:
+  match hit:
+    case True{}:
+      first
+    case False{}:
+      ih
+
+def cite_find_fits(+item: Cite.Item, +k: Nat, +fit: List<&2, Cite.Entry>, +e: {Cite.all_fit(item, fit) == True{} : Bool}) -> {cite_maybe_fits(item, Cite.find(k, fit)) == True{} : Bool}:
+  match fit:
+    case Nil{}:
+      {==}
+    case Con{entry, rest}:
+      cite_found_fits(Nat.is_eq(Cite.id_of(entry), k), item, entry, Cite.find(k, rest), bool_and_left(Cite.fits(item, Cite.key_of(entry)), Cite.all_fit(item, rest), e), cite_find_fits(item, k, rest, bool_and_right(Cite.fits(item, Cite.key_of(entry)), Cite.all_fit(item, rest), e)))
+
+def cite_several_found_fits(landed: Maybe<&2, Cite.Entry>, -item: Cite.Item, -fit: List<&2, Cite.Entry>, at: {cite_maybe_fits(item, landed) == True{} : Bool}, all: {Cite.all_fit(item, fit) == True{} : Bool}) -> {Cite.verdict_fits(item, Cite.several_found(landed, fit)) == True{} : Bool}:
+  match landed:
+    case Some{entry}:
+      at
+    case None{}:
+      all
+
+def cite_several_fits(+item: Cite.Item, +fit: List<&2, Cite.Entry>, link: Maybe<&2, Nat>, trusted: Bool, +all: {Cite.all_fit(item, fit) == True{} : Bool}) -> {Cite.verdict_fits(item, Cite.several(fit, link, trusted)) == True{} : Bool}:
+  match link trusted:
+    case Some{+k} True{}:
+      cite_several_found_fits(Cite.find(k, fit), item, fit, cite_find_fits(item, k, fit, all), all)
+    case Some{k} False{}:
+      all
+    case None{} True{}:
+      all
+    case None{} False{}:
+      all
+
+def cite_one_linked_fits(same: Bool, -item: Cite.Item, -entry: Cite.Entry, -k: Nat, first: {Cite.fits(item, Cite.key_of(entry)) == True{} : Bool}) -> {Cite.verdict_fits(item, Cite.one_linked(same, entry, k)) == True{} : Bool}:
+  match same:
+    case True{}:
+      first
+    case False{}:
+      first
+
+def cite_one_fits(+item: Cite.Item, +entry: Cite.Entry, link: Maybe<&2, Nat>, first: {Cite.fits(item, Cite.key_of(entry)) == True{} : Bool}) -> {Cite.verdict_fits(item, Cite.one(entry, link)) == True{} : Bool}:
+  match link:
+    case None{}:
+      first
+    case Some{k}:
+      cite_one_linked_fits(Nat.is_eq(Cite.id_of(entry), k), item, entry, k, first)
+
+def cite_plain_fits(+item: Cite.Item, +fit: List<&2, Cite.Entry>, link: Maybe<&2, Nat>, trusted: Bool, all: {Cite.all_fit(item, fit) == True{} : Bool}) -> {Cite.verdict_fits(item, Cite.plain(fit, link, trusted)) == True{} : Bool}:
+  match fit:
+    case Nil{}:
+      {==}
+    case Con{entry, Nil{}}:
+      cite_one_fits(item, entry, link, bool_and_left(Cite.fits(item, Cite.key_of(entry)), True{}, all))
+    case Con{entry, Con{next, rest}}:
+      cite_several_fits(item, Con{entry, Con{next, rest}}, link, trusted, all)
+
+def cite_bare_linked_fits(same: Bool, -item: Cite.Item, -entry: Cite.Entry, first: {Cite.fits(item, Cite.key_of(entry)) == True{} : Bool}) -> {Cite.verdict_fits(item, Cite.bare_linked(same, entry)) == True{} : Bool}:
+  match same:
+    case True{}:
+      first
+    case False{}:
+      {==}
+
+def cite_bare_fits(+item: Cite.Item, +fit: List<&2, Cite.Entry>, link: Maybe<&2, Nat>, all: {Cite.all_fit(item, fit) == True{} : Bool}) -> {Cite.verdict_fits(item, Cite.bare(fit, link)) == True{} : Bool}:
+  match fit link:
+    case Con{entry, Nil{}} Some{k}:
+      cite_bare_linked_fits(Nat.is_eq(Cite.id_of(entry), k), item, entry, bool_and_left(Cite.fits(item, Cite.key_of(entry)), True{}, all))
+    case Con{entry, Nil{}} None{}:
+      {==}
+    case Con{entry, Con{next, rest}} Some{k}:
+      {==}
+    case Con{entry, Con{next, rest}} None{}:
+      {==}
+    case Nil{} Some{k}:
+      {==}
+    case Nil{} None{}:
+      {==}
+
+def cite_from_fits(alone: Bool, +item: Cite.Item, +fit: List<&2, Cite.Entry>, link: Maybe<&2, Nat>, trusted: Bool, all: {Cite.all_fit(item, fit) == True{} : Bool}) -> {Cite.verdict_fits(item, Cite.decide_from(alone, fit, link, trusted)) == True{} : Bool}:
+  match alone:
+    case True{}:
+      cite_bare_fits(item, fit, link, all)
+    case False{}:
+      cite_plain_fits(item, fit, link, trusted, all)
+
+def Laws.cite_decide_fits(item, entries, link, trusted):
+  cite_from_fits(Cite.is_bare(item), item, Cite.fitting(item, entries), link, trusted, Laws.cite_fitting_sound(item, entries))
+
+def Laws.cite_decide_one(fit, trusted):
+  match fit trusted:
+    case Nil{} _:
+      {==}
+    case Con{entry, Nil{}} _:
+      {==}
+    case Con{entry, Con{next, rest}} True{}:
+      {==}
+    case Con{entry, Con{next, rest}} False{}:
+      {==}
+
+def Laws.cite_decide_untrusted(entry, next, rest, link):
+  match link:
+    case None{}:
+      {==}
+    case Some{k}:
+      {==}
+
+# With a link, what is named is where the link lands.
+def cite_maybe_at(+k: Nat, landed: Maybe<&2, Cite.Entry>) -> Bool:
+  match landed:
+    case None{}:
+      True{}
+    case Some{entry}:
+      Nat.is_eq(Cite.id_of(entry), k)
+
+def cite_found_at(hit: Bool, -k: Nat, -entry: Cite.Entry, -later: Maybe<&2, Cite.Entry>, same: {hit == Nat.is_eq(Cite.id_of(entry), k) : Bool}, ih: {cite_maybe_at(k, later) == True{} : Bool}) -> {cite_maybe_at(k, Cite.found(hit, entry, later)) == True{} : Bool}:
+  match hit:
+    case True{}:
+      %same : {_ == True{} : Bool}
+      {==}
+    case False{}:
+      ih
+
+def cite_find_at(+k: Nat, +fit: List<&2, Cite.Entry>) -> {cite_maybe_at(k, Cite.find(k, fit)) == True{} : Bool}:
+  match fit:
+    case Nil{}:
+      {==}
+    case Con{entry, rest}:
+      cite_found_at(Nat.is_eq(Cite.id_of(entry), k), k, entry, Cite.find(k, rest), {==}, cite_find_at(k, rest))
+
+def cite_several_found_at(landed: Maybe<&2, Cite.Entry>, -k: Nat, -fit: List<&2, Cite.Entry>, at: {cite_maybe_at(k, landed) == True{} : Bool}) -> {Cite.named_at(k, Cite.several_found(landed, fit)) == True{} : Bool}:
+  match landed:
+    case Some{entry}:
+      at
+    case None{}:
+      {==}
+
+def cite_several_at(+k: Nat, +fit: List<&2, Cite.Entry>, trusted: Bool) -> {Cite.named_at(k, Cite.several(fit, Some{k}, trusted)) == True{} : Bool}:
+  match trusted:
+    case True{}:
+      cite_several_found_at(Cite.find(k, fit), k, fit, cite_find_at(k, fit))
+    case False{}:
+      {==}
+
+def cite_one_linked_at(hit: Bool, -k: Nat, -entry: Cite.Entry, same: {hit == Nat.is_eq(Cite.id_of(entry), k) : Bool}) -> {Cite.named_at(k, Cite.one_linked(hit, entry, k)) == True{} : Bool}:
+  match hit:
+    case True{}:
+      %same : {_ == True{} : Bool}
+      {==}
+    case False{}:
+      {==}
+
+def cite_bare_linked_at(hit: Bool, -k: Nat, -entry: Cite.Entry, same: {hit == Nat.is_eq(Cite.id_of(entry), k) : Bool}) -> {Cite.named_at(k, Cite.bare_linked(hit, entry)) == True{} : Bool}:
+  match hit:
+    case True{}:
+      %same : {_ == True{} : Bool}
+      {==}
+    case False{}:
+      {==}
+
+def cite_plain_at(+k: Nat, +fit: List<&2, Cite.Entry>, trusted: Bool) -> {Cite.named_at(k, Cite.plain(fit, Some{k}, trusted)) == True{} : Bool}:
+  match fit:
+    case Nil{}:
+      {==}
+    case Con{entry, Nil{}}:
+      cite_one_linked_at(Nat.is_eq(Cite.id_of(entry), k), k, entry, {==})
+    case Con{entry, Con{next, rest}}:
+      cite_several_at(k, Con{entry, Con{next, rest}}, trusted)
+
+def cite_bare_at(+k: Nat, +fit: List<&2, Cite.Entry>) -> {Cite.named_at(k, Cite.bare(fit, Some{k})) == True{} : Bool}:
+  match fit:
+    case Nil{}:
+      {==}
+    case Con{entry, Nil{}}:
+      cite_bare_linked_at(Nat.is_eq(Cite.id_of(entry), k), k, entry, {==})
+    case Con{entry, Con{next, rest}}:
+      {==}
+
+def cite_from_at(alone: Bool, +k: Nat, +fit: List<&2, Cite.Entry>, trusted: Bool) -> {Cite.named_at(k, Cite.decide_from(alone, fit, Some{k}, trusted)) == True{} : Bool}:
+  match alone:
+    case True{}:
+      cite_bare_at(k, fit)
+    case False{}:
+      cite_plain_at(k, fit, trusted)
+
+def Laws.cite_decide_link(item, entries, link, trusted):
+  cite_from_at(Cite.is_bare(item), link, Cite.fitting(item, entries), trusted)
+
+def Laws.cite_decide_conflict(id, key, away, trusted):
+  %Equal.sym(Cmp, Nat.cmp(id, Nat.add(id, 1n+away)), LT{}, cite_cmp_below(id, away)) : {Cite.one_linked(Cmp.is_eq(_), Cite.Entry{id, key}, Nat.add(id, 1n+away)) == Cite.Conflict{Cite.Entry{id, key}, Nat.add(id, 1n+away)} : Cite.Verdict}
+  {==}
+
+def Laws.cite_decide_conflict_below(id, key, away, trusted):
+  %Equal.sym(Cmp, Nat.cmp(Nat.add(id, 1n+away), id), GT{}, cite_cmp_above(id, away)) : {Cite.one_linked(Cmp.is_eq(_), Cite.Entry{Nat.add(id, 1n+away), key}, id) == Cite.Conflict{Cite.Entry{Nat.add(id, 1n+away), key}, id} : Cite.Verdict}
+  {==}
+
+def cite_bare_none(fit: List<&2, Cite.Entry>) -> {Cite.bare(fit, None{}) == Cite.NotFound{} : Cite.Verdict}:
+  match fit:
+    case Nil{}:
+      {==}
+    case Con{entry, Nil{}}:
+      {==}
+    case Con{entry, Con{next, rest}}:
+      {==}
+
+def Laws.cite_decide_bare(label, entries, trusted):
+  cite_bare_none(Cite.fitting(Cite.Bare{label}, entries))
+
+def Laws.cite_decide_bare_several(entry, next, rest, link):
+  match link:
+    case None{}:
+      {==}
+    case Some{k}:
+      {==}
+
+def Laws.cite_trusted_against(agree, against):
+  match agree:
+    case 0n:
+      {==}
+    case 1n:
+      {==}
+    case 2n+more:
+      {==}
+
+def Laws.cite_trusted_none(disagree):
+  {==}
+
+def Laws.cite_trusted_one(disagree):
+  match disagree:
+    case 0n:
+      {==}
+    case 1n+against:
+      {==}
+
+def Laws.cite_trusted_two(more):
+  {==}
+
+def Laws.cite_list_single(page, only):
+  {==}
+
+def Laws.cite_list_passes(start, end, further, rest, before):
+  %Equal.sym(Cmp, Nat.cmp(start, Nat.add(start, 1n+further)), LT{}, cite_cmp_below(start, further)) : {Cite.choose(Cmp.is_lt(_), Nat.is_gt(Nat.add(start, 1n+further), before), Cite.Span{start, end}, Cite.walk(rest, Nat.add(start, 1n+further), end)) == Cite.walk(rest, Nat.add(start, 1n+further), end) : Maybe<&2, Cite.Span>}
+  {==}
+
+def cite_not_below(page: Nat, further: Nat) -> {False{} == Cmp.is_lt(Nat.cmp(Nat.add(page, further), page)) : Bool}:
+  match page further:
+    case 0n 0n:
+      {==}
+    case 0n 1n+f:
+      {==}
+    case 1n+p _:
+      cite_not_below(p, further)
+
+def cite_choose_candidate(after: Bool, -span: Cite.Span, -later: Maybe<&2, Cite.Span>) -> {Cite.choose(False{}, after, span, later) == Cite.candidate(after, span) : Maybe<&2, Cite.Span>}:
+  match after:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+def Laws.cite_list_first(page, further, end, rest, before):
+  %cite_not_below(page, further) : {Cite.choose(_, Nat.is_gt(page, before), Cite.Span{Nat.add(page, further), end}, Cite.walk(rest, page, end)) == Cite.candidate(Nat.is_gt(page, before), Cite.Span{Nat.add(page, further), end}) : Maybe<&2, Cite.Span>}
+  cite_choose_candidate(Nat.is_gt(page, before), Cite.Span{Nat.add(page, further), end}, Cite.walk(rest, page, end))
+
+def cite_ge_from_lt(c: Cmp, e: {False{} == Cmp.is_lt(c) : Bool}) -> {Cmp.is_ge(c) == True{} : Bool}:
+  match c:
+    case LT{}:
+      impossible({False{} == True{} : Bool}, false_is_not_true(e))
+    case EQ{}:
+      {==}
+    case GT{}:
+      {==}
+
+def cite_choose_after(passes: Bool, after: Bool, +page: Nat, +start: Nat, -end: Nat, -later: Maybe<&2, Cite.Span>, same: {passes == Nat.is_lt(start, page) : Bool}, ih: {Cite.begins_after(page, later) == True{} : Bool}) -> {Cite.begins_after(page, Cite.choose(passes, after, Cite.Span{start, end}, later)) == True{} : Bool}:
+  match passes after:
+    case True{} True{}:
+      ih
+    case True{} False{}:
+      ih
+    case False{} True{}:
+      cite_ge_from_lt(Nat.cmp(start, page), same)
+    case False{} False{}:
+      {==}
+
+def cite_walk_after(+lists: List<&2, Cite.Span>, +page: Nat, +before: Nat) -> {Cite.begins_after(page, Cite.walk(lists, page, before)) == True{} : Bool}:
+  match lists:
+    case Nil{}:
+      {==}
+    case Con{Cite.Span{start, end}, rest}:
+      cite_choose_after(Nat.is_lt(start, page), Nat.is_gt(page, before), page, start, end, Cite.walk(rest, page, end), {==}, cite_walk_after(rest, page, end))
+
+def Laws.cite_list_after(page, first, second, rest):
+  cite_walk_after(Con{first, Con{second, rest}}, page, 0n)
+
+# Dividing a list.
+def cite_place_joined(start: Bool, -id: Nat, later: Cite.Split) -> {Cite.joined(Cite.place(start, id, later)) == Con{Cite.Line{start, id}, Cite.joined(later)} : List<&2, Cite.Line>}:
+  match start later:
+    case True{} Cite.Split{lead, entries}:
+      {==}
+    case False{} Cite.Split{lead, entries}:
+      {==}
+
+def Laws.cite_split_whole(lines):
+  match lines:
+    case Nil{}:
+      {==}
+    case Con{Cite.Line{start, id}, rest}:
+      %Laws.cite_split_whole(rest) : {Cite.joined(Cite.place(start, id, Cite.split(rest))) == Con{Cite.Line{start, id}, _} : List<&2, Cite.Line>}
+      cite_place_joined(start, id, Cite.split(rest))
+
+def cite_place_ok(start: Bool, -id: Nat, later: Cite.Split, ok: {Cite.well_divided(later) == True{} : Bool}) -> {Cite.well_divided(Cite.place(start, id, later)) == True{} : Bool}:
+  match start later:
+    case True{} Cite.Split{lead, entries}:
+      ok
+    case False{} Cite.Split{lead, entries}:
+      ok
+
+def Laws.cite_split_starts(lines):
+  match lines:
+    case Nil{}:
+      {==}
+    case Con{Cite.Line{start, id}, rest}:
+      cite_place_ok(start, id, Cite.split(rest), Laws.cite_split_starts(rest))
+
+def cite_place_count(start: Bool, -id: Nat, later: Cite.Split, -rest: List<&2, Cite.Line>, ih: {Cite.entry_count(later) == Cite.starts(rest) : Nat}) -> {Cite.entry_count(Cite.place(start, id, later)) == Cite.starts(Con{Cite.Line{start, id}, rest}) : Nat}:
+  match start later:
+    case True{} Cite.Split{lead, entries}:
+      %ih : {1n+List.length(&2, List<&2, Cite.Line>, entries) == 1n+_ : Nat}
+      {==}
+    case False{} Cite.Split{lead, entries}:
+      ih
+
+def Laws.cite_split_count(lines):
+  match lines:
+    case Nil{}:
+      {==}
+    case Con{Cite.Line{start, id}, rest}:
+      cite_place_count(start, id, Cite.split(rest), rest, Laws.cite_split_count(rest))
+
+# The sources of a note.
+def cite_member_end(+x: Nat, +xs: List<&2, Nat>) -> {Cite.member(x, Cite.append(xs, [x])) == True{} : Bool}:
+  match xs:
+    case Nil{}:
+      %Equal.sym(Bool, Nat.is_eq(x, x), True{}, cite_eq_refl(x)) : {Bool.or(_, False{}) == True{} : Bool}
+      {==}
+    case Con{h, t}:
+      %Equal.sym(Bool, Cite.member(x, Cite.append(t, [x])), True{}, cite_member_end(x, t)) : {Bool.or(Nat.is_eq(h, x), _) == True{} : Bool}
+      bool_or_true(Nat.is_eq(h, x))
+
+def cite_added_has(present: Bool, +x: Nat, +xs: List<&2, Nat>, same: {present == Cite.member(x, xs) : Bool}) -> {Cite.member(x, Cite.add_checked(present, x, xs)) == True{} : Bool}:
+  match present:
+    case True{}:
+      %same : {_ == True{} : Bool}
+      {==}
+    case False{}:
+      cite_member_end(x, xs)
+
+def Laws.cite_add_has(source, list):
+  cite_added_has(Cite.member(source, list), source, list, {==})
+
+def Laws.cite_add_once(source, list):
+  %Equal.sym(Bool, Cite.member(source, Cite.add_source(source, list)), True{}, Laws.cite_add_has(source, list)) : {Cite.add_checked(_, source, Cite.add_source(source, list)) == Cite.add_source(source, list) : List<&2, Nat>}
+  {==}
+
+def cite_append_nil(xs: List<&2, Nat>) -> {xs == Cite.append(xs, Nil{}) : List<&2, Nat>}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{h, t}:
+      %cite_append_nil(t) : {Con{h, t} == Con{h, _} : List<&2, Nat>}
+      {==}
+
+def cite_add_checked_keeps(present: Bool, -x: Nat, xs: List<&2, Nat>) -> {Cite.add_checked(present, x, xs) == Cite.append(xs, Cite.added(present, x)) : List<&2, Nat>}:
+  match present:
+    case True{}:
+      cite_append_nil(xs)
+    case False{}:
+      {==}
+
+def Laws.cite_add_keeps(source, list):
+  cite_add_checked_keeps(Cite.member(source, list), source, list)
+
+# The same work.
+def Laws.cite_same_doi(doi, title, long, year, first, title2, long2, year2, first2):
+  %Equal.sym(Bool, Nat.is_eq(doi, doi), True{}, cite_eq_refl(doi)) : {Bool.or(_, Cite.by_all(Cite.Work{1n+doi, False{}, title, long, year, first}, Cite.Work{1n+doi, False{}, title2, long2, year2, first2})) == True{} : Bool}
+  {==}
+
+def Laws.cite_same_all(cut, title, long, year, first, other):
+  match cut other:
+    case True{} Cite.Work{doi2, True{}, title2, long2, year2, first2}:
+      {==}
+    case True{} Cite.Work{doi2, False{}, title2, long2, year2, first2}:
+      {==}
+    case False{} Cite.Work{doi2, True{}, title2, long2, year2, first2}:
+      {==}
+    case False{} Cite.Work{doi2, False{}, title2, long2, year2, first2}:
+      {==}
+
+def Laws.cite_same_cut(doi, title, long, year, first, other):
+  match other:
+    case Cite.Work{doi2, cut2, title2, long2, year2, first2}:
+      {==}
+
+def Laws.cite_same_cut_other(one, doi, title, long, year, first):
+  match one:
+    case Cite.Work{doi1, True{}, title1, long1, year1, first1}:
+      {==}
+    case Cite.Work{doi1, False{}, title1, long1, year1, first1}:
+      {==}
+
+def cite_and_false_sym(p: Bool) -> {False{} == Bool.and(p, False{}) : Bool}:
+  match p:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+def cite_and_false(p: Bool) -> {Bool.and(p, False{}) == False{} : Bool}:
+  match p:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+def cite_and_false2(p: Bool, q: Bool) -> {Bool.and(p, Bool.and(q, False{})) == False{} : Bool}:
+  match p q:
+    case True{} True{}:
+      {==}
+    case True{} False{}:
+      {==}
+    case False{} _:
+      {==}
+
+def cite_and_false3(p: Bool, q: Bool, r: Bool) -> {Bool.and(p, Bool.and(q, Bool.and(r, False{}))) == False{} : Bool}:
+  match p:
+    case True{}:
+      cite_and_false2(q, r)
+    case False{}:
+      {==}
+
+def cite_and_false4(p: Bool, q: Bool, r: Bool, s: Bool) -> {Bool.and(p, Bool.and(q, Bool.and(r, Bool.and(s, False{})))) == False{} : Bool}:
+  match p:
+    case True{}:
+      cite_and_false3(q, r, s)
+    case False{}:
+      {==}
+
+def Laws.cite_same_needs_title(doi, cut, long, year, first, other):
+  match other:
+    case Cite.Work{doi2, cut2, title2, long2, year2, first2}:
+      cite_and_false2(long, long2)
+
+def Laws.cite_same_needs_long(doi, cut, title, year, first, other):
+  match other:
+    case Cite.Work{doi2, cut2, title2, long2, year2, first2}:
+      {==}
+
+def Laws.cite_same_needs_year(doi, cut, title, long, first, other):
+  match other:
+    case Cite.Work{doi2, cut2, title2, long2, year2, first2}:
+      cite_and_false3(long, long2, Cite.both(title, title2))
+
+def Laws.cite_same_needs_author(doi, cut, title, long, year, other):
+  match other:
+    case Cite.Work{doi2, cut2, title2, long2, year2, first2}:
+      cite_and_false4(long, long2, Cite.both(title, title2), Cite.both(year, year2))
+
+# Ranges.
+def cite_le_add(a: Nat, w: Nat) -> {True{} == Nat.is_le(a, Nat.add(a, w)) : Bool}:
+  match a w:
+    case 0n 0n:
+      {==}
+    case 0n 1n+q:
+      {==}
+    case 1n+p _:
+      cite_le_add(p, w)
+
+def cite_sub_add(a: Nat, w: Nat) -> {w == Nat.sub(Nat.add(a, w), a) : Nat}:
+  match a w:
+    case 0n 0n:
+      {==}
+    case 0n 1n+q:
+      {==}
+    case 1n+p _:
+      cite_sub_add(p, w)
+
+def Laws.cite_range_exact(a, w):
+  %cite_sub_add(a, w) : {Cite.within(Bool.and(Nat.is_le(a, Nat.add(a, w)), Nat.is_le(_, 50n)), Cite.count_up(1n+_, a)) == Cite.within(Nat.is_le(w, 50n), Cite.count_up(1n+w, a)) : List<&2, Nat>}
+  %cite_le_add(a, w) : {Cite.within(Bool.and(_, Nat.is_le(w, 50n)), Cite.count_up(1n+w, a)) == Cite.within(Nat.is_le(w, 50n), Cite.count_up(1n+w, a)) : List<&2, Nat>}
+  {==}
+
+def Laws.cite_range_length(n, a):
+  match n:
+    case 0n:
+      {==}
+    case 1n+p:
+      %Laws.cite_range_length(p, 1n+a) : {1n+Cite.length(Cite.count_up(p, 1n+a)) == 1n+_ : Nat}
+      {==}
+
+def Laws.cite_range_ascending(n, a):
+  match n:
+    case 0n:
+      {==}
+    case 1n+p:
+      %Equal.sym(Bool, Nat.is_eq(a, a), True{}, cite_eq_refl(a)) : {Bool.and(_, Cite.ascending_from(Cite.count_up(p, 1n+a), 1n+a)) == True{} : Bool}
+      Laws.cite_range_ascending(p, 1n+a)
+
+def Laws.cite_range_backwards(b, d):
+  %Equal.sym(Cmp, Nat.cmp(Nat.add(b, 1n+d), b), GT{}, cite_cmp_above(b, d)) : {Cite.within(Bool.and(Cmp.is_le(_), Nat.is_le(Nat.sub(b, Nat.add(b, 1n+d)), 50n)), Cite.count_up(1n+Nat.sub(b, Nat.add(b, 1n+d)), Nat.add(b, 1n+d))) == Nil{} : List<&2, Nat>}
+  {==}
+
+def Laws.cite_range_wide(a, d):
+  Laws.cite_range_exact(a, 51n+d)
+
+# The inside of a bracket.
+def cite_after_read(+rest: List<&2, Cite.Piece>, +piece: Cite.Piece) -> {Cite.go(Cite.after(rest), Cite.Got{piece}) == Some{Cite.Parsed{piece, rest}} : Maybe<&2, Cite.Parsed>}:
+  match rest:
+    case Nil{}:
+      {==}
+    case Con{Cite.One{n}, more}:
+      %Equal.sym(Maybe<&2, Cite.Parsed>, Cite.go(Cite.after(more), Cite.Got{Cite.One{n}}), Some{Cite.Parsed{Cite.One{n}, more}}, cite_after_read(more, Cite.One{n})) : {Cite.add(piece, _) == Some{Cite.Parsed{piece, Con{Cite.One{n}, more}}} : Maybe<&2, Cite.Parsed>}
+      {==}
+    case Con{Cite.Label{n}, more}:
+      %Equal.sym(Maybe<&2, Cite.Parsed>, Cite.go(Cite.after(more), Cite.Got{Cite.Label{n}}), Some{Cite.Parsed{Cite.Label{n}, more}}, cite_after_read(more, Cite.Label{n})) : {Cite.add(piece, _) == Some{Cite.Parsed{piece, Con{Cite.Label{n}, more}}} : Maybe<&2, Cite.Parsed>}
+      {==}
+    case Con{Cite.Range{from, to}, more}:
+      %Equal.sym(Maybe<&2, Cite.Parsed>, Cite.go(Cite.after(more), Cite.Got{Cite.Range{from, to}}), Some{Cite.Parsed{Cite.Range{from, to}, more}}, cite_after_read(more, Cite.Range{from, to})) : {Cite.add(piece, _) == Some{Cite.Parsed{piece, Con{Cite.Range{from, to}, more}}} : Maybe<&2, Cite.Parsed>}
+      {==}
+
+def Laws.cite_items_print(first, rest):
+  match first:
+    case Cite.One{n}:
+      cite_after_read(rest, Cite.One{n})
+    case Cite.Label{n}:
+      cite_after_read(rest, Cite.Label{n})
+    case Cite.Range{from, to}:
+      cite_after_read(rest, Cite.Range{from, to})
+
+def cite_pending(state: Cite.State, tokens: List<&2, Cite.Token>) -> List<&2, Cite.Token>:
+  match state:
+    case Cite.Want{}:
+      tokens
+    case Cite.Got{piece}:
+      Cite.show_onto(piece, tokens)
+    case Cite.Open{from}:
+      Con{Cite.Num{from}, Con{Cite.Dash{}, tokens}}
+
+def cite_wrap(piece: Cite.Piece, read: Maybe<&2, List<&2, Cite.Token>>) -> Maybe<&2, List<&2, Cite.Token>>:
+  match read:
+    case None{}:
+      None{}
+    case Some{tokens}:
+      Some{Cite.show_onto(piece, Con{Cite.Sep{}, tokens})}
+
+def cite_add_written(later: Maybe<&2, Cite.Parsed>, -piece: Cite.Piece, -rest: List<&2, Cite.Token>, ih: {Cite.shown(later) == Cite.kept(later, rest) : Maybe<&2, List<&2, Cite.Token>>}) -> {Cite.shown(Cite.add(piece, later)) == Cite.kept(Cite.add(piece, later), Cite.show_onto(piece, Con{Cite.Sep{}, rest})) : Maybe<&2, List<&2, Cite.Token>>}:
+  match later:
+    case None{}:
+      {==}
+    case Some{Cite.Parsed{first, more}}:
+      Equal.cong(Maybe<&2, List<&2, Cite.Token>>, Maybe<&2, List<&2, Cite.Token>>, x => cite_wrap(piece, x), Some{Cite.unparse(first, more)}, Some{rest}, ih)
+
+def cite_go_written(+tokens: List<&2, Cite.Token>, +state: Cite.State) -> {Cite.shown(Cite.go(tokens, state)) == Cite.kept(Cite.go(tokens, state), cite_pending(state, tokens)) : Maybe<&2, List<&2, Cite.Token>>}:
+  match tokens state:
+    case Nil{} Cite.Want{}:
+      {==}
+    case Nil{} Cite.Got{Cite.One{a}}:
+      {==}
+    case Nil{} Cite.Got{Cite.Label{a}}:
+      {==}
+    case Nil{} Cite.Got{Cite.Range{a, b}}:
+      {==}
+    case Nil{} Cite.Open{a}:
+      {==}
+    case Con{Cite.Num{n}, rest} Cite.Want{}:
+      cite_go_written(rest, Cite.Got{Cite.One{n}})
+    case Con{Cite.Num{n}, rest} Cite.Got{Cite.One{a}}:
+      {==}
+    case Con{Cite.Num{n}, rest} Cite.Got{Cite.Label{a}}:
+      {==}
+    case Con{Cite.Num{n}, rest} Cite.Got{Cite.Range{a, b}}:
+      {==}
+    case Con{Cite.Num{n}, rest} Cite.Open{a}:
+      cite_go_written(rest, Cite.Got{Cite.Range{a, n}})
+    case Con{Cite.Lab{n}, rest} Cite.Want{}:
+      cite_go_written(rest, Cite.Got{Cite.Label{n}})
+    case Con{Cite.Lab{n}, rest} Cite.Got{Cite.One{a}}:
+      {==}
+    case Con{Cite.Lab{n}, rest} Cite.Got{Cite.Label{a}}:
+      {==}
+    case Con{Cite.Lab{n}, rest} Cite.Got{Cite.Range{a, b}}:
+      {==}
+    case Con{Cite.Lab{n}, rest} Cite.Open{a}:
+      {==}
+    case Con{Cite.Dash{}, rest} Cite.Want{}:
+      {==}
+    case Con{Cite.Dash{}, rest} Cite.Got{Cite.One{a}}:
+      cite_go_written(rest, Cite.Open{a})
+    case Con{Cite.Dash{}, rest} Cite.Got{Cite.Label{a}}:
+      {==}
+    case Con{Cite.Dash{}, rest} Cite.Got{Cite.Range{a, b}}:
+      {==}
+    case Con{Cite.Dash{}, rest} Cite.Open{a}:
+      {==}
+    case Con{Cite.Sep{}, rest} Cite.Want{}:
+      {==}
+    case Con{Cite.Sep{}, rest} Cite.Got{Cite.One{a}}:
+      cite_add_written(Cite.go(rest, Cite.Want{}), Cite.One{a}, rest, cite_go_written(rest, Cite.Want{}))
+    case Con{Cite.Sep{}, rest} Cite.Got{Cite.Label{a}}:
+      cite_add_written(Cite.go(rest, Cite.Want{}), Cite.Label{a}, rest, cite_go_written(rest, Cite.Want{}))
+    case Con{Cite.Sep{}, rest} Cite.Got{Cite.Range{a, b}}:
+      cite_add_written(Cite.go(rest, Cite.Want{}), Cite.Range{a, b}, rest, cite_go_written(rest, Cite.Want{}))
+    case Con{Cite.Sep{}, rest} Cite.Open{a}:
+      {==}
+    case Con{Cite.Bad{}, rest} Cite.Want{}:
+      {==}
+    case Con{Cite.Bad{}, rest} Cite.Got{Cite.One{a}}:
+      {==}
+    case Con{Cite.Bad{}, rest} Cite.Got{Cite.Label{a}}:
+      {==}
+    case Con{Cite.Bad{}, rest} Cite.Got{Cite.Range{a, b}}:
+      {==}
+    case Con{Cite.Bad{}, rest} Cite.Open{a}:
+      {==}
+
+def Laws.cite_items_written(tokens):
+  cite_go_written(tokens, Cite.Want{})
+
+def Laws.cite_items_range(a, w):
+  %Equal.sym(List<&2, Nat>, Cite.expand(a, Nat.add(a, w)), Cite.within(Nat.is_le(w, 50n), Cite.count_up(1n+w, a)), Laws.cite_range_exact(a, w)) : {Cite.filled(_) == Cite.filled(Cite.within(Nat.is_le(w, 50n), Cite.count_up(1n+w, a))) : Maybe<&2, List<&2, Nat>>}
+  {==}
+
+def Laws.cite_items_backwards(b, d):
+  %Equal.sym(List<&2, Nat>, Cite.expand(Nat.add(b, 1n+d), b), Nil{}, Laws.cite_range_backwards(b, d)) : {Cite.filled(_) == None{} : Maybe<&2, List<&2, Nat>>}
+  {==}
+
+# The labels of a numbered list.
+def cite_from_run(+n: Nat, +m: Nat) -> {Cite.from(Cite.count_up(n, 1n+m), m) == Cite.Complete{} : Cite.Seq}:
+  match n:
+    case 0n:
+      {==}
+    case 1n+p:
+      %Equal.sym(Cmp, Nat.cmp(m, m), EQ{}, cite_cmp_refl(m)) : {Cite.join_seq(Cite.gap_of(_, m, 1n+m), Cite.from(Cite.count_up(p, 2n+m), 1n+m)) == Cite.Complete{} : Cite.Seq}
+      cite_from_run(p, 1n+m)
+
+def Laws.cite_sequence_complete(n, m):
+  match n:
+    case 0n:
+      {==}
+    case 1n+p:
+      cite_from_run(p, m)
+
+def cite_cmp_over(p: Nat, -k: Nat) -> {GT{} == Nat.cmp(Nat.add(p, 2n+k), 1n+p) : Cmp}:
+  match p:
+    case 0n:
+      {==}
+    case 1n+q:
+      cite_cmp_over(q, k)
+
+def cite_sub_over(p: Nat, -k: Nat) -> {1n+k == Nat.sub(Nat.add(p, 2n+k), 1n+p) : Nat}:
+  match p:
+    case 0n:
+      {==}
+    case 1n+q:
+      cite_sub_over(q, k)
+
+def Laws.cite_sequence_missing(p, k):
+  %cite_cmp_over(p, k) : {Cite.join_seq(Cite.gap_of(_, p, Nat.add(p, 2n+k)), Cite.Complete{}) == Cite.Missing{Cite.count_up(1n+k, 1n+p)} : Cite.Seq}
+  %cite_sub_over(p, k) : {Cite.Missing{Cite.count_up(_, 1n+p)} == Cite.Missing{Cite.count_up(1n+k, 1n+p)} : Cite.Seq}
+  {==}
+
+def cite_cmp_under(x: Nat, -d: Nat) -> {LT{} == Nat.cmp(x, 1n+Nat.add(x, d)) : Cmp}:
+  match x:
+    case 0n:
+      {==}
+    case 1n+q:
+      cite_cmp_under(q, d)
+
+def cite_join_wrong(here: Cite.Gap) -> {Cite.join_seq(here, Cite.Wrong{}) == Cite.Wrong{} : Cite.Seq}:
+  match here:
+    case Cite.Back{}:
+      {==}
+    case Cite.Step{}:
+      {==}
+    case Cite.Skip{missing}:
+      {==}
+
+def cite_from_wrong(+before: List<&2, Nat>, +prev: Nat, +x: Nat, +d: Nat, +more: List<&2, Nat>) -> {Cite.from(Cite.append(before, Con{Nat.add(x, d), Con{x, more}}), prev) == Cite.Wrong{} : Cite.Seq}:
+  match before:
+    case Nil{}:
+      %cite_cmp_under(x, d) : {Cite.join_seq(Cite.gap(prev, Nat.add(x, d)), Cite.join_seq(Cite.gap_of(_, Nat.add(x, d), x), Cite.from(more, x))) == Cite.Wrong{} : Cite.Seq}
+      cite_join_wrong(Cite.gap(prev, Nat.add(x, d)))
+    case Con{h, t}:
+      %Equal.sym(Cite.Seq, Cite.from(Cite.append(t, Con{Nat.add(x, d), Con{x, more}}), h), Cite.Wrong{}, cite_from_wrong(t, h, x, d, more)) : {Cite.join_seq(Cite.gap(prev, h), _) == Cite.Wrong{} : Cite.Seq}
+      cite_join_wrong(Cite.gap(prev, h))
+
+def Laws.cite_sequence_disorder(before, x, d, more):
+  match before:
+    case Nil{}:
+      %cite_cmp_under(x, d) : {Cite.join_seq(Cite.gap_of(_, Nat.add(x, d), x), Cite.from(more, x)) == Cite.Wrong{} : Cite.Seq}
+      {==}
+    case Con{h, t}:
+      cite_from_wrong(t, h, x, d, more)
+
+# The works of a page.
+def cite_drop_ids(hit: Bool, -own: Nat, -count: Nat, -left: List<&2, Cite.Row>, -dropped: List<&2, Nat>, ih: {Cite.row_ids(left) == dropped : List<&2, Nat>}) -> {Cite.row_ids(Cite.drop_row(hit, Cite.Row{own, count}, left)) == Cite.drop_one(hit, own, dropped) : List<&2, Nat>}:
+  match hit:
+    case True{}:
+      ih
+    case False{}:
+      %ih : {Con{own, Cite.row_ids(left)} == Con{own, _} : List<&2, Nat>}
+      {==}
+
+def cite_without_ids(+id: Nat, +rows: List<&2, Cite.Row>) -> {Cite.row_ids(Cite.without(id, rows)) == Cite.drop_all(id, Cite.row_ids(rows)) : List<&2, Nat>}:
+  match rows:
+    case Nil{}:
+      {==}
+    case Con{Cite.Row{own, count}, rest}:
+      cite_drop_ids(Nat.is_eq(own, id), own, count, Cite.without(id, rest), Cite.drop_all(id, Cite.row_ids(rest)), cite_without_ids(id, rest))
+
+def Laws.cite_works_order(ids):
+  match ids:
+    case Nil{}:
+      {==}
+    case Con{id, rest}:
+      %Laws.cite_works_order(rest) : {Con{id, Cite.row_ids(Cite.without(id, Cite.works(rest)))} == Con{id, Cite.drop_all(id, _)} : List<&2, Nat>}
+      %cite_without_ids(id, Cite.works(rest)) : {Con{id, Cite.row_ids(Cite.without(id, Cite.works(rest)))} == Con{id, _} : List<&2, Nat>}
+      {==}
+
+# An id is not among what is left when it is dropped.
+def cite_dropped_step(hit: Bool, -h: Nat, -id: Nat, -left: List<&2, Nat>, same: {hit == Nat.is_eq(h, id) : Bool}, ih: {Cite.member(id, left) == False{} : Bool}) -> {Cite.member(id, Cite.drop_one(hit, h, left)) == False{} : Bool}:
+  match hit:
+    case True{}:
+      ih
+    case False{}:
+      %same : {Bool.or(_, Cite.member(id, left)) == False{} : Bool}
+      ih
+
+def cite_dropped_gone(+id: Nat, +xs: List<&2, Nat>) -> {Cite.member(id, Cite.drop_all(id, xs)) == False{} : Bool}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{h, t}:
+      cite_dropped_step(Nat.is_eq(h, id), h, id, Cite.drop_all(id, t), {==}, cite_dropped_gone(id, t))
+
+def cite_or_false_left(p: Bool, q: Bool, e: {Bool.or(p, q) == False{} : Bool}) -> {p == False{} : Bool}:
+  match p:
+    case False{}:
+      {==}
+    case True{}:
+      e
+
+def cite_or_false_right(p: Bool, q: Bool, e: {Bool.or(p, q) == False{} : Bool}) -> {q == False{} : Bool}:
+  match p:
+    case False{}:
+      e
+    case True{}:
+      impossible({q == False{} : Bool}, false_is_not_true(Equal.sym(Bool, True{}, False{}, e)))
+
+# What is not in a list is not in what is left of it.
+def cite_absent_step(hit: Bool, -h: Nat, -x: Nat, -left: List<&2, Nat>, head: {Nat.is_eq(h, x) == False{} : Bool}, ih: {Cite.member(x, left) == False{} : Bool}) -> {Cite.member(x, Cite.drop_one(hit, h, left)) == False{} : Bool}:
+  match hit:
+    case True{}:
+      ih
+    case False{}:
+      %Equal.sym(Bool, Nat.is_eq(h, x), False{}, head) : {Bool.or(_, Cite.member(x, left)) == False{} : Bool}
+      ih
+
+def cite_absent_stays(+x: Nat, +id: Nat, +xs: List<&2, Nat>, +e: {Cite.member(x, xs) == False{} : Bool}) -> {Cite.member(x, Cite.drop_all(id, xs)) == False{} : Bool}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{h, t}:
+      cite_absent_step(Nat.is_eq(h, id), h, x, Cite.drop_all(id, t), cite_or_false_left(Nat.is_eq(h, x), Cite.member(x, t), e), cite_absent_stays(x, id, t, cite_or_false_right(Nat.is_eq(h, x), Cite.member(x, t), e)))
+
+def cite_distinct_step(hit: Bool, -h: Nat, -left: List<&2, Nat>, absent: {Cite.member(h, left) == False{} : Bool}, ih: {Cite.distinct(left) == True{} : Bool}) -> {Cite.distinct(Cite.drop_one(hit, h, left)) == True{} : Bool}:
+  match hit:
+    case True{}:
+      ih
+    case False{}:
+      %Equal.sym(Bool, Cite.member(h, left), False{}, absent) : {Bool.and(Bool.not(_), Cite.distinct(left)) == True{} : Bool}
+      ih
+
+def cite_distinct_stays(+id: Nat, +xs: List<&2, Nat>, +e: {Cite.distinct(xs) == True{} : Bool}) -> {Cite.distinct(Cite.drop_all(id, xs)) == True{} : Bool}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{h, t}:
+      cite_distinct_step(Nat.is_eq(h, id), h, Cite.drop_all(id, t), cite_absent_stays(h, id, t, bool_not_true(Cite.member(h, t), bool_and_left(Bool.not(Cite.member(h, t)), Cite.distinct(t), e))), cite_distinct_stays(id, t, bool_and_right(Bool.not(Cite.member(h, t)), Cite.distinct(t), e)))
+
+def cite_firsts_distinct(+ids: List<&2, Nat>) -> {Cite.distinct(Cite.firsts(ids)) == True{} : Bool}:
+  match ids:
+    case Nil{}:
+      {==}
+    case Con{id, rest}:
+      %Equal.sym(Bool, Cite.member(id, Cite.drop_all(id, Cite.firsts(rest))), False{}, cite_dropped_gone(id, Cite.firsts(rest))) : {Bool.and(Bool.not(_), Cite.distinct(Cite.drop_all(id, Cite.firsts(rest)))) == True{} : Bool}
+      cite_distinct_stays(id, Cite.firsts(rest), cite_firsts_distinct(rest))
+
+def Laws.cite_works_once(ids):
+  %Equal.sym(List<&2, Nat>, Cite.row_ids(Cite.works(ids)), Cite.firsts(ids), Laws.cite_works_order(ids)) : {Cite.distinct(_) == True{} : Bool}
+  cite_firsts_distinct(ids)
+
+# Counting.
+def cite_add_assoc(a: Nat, -b: Nat, -c: Nat) -> {Nat.add(Nat.add(a, b), c) == Nat.add(a, Nat.add(b, c)) : Nat}:
+  match a:
+    case 0n:
+      {==}
+    case 1n+p:
+      %cite_add_assoc(p, b, c) : {1n+Nat.add(Nat.add(p, b), c) == 1n+_ : Nat}
+      {==}
+
+def cite_add_swap(t: Nat, +c: Nat, -w: Nat) -> {Nat.add(t, Nat.add(c, w)) == Nat.add(c, Nat.add(t, w)) : Nat}:
+  match t:
+    case 0n:
+      {==}
+    case 1n+p:
+      %Equal.sym(Nat, Nat.add(c, 1n+Nat.add(p, w)), 1n+Nat.add(c, Nat.add(p, w)), nat_add_succ(c, Nat.add(p, w))) : {1n+Nat.add(p, Nat.add(c, w)) == _ : Nat}
+      %cite_add_swap(p, c, w) : {1n+Nat.add(p, Nat.add(c, w)) == 1n+_ : Nat}
+      {==}
+
+def cite_tally_step(hit: Bool, +count: Nat, -own: Nat, +some: Nat, -left: List<&2, Cite.Row>, -whole: Nat, ih: {Nat.add(some, Cite.total(left)) == whole : Nat}) -> {Nat.add(Nat.add(Cite.counted(hit, count), some), Cite.total(Cite.drop_row(hit, Cite.Row{own, count}, left))) == Nat.add(count, whole) : Nat}:
+  match hit:
+    case True{}:
+      %ih : {Nat.add(Nat.add(count, some), Cite.total(left)) == Nat.add(count, _) : Nat}
+      cite_add_assoc(count, some, Cite.total(left))
+    case False{}:
+      %ih : {Nat.add(some, Nat.add(count, Cite.total(left))) == Nat.add(count, _) : Nat}
+      cite_add_swap(some, count, Cite.total(left))
+
+def cite_tally_whole(+id: Nat, +rows: List<&2, Cite.Row>) -> {Nat.add(Cite.tally(id, rows), Cite.total(Cite.without(id, rows))) == Cite.total(rows) : Nat}:
+  match rows:
+    case Nil{}:
+      {==}
+    case Con{Cite.Row{own, count}, rest}:
+      cite_tally_step(Nat.is_eq(own, id), count, own, Cite.tally(id, rest), Cite.without(id, rest), Cite.total(rest), cite_tally_whole(id, rest))
+
+def Laws.cite_works_count(ids):
+  match ids:
+    case Nil{}:
+      {==}
+    case Con{id, rest}:
+      %Laws.cite_works_count(rest) : {1n+Nat.add(Cite.tally(id, Cite.works(rest)), Cite.total(Cite.without(id, Cite.works(rest)))) == 1n+_ : Nat}
+      %cite_tally_whole(id, Cite.works(rest)) : {1n+Nat.add(Cite.tally(id, Cite.works(rest)), Cite.total(Cite.without(id, Cite.works(rest)))) == 1n+_ : Nat}
+      {==}
+
+# Membership after dropping.
+def cite_nat_same(+a: Nat, +b: Nat, e: {Nat.is_eq(a, b) == True{} : Bool}) -> {a == b : Nat}:
+  match a b:
+    case 0n 0n:
+      {==}
+    case 0n 1n+q:
+      impossible({0n == 1n+q : Nat}, false_is_not_true(e))
+    case 1n+p 0n:
+      impossible({1n+p == 0n : Nat}, false_is_not_true(e))
+    case 1n+p 1n+q:
+      %cite_nat_same(p, q, e) : {1n+p == 1n+_ : Nat}
+      {==}
+
+def cite_eq_sym(a: Nat, b: Nat) -> {Nat.is_eq(a, b) == Nat.is_eq(b, a) : Bool}:
+  match a b:
+    case 0n 0n:
+      {==}
+    case 0n 1n+q:
+      {==}
+    case 1n+p 0n:
+      {==}
+    case 1n+p 1n+q:
+      cite_eq_sym(p, q)
+
+def cite_eq_left(+h: Nat, +id: Nat, -x: Nat, eh: {True{} == Nat.is_eq(h, id) : Bool}, ex: {True{} == Nat.is_eq(h, x) : Bool}) -> {True{} == Nat.is_eq(id, x) : Bool}:
+  %cite_nat_same(h, id, Equal.sym(Bool, True{}, Nat.is_eq(h, id), eh)) : {True{} == Nat.is_eq(_, x) : Bool}
+  ex
+
+def cite_eq_moved(+h: Nat, -id: Nat, +x: Nat, eh: {False{} == Nat.is_eq(h, id) : Bool}, ex: {True{} == Nat.is_eq(h, x) : Bool}) -> {False{} == Nat.is_eq(x, id) : Bool}:
+  %cite_nat_same(h, x, Equal.sym(Bool, True{}, Nat.is_eq(h, x), ex)) : {False{} == Nat.is_eq(_, id) : Bool}
+  eh
+
+def cite_eq_apart(+h: Nat, +id: Nat, +x: Nat, eh: {False{} == Nat.is_eq(h, id) : Bool}, ex: {True{} == Nat.is_eq(h, x) : Bool}) -> {False{} == Nat.is_eq(id, x) : Bool}:
+  Equal.trans(Bool, False{}, Nat.is_eq(x, id), Nat.is_eq(id, x), cite_eq_moved(h, id, x, eh, ex), cite_eq_sym(x, id))
+
+def cite_member_step(hit: Bool, here: Bool, +h: Nat, +id: Nat, +x: Nat, -left: List<&2, Nat>, -rest: Bool, eh: {hit == Nat.is_eq(h, id) : Bool}, +ex: {here == Nat.is_eq(h, x) : Bool}, ih: {Cite.member(x, left) == Bool.and(Bool.not(Nat.is_eq(id, x)), rest) : Bool}) -> {Cite.member(x, Cite.drop_one(hit, h, left)) == Bool.and(Bool.not(Nat.is_eq(id, x)), Bool.or(here, rest)) : Bool}:
+  match hit here:
+    case True{} True{}:
+      %Equal.sym(Bool, Cite.member(x, left), Bool.and(Bool.not(Nat.is_eq(id, x)), rest), ih) : {_ == Bool.and(Bool.not(Nat.is_eq(id, x)), True{}) : Bool}
+      %cite_eq_left(h, id, x, eh, ex) : {Bool.and(Bool.not(_), rest) == Bool.and(Bool.not(_), True{}) : Bool}
+      {==}
+    case True{} False{}:
+      ih
+    case False{} True{}:
+      %ex : {Bool.or(_, Cite.member(x, left)) == Bool.and(Bool.not(Nat.is_eq(id, x)), True{}) : Bool}
+      %cite_eq_apart(h, id, x, eh, ex) : {True{} == Bool.and(Bool.not(_), True{}) : Bool}
+      {==}
+    case False{} False{}:
+      %ex : {Bool.or(_, Cite.member(x, left)) == Bool.and(Bool.not(Nat.is_eq(id, x)), rest) : Bool}
+      ih
+
+def cite_member_dropped(+x: Nat, +id: Nat, +xs: List<&2, Nat>) -> {Cite.member(x, Cite.drop_all(id, xs)) == Bool.and(Bool.not(Nat.is_eq(id, x)), Cite.member(x, xs)) : Bool}:
+  match xs:
+    case Nil{}:
+      cite_and_false_sym(Bool.not(Nat.is_eq(id, x)))
+    case Con{h, t}:
+      cite_member_step(Nat.is_eq(h, id), Nat.is_eq(h, x), h, id, x, Cite.drop_all(id, t), Cite.member(x, t), {==}, {==}, cite_member_dropped(x, id, t))
+
+def cite_or_and_not(e: Bool, -m: Bool) -> {Bool.or(e, Bool.and(Bool.not(e), m)) == Bool.or(e, m) : Bool}:
+  match e:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+def cite_firsts_member(+x: Nat, +ids: List<&2, Nat>) -> {Cite.member(x, Cite.firsts(ids)) == Cite.member(x, ids) : Bool}:
+  match ids:
+    case Nil{}:
+      {==}
+    case Con{id, rest}:
+      %Equal.sym(Bool, Cite.member(x, Cite.drop_all(id, Cite.firsts(rest))), Bool.and(Bool.not(Nat.is_eq(id, x)), Cite.member(x, Cite.firsts(rest))), cite_member_dropped(x, id, Cite.firsts(rest))) : {Bool.or(Nat.is_eq(id, x), _) == Bool.or(Nat.is_eq(id, x), Cite.member(x, rest)) : Bool}
+      %Equal.sym(Bool, Cite.member(x, Cite.firsts(rest)), Cite.member(x, rest), cite_firsts_member(x, rest)) : {Bool.or(Nat.is_eq(id, x), Bool.and(Bool.not(Nat.is_eq(id, x)), _)) == Bool.or(Nat.is_eq(id, x), Cite.member(x, rest)) : Bool}
+      cite_or_and_not(Nat.is_eq(id, x), Cite.member(x, rest))
+
+def Laws.cite_works_all(x, ids):
+  %Equal.sym(List<&2, Nat>, Cite.row_ids(Cite.works(ids)), Cite.firsts(ids), Laws.cite_works_order(ids)) : {Cite.member(x, _) == Cite.member(x, ids) : Bool}
+  cite_firsts_member(x, ids)
+
+# Each work's count.
+def cite_tally_step_without(hit: Bool, here: Bool, +own: Nat, +id: Nat, +x: Nat, -count: Nat, -left: List<&2, Cite.Row>, -rest: Nat, eh: {hit == Nat.is_eq(own, id) : Bool}, +ex: {here == Nat.is_eq(own, x) : Bool}, ih: {Cite.tally(x, left) == Cite.counted(Bool.not(Nat.is_eq(id, x)), rest) : Nat}) -> {Cite.tally(x, Cite.drop_row(hit, Cite.Row{own, count}, left)) == Cite.counted(Bool.not(Nat.is_eq(id, x)), Nat.add(Cite.counted(here, count), rest)) : Nat}:
+  match hit here:
+    case True{} True{}:
+      %Equal.sym(Nat, Cite.tally(x, left), Cite.counted(Bool.not(Nat.is_eq(id, x)), rest), ih) : {_ == Cite.counted(Bool.not(Nat.is_eq(id, x)), Nat.add(count, rest)) : Nat}
+      %cite_eq_left(own, id, x, eh, ex) : {Cite.counted(Bool.not(_), rest) == Cite.counted(Bool.not(_), Nat.add(count, rest)) : Nat}
+      {==}
+    case True{} False{}:
+      ih
+    case False{} True{}:
+      %ex : {Nat.add(Cite.counted(_, count), Cite.tally(x, left)) == Cite.counted(Bool.not(Nat.is_eq(id, x)), Nat.add(count, rest)) : Nat}
+      %Equal.sym(Nat, Cite.tally(x, left), Cite.counted(Bool.not(Nat.is_eq(id, x)), rest), ih) : {Nat.add(count, _) == Cite.counted(Bool.not(Nat.is_eq(id, x)), Nat.add(count, rest)) : Nat}
+      %cite_eq_apart(own, id, x, eh, ex) : {Nat.add(count, Cite.counted(Bool.not(_), rest)) == Cite.counted(Bool.not(_), Nat.add(count, rest)) : Nat}
+      {==}
+    case False{} False{}:
+      %ex : {Nat.add(Cite.counted(_, count), Cite.tally(x, left)) == Cite.counted(Bool.not(Nat.is_eq(id, x)), rest) : Nat}
+      ih
+
+def cite_counted_zero(hit: Bool) -> {0n == Cite.counted(hit, 0n) : Nat}:
+  match hit:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+def cite_tally_without(+x: Nat, +id: Nat, +rows: List<&2, Cite.Row>) -> {Cite.tally(x, Cite.without(id, rows)) == Cite.counted(Bool.not(Nat.is_eq(id, x)), Cite.tally(x, rows)) : Nat}:
+  match rows:
+    case Nil{}:
+      cite_counted_zero(Bool.not(Nat.is_eq(id, x)))
+    case Con{Cite.Row{own, count}, rest}:
+      cite_tally_step_without(Nat.is_eq(own, id), Nat.is_eq(own, x), own, id, x, count, Cite.without(id, rest), Cite.tally(x, rest), {==}, {==}, cite_tally_without(x, id, rest))
+
+def cite_add_zero(a: Nat) -> {Nat.add(a, 0n) == a : Nat}:
+  match a:
+    case 0n:
+      {==}
+    case 1n+p:
+      %cite_add_zero(p) : {1n+Nat.add(p, 0n) == 1n+_ : Nat}
+      {==}
+
+def cite_each_step(same: Bool, +id: Nat, +x: Nat, +rows: List<&2, Cite.Row>, -n: Nat, e: {same == Nat.is_eq(id, x) : Bool}, ih: {Cite.tally(x, rows) == n : Nat}) -> {Nat.add(Cite.counted(same, 1n+Cite.tally(id, rows)), Cite.counted(Bool.not(same), Cite.tally(x, rows))) == Nat.add(Cite.counted(same, 1n), n) : Nat}:
+  match same:
+    case True{}:
+      %Equal.sym(Nat, id, x, cite_nat_same(id, x, Equal.sym(Bool, True{}, Nat.is_eq(id, x), e))) : {Nat.add(1n+Cite.tally(_, rows), 0n) == 1n+n : Nat}
+      %ih : {Nat.add(1n+Cite.tally(x, rows), 0n) == 1n+_ : Nat}
+      %cite_add_zero(Cite.tally(x, rows)) : {1n+Nat.add(Cite.tally(x, rows), 0n) == 1n+_ : Nat}
+      {==}
+    case False{}:
+      ih
+
+def Laws.cite_works_each(x, ids):
+  match ids:
+    case Nil{}:
+      {==}
+    case Con{id, rest}:
+      %Equal.sym(Nat, Cite.tally(x, Cite.without(id, Cite.works(rest))), Cite.counted(Bool.not(Nat.is_eq(id, x)), Cite.tally(x, Cite.works(rest))), cite_tally_without(x, id, Cite.works(rest))) : {Nat.add(Cite.counted(Nat.is_eq(id, x), 1n+Cite.tally(id, Cite.works(rest))), _) == Nat.add(Cite.counted(Nat.is_eq(id, x), 1n), Cite.occurrences(x, rest)) : Nat}
+      cite_each_step(Nat.is_eq(id, x), id, x, Cite.works(rest), Cite.occurrences(x, rest), {==}, Laws.cite_works_each(x, rest))
+
+# A note's name: no forbidden character.
+def Laws.cite_name_forbids():
+  {==}
+
+def Laws.cite_name_edges():
+  {==}
+
+def cite_clean_allowed(hit: Bool, -c: Char, same: {hit == Cite.forbidden(c) : Bool}) -> {Cite.allowed(Bool.pick(Char, hit, ' ', c)) == True{} : Bool}:
+  match hit:
+    case True{}:
+      {==}
+    case False{}:
+      %same : {Bool.not(_) == True{} : Bool}
+      {==}
+
+def cite_cleaned_allowed(+text: String) -> {Cite.all_allowed(Cite.cleaned(text)) == True{} : Bool}:
+  match text:
+    case SNil{}:
+      {==}
+    case SCon{c, rest}:
+      %Equal.sym(Bool, Cite.all_allowed(Cite.cleaned(rest)), True{}, cite_cleaned_allowed(rest)) : {Bool.and(Cite.allowed(Cite.clean(c)), _) == True{} : Bool}
+      %Equal.sym(Bool, Cite.allowed(Bool.pick(Char, Cite.forbidden(c), ' ', c)), True{}, cite_clean_allowed(Cite.forbidden(c), c, {==})) : {Bool.and(_, True{}) == True{} : Bool}
+      {==}
+
+def cite_cons_allowed(-c: Char, -tail: String, head: {Cite.allowed(c) == True{} : Bool}, rest: {Cite.all_allowed(tail) == True{} : Bool}) -> {Cite.all_allowed(SCon{c, tail}) == True{} : Bool}:
+  %Equal.sym(Bool, Cite.all_allowed(tail), True{}, rest) : {Bool.and(Cite.allowed(c), _) == True{} : Bool}
+  %Equal.sym(Bool, Cite.allowed(c), True{}, head) : {Bool.and(_, True{}) == True{} : Bool}
+  {==}
+
+def cite_squeeze_put_allowed(drop: Bool, -c: Char, -tail: String, head: {Cite.allowed(c) == True{} : Bool}, rest: {Cite.all_allowed(tail) == True{} : Bool}) -> {Cite.all_allowed(Cite.squeeze_put(drop, c, tail)) == True{} : Bool}:
+  match drop:
+    case True{}:
+      rest
+    case False{}:
+      cite_cons_allowed(c, tail, head, rest)
+
+def cite_squeezed_allowed(+text: String, +e: {Cite.all_allowed(text) == True{} : Bool}) -> {Cite.all_allowed(Cite.squeezed(text)) == True{} : Bool}:
+  match text:
+    case SNil{}:
+      {==}
+    case SCon{c, rest}:
+      cite_squeeze_put_allowed(Bool.and(Char.is_eq(c, ' '), Cite.leads_space(Cite.squeezed(rest))), c, Cite.squeezed(rest), bool_and_left(Cite.allowed(c), Cite.all_allowed(rest), e), cite_squeezed_allowed(rest, bool_and_right(Cite.allowed(c), Cite.all_allowed(rest), e)))
+
+def cite_lstrip_pick_allowed(strip: Bool, -c: Char, -rest: String, -stripped: String, whole: {Cite.all_allowed(SCon{c, rest}) == True{} : Bool}, ih: {Cite.all_allowed(stripped) == True{} : Bool}) -> {Cite.all_allowed(Cite.lstrip_pick(strip, c, rest, stripped)) == True{} : Bool}:
+  match strip:
+    case True{}:
+      ih
+    case False{}:
+      whole
+
+def cite_lstrip_allowed(+text: String, +e: {Cite.all_allowed(text) == True{} : Bool}) -> {Cite.all_allowed(Cite.lstrip(text)) == True{} : Bool}:
+  match text:
+    case SNil{}:
+      {==}
+    case SCon{c, rest}:
+      cite_lstrip_pick_allowed(Cite.edge(c), c, rest, Cite.lstrip(rest), e, cite_lstrip_allowed(rest, bool_and_right(Cite.allowed(c), Cite.all_allowed(rest), e)))
+
+def cite_take_put_allowed(ok: Bool, -c: Char, -tail: String, head: {Cite.allowed(c) == True{} : Bool}, rest: {Cite.all_allowed(tail) == True{} : Bool}) -> {Cite.all_allowed(Cite.take_put(ok, c, tail)) == True{} : Bool}:
+  match ok:
+    case True{}:
+      cite_cons_allowed(c, tail, head, rest)
+    case False{}:
+      {==}
+
+def cite_take_allowed(+text: String, +budget: Nat, +e: {Cite.all_allowed(text) == True{} : Bool}) -> {Cite.all_allowed(Cite.take(text, budget)) == True{} : Bool}:
+  match text:
+    case SNil{}:
+      {==}
+    case SCon{c, rest}:
+      cite_take_put_allowed(Nat.is_le(Cite.width(c), budget), c, Cite.take(rest, Nat.sub(budget, Cite.width(c))), bool_and_left(Cite.allowed(c), Cite.all_allowed(rest), e), cite_take_allowed(rest, Nat.sub(budget, Cite.width(c)), bool_and_right(Cite.allowed(c), Cite.all_allowed(rest), e)))
+
+def cite_rstrip_end_allowed(strip: Bool, -c: Char, head: {Cite.allowed(c) == True{} : Bool}) -> {Cite.all_allowed(Cite.rstrip_end(strip, c)) == True{} : Bool}:
+  match strip:
+    case True{}:
+      {==}
+    case False{}:
+      cite_cons_allowed(c, SNil{}, head, {==})
+
+def cite_rstrip_put_allowed(+c: Char, tail: String, head: {Cite.allowed(c) == True{} : Bool}, rest: {Cite.all_allowed(tail) == True{} : Bool}) -> {Cite.all_allowed(Cite.rstrip_put(c, tail)) == True{} : Bool}:
+  match tail:
+    case SNil{}:
+      cite_rstrip_end_allowed(Cite.edge(c), c, head)
+    case SCon{d, more}:
+      cite_cons_allowed(c, SCon{d, more}, head, rest)
+
+def cite_rstrip_allowed(+text: String, +e: {Cite.all_allowed(text) == True{} : Bool}) -> {Cite.all_allowed(Cite.rstrip(text)) == True{} : Bool}:
+  match text:
+    case SNil{}:
+      {==}
+    case SCon{c, rest}:
+      cite_rstrip_put_allowed(c, Cite.rstrip(rest), bool_and_left(Cite.allowed(c), Cite.all_allowed(rest), e), cite_rstrip_allowed(rest, bool_and_right(Cite.allowed(c), Cite.all_allowed(rest), e)))
+
+def cite_prefixed_allowed(text: String, e: {Cite.all_allowed(text) == True{} : Bool}) -> {Cite.all_allowed(Cite.prefixed(text)) == True{} : Bool}:
+  match text:
+    case SNil{}:
+      {==}
+    case SCon{c, rest}:
+      e
+
+def cite_final_allowed(enough: Bool, +text: String, e: {Cite.all_allowed(text) == True{} : Bool}) -> {Cite.all_allowed(Cite.final(enough, text)) == True{} : Bool}:
+  match enough:
+    case True{}:
+      e
+    case False{}:
+      cite_prefixed_allowed(text, e)
+
+def cite_core(text: String) -> String:
+  Cite.rstrip(Cite.take(Cite.lstrip(Cite.squeezed(Cite.cleaned(text))), 170n))
+
+def cite_core_allowed(+text: String) -> {Cite.all_allowed(cite_core(text)) == True{} : Bool}:
+  cite_rstrip_allowed(Cite.take(Cite.lstrip(Cite.squeezed(Cite.cleaned(text))), 170n), cite_take_allowed(Cite.lstrip(Cite.squeezed(Cite.cleaned(text))), 170n, cite_lstrip_allowed(Cite.squeezed(Cite.cleaned(text)), cite_squeezed_allowed(Cite.cleaned(text), cite_cleaned_allowed(text)))))
+
+def Laws.cite_name_allowed(text):
+  cite_final_allowed(Cite.long(cite_core(text), 5n), cite_core(text), cite_core_allowed(text))
+
+# A note's name: how it begins.
+def cite_lstrip_pick_starts(strip: Bool, -c: Char, -rest: String, -stripped: String, same: {strip == Cite.edge(c) : Bool}, ih: {Cite.starts_ok(stripped) == True{} : Bool}) -> {Cite.starts_ok(Cite.lstrip_pick(strip, c, rest, stripped)) == True{} : Bool}:
+  match strip:
+    case True{}:
+      ih
+    case False{}:
+      %same : {Bool.not(_) == True{} : Bool}
+      {==}
+
+def cite_lstrip_starts(+text: String) -> {Cite.starts_ok(Cite.lstrip(text)) == True{} : Bool}:
+  match text:
+    case SNil{}:
+      {==}
+    case SCon{c, rest}:
+      cite_lstrip_pick_starts(Cite.edge(c), c, rest, Cite.lstrip(rest), {==}, cite_lstrip_starts(rest))
+
+def cite_take_put_starts(ok: Bool, -c: Char, -tail: String, e: {Bool.not(Cite.edge(c)) == True{} : Bool}) -> {Cite.starts_ok(Cite.take_put(ok, c, tail)) == True{} : Bool}:
+  match ok:
+    case True{}:
+      e
+    case False{}:
+      {==}
+
+def cite_take_starts(+text: String, +budget: Nat, e: {Cite.starts_ok(text) == True{} : Bool}) -> {Cite.starts_ok(Cite.take(text, budget)) == True{} : Bool}:
+  match text:
+    case SNil{}:
+      {==}
+    case SCon{c, rest}:
+      cite_take_put_starts(Nat.is_le(Cite.width(c), budget), c, Cite.take(rest, Nat.sub(budget, Cite.width(c))), e)
+
+def cite_rstrip_end_starts(strip: Bool, -c: Char, e: {Bool.not(Cite.edge(c)) == True{} : Bool}) -> {Cite.starts_ok(Cite.rstrip_end(strip, c)) == True{} : Bool}:
+  match strip:
+    case True{}:
+      {==}
+    case False{}:
+      e
+
+def cite_rstrip_put_starts(+c: Char, tail: String, e: {Bool.not(Cite.edge(c)) == True{} : Bool}) -> {Cite.starts_ok(Cite.rstrip_put(c, tail)) == True{} : Bool}:
+  match tail:
+    case SNil{}:
+      cite_rstrip_end_starts(Cite.edge(c), c, e)
+    case SCon{d, more}:
+      e
+
+def cite_rstrip_starts(+text: String, e: {Cite.starts_ok(text) == True{} : Bool}) -> {Cite.starts_ok(Cite.rstrip(text)) == True{} : Bool}:
+  match text:
+    case SNil{}:
+      {==}
+    case SCon{c, rest}:
+      cite_rstrip_put_starts(c, Cite.rstrip(rest), e)
+
+def cite_prefixed_starts(text: String) -> {Cite.starts_ok(Cite.prefixed(text)) == True{} : Bool}:
+  match text:
+    case SNil{}:
+      {==}
+    case SCon{c, rest}:
+      {==}
+
+def cite_final_starts(enough: Bool, +text: String, e: {Cite.starts_ok(text) == True{} : Bool}) -> {Cite.starts_ok(Cite.final(enough, text)) == True{} : Bool}:
+  match enough:
+    case True{}:
+      e
+    case False{}:
+      cite_prefixed_starts(text)
+
+def Laws.cite_name_starts(text):
+  cite_final_starts(Cite.long(cite_core(text), 5n), cite_core(text), cite_rstrip_starts(Cite.take(Cite.lstrip(Cite.squeezed(Cite.cleaned(text))), 170n), cite_take_starts(Cite.lstrip(Cite.squeezed(Cite.cleaned(text))), 170n, cite_lstrip_starts(Cite.squeezed(Cite.cleaned(text))))))
+
+# How it ends.
+def cite_rstrip_end_ends(strip: Bool, -c: Char, same: {strip == Cite.edge(c) : Bool}) -> {Cite.ends_ok(Cite.rstrip_end(strip, c)) == True{} : Bool}:
+  match strip:
+    case True{}:
+      {==}
+    case False{}:
+      %same : {Bool.not(_) == True{} : Bool}
+      {==}
+
+def cite_rstrip_put_ends(+c: Char, tail: String, ih: {Cite.ends_ok(tail) == True{} : Bool}) -> {Cite.ends_ok(Cite.rstrip_put(c, tail)) == True{} : Bool}:
+  match tail:
+    case SNil{}:
+      cite_rstrip_end_ends(Cite.edge(c), c, {==})
+    case SCon{d, more}:
+      ih
+
+def cite_rstrip_ends(+text: String) -> {Cite.ends_ok(Cite.rstrip(text)) == True{} : Bool}:
+  match text:
+    case SNil{}:
+      {==}
+    case SCon{c, rest}:
+      cite_rstrip_put_ends(c, Cite.rstrip(rest), cite_rstrip_ends(rest))
+
+def cite_prefixed_ends(text: String, e: {Cite.ends_ok(text) == True{} : Bool}) -> {Cite.ends_ok(Cite.prefixed(text)) == True{} : Bool}:
+  match text:
+    case SNil{}:
+      {==}
+    case SCon{c, rest}:
+      e
+
+def cite_final_ends(enough: Bool, +text: String, e: {Cite.ends_ok(text) == True{} : Bool}) -> {Cite.ends_ok(Cite.final(enough, text)) == True{} : Bool}:
+  match enough:
+    case True{}:
+      e
+    case False{}:
+      cite_prefixed_ends(text, e)
+
+def Laws.cite_name_ends(text):
+  cite_final_ends(Cite.long(cite_core(text), 5n), cite_core(text), cite_rstrip_ends(Cite.take(Cite.lstrip(Cite.squeezed(Cite.cleaned(text))), 170n)))
+
+# Its stem.
+def cite_prefixed_long(text: String) -> {Cite.long(Cite.prefixed(text), 5n) == True{} : Bool}:
+  match text:
+    case SNil{}:
+      {==}
+    case SCon{c, rest}:
+      {==}
+
+def cite_final_long(enough: Bool, +text: String, same: {enough == Cite.long(text, 5n) : Bool}) -> {Cite.long(Cite.final(enough, text), 5n) == True{} : Bool}:
+  match enough:
+    case True{}:
+      %same : {_ == True{} : Bool}
+      {==}
+    case False{}:
+      cite_prefixed_long(text)
+
+def Laws.cite_name_stem(text):
+  cite_final_long(Cite.long(cite_core(text), 5n), cite_core(text), {==})
+
+# Its length in bytes.
+def cite_le_zero(b: Nat) -> {Nat.is_le(0n, b) == True{} : Bool}:
+  match b:
+    case 0n:
+      {==}
+    case 1n+p:
+      {==}
+
+def cite_le_add_sub(w: Nat, b: Nat, -x: Nat, e1: {Nat.is_le(w, b) == True{} : Bool}, e2: {Nat.is_le(x, Nat.sub(b, w)) == True{} : Bool}) -> {Nat.is_le(Nat.add(w, x), b) == True{} : Bool}:
+  match w b:
+    case 0n 0n:
+      e2
+    case 0n 1n+bp:
+      e2
+    case 1n+wp 0n:
+      impossible({Nat.is_le(1n+Nat.add(wp, x), 0n) == True{} : Bool}, false_is_not_true(e1))
+    case 1n+wp 1n+bp:
+      cite_le_add_sub(wp, bp, x, e1, e2)
+
+def cite_le_mono(w: Nat, -x: Nat, -y: Nat, e: {Nat.is_le(x, y) == True{} : Bool}) -> {Nat.is_le(Nat.add(w, x), Nat.add(w, y)) == True{} : Bool}:
+  match w:
+    case 0n:
+      e
+    case 1n+p:
+      cite_le_mono(p, x, y, e)
+
+def cite_le_trans(a: Nat, b: Nat, c: Nat, e1: {Nat.is_le(a, b) == True{} : Bool}, e2: {Nat.is_le(b, c) == True{} : Bool}) -> {Nat.is_le(a, c) == True{} : Bool}:
+  match a b c:
+    case 0n _ _:
+      cite_le_zero(c)
+    case 1n+ap 0n _:
+      impossible({Nat.is_le(1n+ap, c) == True{} : Bool}, false_is_not_true(e1))
+    case 1n+ap 1n+bp 0n:
+      impossible({Nat.is_le(1n+ap, 0n) == True{} : Bool}, false_is_not_true(e2))
+    case 1n+ap 1n+bp 1n+cp:
+      cite_le_trans(ap, bp, cp, e1, e2)
+
+def cite_take_put_bytes(ok: Bool, +c: Char, -tail: String, +budget: Nat, same: {ok == Nat.is_le(Cite.width(c), budget) : Bool}, ih: {Nat.is_le(Cite.bytes(tail), Nat.sub(budget, Cite.width(c))) == True{} : Bool}) -> {Nat.is_le(Cite.bytes(Cite.take_put(ok, c, tail)), budget) == True{} : Bool}:
+  match ok:
+    case True{}:
+      cite_le_add_sub(Cite.width(c), budget, Cite.bytes(tail), Equal.sym(Bool, True{}, Nat.is_le(Cite.width(c), budget), same), ih)
+    case False{}:
+      cite_le_zero(budget)
+
+def cite_take_bytes(+text: String, +budget: Nat) -> {Nat.is_le(Cite.bytes(Cite.take(text, budget)), budget) == True{} : Bool}:
+  match text:
+    case SNil{}:
+      cite_le_zero(budget)
+    case SCon{c, rest}:
+      cite_take_put_bytes(Nat.is_le(Cite.width(c), budget), c, Cite.take(rest, Nat.sub(budget, Cite.width(c))), budget, {==}, cite_take_bytes(rest, Nat.sub(budget, Cite.width(c))))
+
+def cite_rstrip_end_bytes(strip: Bool, +c: Char, +whole: Nat) -> {Nat.is_le(Cite.bytes(Cite.rstrip_end(strip, c)), Nat.add(Cite.width(c), whole)) == True{} : Bool}:
+  match strip:
+    case True{}:
+      cite_le_zero(Nat.add(Cite.width(c), whole))
+    case False{}:
+      cite_le_mono(Cite.width(c), 0n, whole, cite_le_zero(whole))
+
+def cite_rstrip_put_bytes(+c: Char, tail: String, +whole: Nat, ih: {Nat.is_le(Cite.bytes(tail), whole) == True{} : Bool}) -> {Nat.is_le(Cite.bytes(Cite.rstrip_put(c, tail)), Nat.add(Cite.width(c), whole)) == True{} : Bool}:
+  match tail:
+    case SNil{}:
+      cite_rstrip_end_bytes(Cite.edge(c), c, whole)
+    case SCon{d, more}:
+      cite_le_mono(Cite.width(c), Cite.bytes(SCon{d, more}), whole, ih)
+
+def cite_rstrip_bytes(+text: String) -> {Nat.is_le(Cite.bytes(Cite.rstrip(text)), Cite.bytes(text)) == True{} : Bool}:
+  match text:
+    case SNil{}:
+      {==}
+    case SCon{c, rest}:
+      cite_rstrip_put_bytes(c, Cite.rstrip(rest), Cite.bytes(rest), cite_rstrip_bytes(rest))
+
+def cite_prefixed_bytes(text: String, e: {Nat.is_le(Cite.bytes(text), 170n) == True{} : Bool}) -> {Nat.is_le(Cite.bytes(Cite.prefixed(text)), 180n) == True{} : Bool}:
+  match text:
+    case SNil{}:
+      {==}
+    case SCon{c, rest}:
+      e
+
+def cite_final_bytes(enough: Bool, +text: String, e: {Nat.is_le(Cite.bytes(text), 170n) == True{} : Bool}) -> {Nat.is_le(Cite.bytes(Cite.final(enough, text)), 180n) == True{} : Bool}:
+  match enough:
+    case True{}:
+      cite_le_trans(Cite.bytes(text), 170n, 180n, e, {==})
+    case False{}:
+      cite_prefixed_bytes(text, e)
+
+def Laws.cite_name_bytes(text):
+  cite_final_bytes(Cite.long(cite_core(text), 5n), cite_core(text), cite_le_trans(Cite.bytes(Cite.rstrip(Cite.take(Cite.lstrip(Cite.squeezed(Cite.cleaned(text))), 170n))), Cite.bytes(Cite.take(Cite.lstrip(Cite.squeezed(Cite.cleaned(text))), 170n)), 170n, cite_rstrip_bytes(Cite.take(Cite.lstrip(Cite.squeezed(Cite.cleaned(text))), 170n)), cite_take_bytes(Cite.lstrip(Cite.squeezed(Cite.cleaned(text))), 170n)))

@@ -32,6 +32,7 @@ export class PluginSettingTab {containerEl!:HTMLElement;constructor(public app:a
 export class Setting {constructor(_element:HTMLElement){} }
 export const MarkdownRenderer={render:async()=>{}};
 export function setIcon(_element:HTMLElement,_icon:string){}
+export function normalizePath(path:string){return path.replace(/\\/g,'/').replace(/\/+/g,'/').replace(/^\/|\/$/g,'');}
 export function displayTooltip(_element:HTMLElement,_content:string,_options?:object){}
 export function parseLinktext(text:string){const at=text.indexOf('#');return {path:at<0?text:text.slice(0,at),subpath:at<0?'':text.slice(at)};}
 export async function requestUrl(options:any){return (globalThis as any).__annotatorTestRequest(options);}

@@ -78,6 +78,8 @@ export { annotationQuote } from './pdf-annotation';
 import { annotationQuote, otherCopy, resolvePdfAnnotation, resolvePdfAnnotationEarly } from './pdf-annotation';
 import type { Progress } from './progress';
 import type { PdfTextMemory } from './pdf-text-memory';
+import { PdfCitations, type CiteLogic } from './pdf-citations';
+import type { Link, Rect, Run } from './citations';
 /** What the reader says while it reads the document's text. Highlights are painted meanwhile; everything else waits. */
 const INDEXING = 'Indexing PDF text…';
 function nativeViewer(view: FileView): PdfViewer | undefined {
@@ -115,7 +117,7 @@ function pageBox(page: HTMLElement) {
 function ownMutation(record: MutationRecord): boolean {
     if (
         (record.target as Element).closest?.(
-            '.annotator-native-marks, .annotator-area-band, .annotator-area-hint, .annotator-drawing-live'
+            '.annotator-native-marks, .annotator-area-band, .annotator-area-hint, .annotator-drawing-live, .annotator-citation-flash'
         )
     )
         return true;
@@ -124,10 +126,22 @@ function ownMutation(record: MutationRecord): boolean {
         changed.length > 0 &&
         changed.every(node =>
             (node as Element).matches?.(
-                '.annotator-native-marks, .annotator-area-band, .annotator-area-hint, .annotator-drawing-live'
+                '.annotator-native-marks, .annotator-area-band, .annotator-area-hint, .annotator-drawing-live, .annotator-citation-flash'
             )
         )
     );
+}
+/** What the citations ask of the PDF library's document. */
+interface CitedDocument {
+    getPage(page: number): Promise<{
+        view?: number[];
+        getTextContent(): Promise<{
+            items: { str?: string; hasEOL?: boolean; transform?: number[]; width?: number; height?: number }[];
+        }>;
+        getAnnotations?(): Promise<{ subtype?: string; dest?: unknown; rect?: number[] }[]>;
+    }>;
+    getDestination(name: string): Promise<unknown>;
+    getPageIndex(ref: unknown): Promise<number>;
 }
 export class NativePdf {
     private disposed = false;
@@ -700,6 +714,182 @@ export class NativePdf {
     currentPage(): number | null {
         const page = nativeViewer(this.view)?.currentPageNumber;
         return typeof page === 'number' && Number.isSafeInteger(page) && page >= 1 ? page : null;
+    }
+    // ── Citations ───────────────────────────────────────────────────────────
+    // Nothing below runs unless the Citations view asks: no page is read and no link looked at for a PDF whose citations nobody looks at.
+    private cited: { doc: PdfDocument; reader: PdfCitations } | null = null;
+    /** Whether the document's text has been read (the citations wait for it). */
+    get textRead(): boolean {
+        return !!this.document && this.pages.length > 0 && !this.error;
+    }
+    /** What is known of this PDF's citations; made when first asked for and let go with the document. */
+    citations(logic: CiteLogic): PdfCitations | null {
+        const doc = this.document;
+        if (!doc || this.disposed) return null;
+        if (this.cited?.doc === doc) return this.cited.reader;
+        this.cited?.reader.dispose();
+        const whole = doc as unknown as CitedDocument,
+            destinations = new Map<string, Promise<[number, number | null, number | null] | null>>();
+        const tenth = (value: number) => Math.round(value * 10) / 10;
+        const reach = (destination: unknown): Promise<[number, number | null, number | null] | null> => {
+            const resolve = async (): Promise<[number, number | null, number | null] | null> => {
+                try {
+                    const found =
+                        typeof destination === 'string' ? await whole.getDestination(destination) : destination;
+                    if (!Array.isArray(found)) return null;
+                    const index = typeof found[0] === 'number' ? found[0] : await whole.getPageIndex(found[0]),
+                        kind = (found[1] as { name?: string } | undefined)?.name,
+                        top =
+                            kind === 'XYZ'
+                                ? found[3]
+                                : kind === 'FitH' || kind === 'FitBH'
+                                  ? found[2]
+                                  : kind === 'FitR'
+                                    ? found[5]
+                                    : null,
+                        left = kind === 'XYZ' || kind === 'FitR' ? found[2] : null;
+                    if (!Number.isSafeInteger(index)) return null;
+                    return [
+                        index + 1,
+                        typeof top === 'number' ? tenth(top) : null,
+                        typeof left === 'number' ? tenth(left) : null
+                    ];
+                } catch {
+                    return null;
+                }
+            };
+            if (typeof destination !== 'string') return resolve();
+            let known = destinations.get(destination);
+            if (!known) destinations.set(destination, (known = resolve()));
+            return known;
+        };
+        const reader = new PdfCitations(
+            {
+                pages: doc.numPages,
+                textLines: number => this.textLines(number),
+                runs: async number => {
+                    const page = await whole.getPage(number),
+                        content = await page.getTextContent(),
+                        view = Array.isArray(page.view) ? page.view : [0, 0, 612, 792];
+                    return {
+                        height: view[3] - view[1],
+                        runs: content.items
+                            .filter(item => item.str || item.hasEOL)
+                            .map(
+                                item =>
+                                    [
+                                        item.str || '',
+                                        tenth(item.transform?.[4] ?? 0),
+                                        tenth(item.transform?.[5] ?? 0),
+                                        tenth(item.width ?? 0),
+                                        tenth(item.height || Math.abs(item.transform?.[3] ?? 0)),
+                                        item.hasEOL ? 1 : 0
+                                    ] as Run
+                            )
+                    };
+                },
+                links: async number => {
+                    const page = await whole.getPage(number),
+                        links: Link[] = [];
+                    for (const made of (await page.getAnnotations?.()) || []) {
+                        if (made.subtype !== 'Link' || !made.dest || !Array.isArray(made.rect)) continue;
+                        const to = await reach(made.dest);
+                        if (to)
+                            links.push([
+                                tenth(made.rect[0]),
+                                tenth(made.rect[1]),
+                                tenth(made.rect[2]),
+                                tenth(made.rect[3]),
+                                ...to
+                            ]);
+                    }
+                    return links;
+                }
+            },
+            logic
+        );
+        this.cited = { doc, reader };
+        return reader;
+    }
+    /** A page's text line by line, from what the reader already holds. */
+    private textLines(number: number): string[] | null {
+        const page = this.pages.find(item => item.number === number);
+        if (!page) return null;
+        const lines: string[] = [];
+        let from = 0;
+        for (const at of this.lineEnds.get(number) || []) {
+            lines.push(page.text.slice(from, at));
+            from = at;
+        }
+        lines.push(page.text.slice(from));
+        return lines;
+    }
+    /** Go to a place in the PDF as a followed link is gone to: Back returns from it. */
+    goTo(page: number, top: number | null, left: number | null): boolean {
+        const viewer = nativeViewer(this.view) as
+            (PdfViewer & { scrollPageIntoView?(to: { pageNumber: number; destArray?: unknown[] }): void }) | undefined;
+        if (!viewer || this.disposed) return false;
+        this.trail.push({
+            page: viewer.currentPageNumber,
+            top: viewer.container?.scrollTop ?? 0,
+            left: viewer.container?.scrollLeft ?? 0
+        });
+        if (this.trail.length > 30) this.trail.shift();
+        this.showBack();
+        try {
+            if (typeof viewer.scrollPageIntoView === 'function')
+                viewer.scrollPageIntoView({
+                    pageNumber: page,
+                    ...(top === null ? {} : { destArray: [null, { name: 'XYZ' }, left, top, null] })
+                });
+            else viewer.currentPageNumber = page;
+        } catch {
+            viewer.currentPageNumber = page;
+        }
+        return true;
+    }
+    /** Show where something is on a page for a moment: rectangles in the page's own units. The page is brought into view first if `bring`. */
+    flash(page: number, rects: readonly Rect[], bring = false): boolean {
+        const viewer = nativeViewer(this.view) as
+            | (PdfViewer & {
+                  getPageView?(
+                      index: number
+                  ):
+                      | { div?: HTMLElement; viewport?: { convertToViewportRectangle(rect: number[]): number[] } }
+                      | undefined;
+                  scrollPageIntoView?(to: { pageNumber: number; destArray?: unknown[] }): void;
+              })
+            | undefined;
+        const shown = viewer?.getPageView?.(page - 1);
+        if (!viewer || !shown?.div || !shown.viewport || !rects.length || this.disposed) return false;
+        if (bring) {
+            const top = Math.max(...rects.map(rect => rect[3]));
+            try {
+                viewer.scrollPageIntoView?.({
+                    pageNumber: page,
+                    destArray: [null, { name: 'XYZ' }, null, top + 80, null]
+                });
+            } catch {
+                /* The page is shown where it is. */
+            }
+        }
+        const doc = shown.div.ownerDocument;
+        shown.div.querySelectorAll('.annotator-citation-flash').forEach(old => old.remove());
+        const layer = doc.createElement('div');
+        layer.className = 'annotator-citation-flash';
+        for (const rect of rects) {
+            const [a, b, c, d] = shown.viewport.convertToViewportRectangle([...rect]),
+                box = doc.createElement('div');
+            box.className = 'annotator-citation-flash-box';
+            box.style.left = `${Math.min(a, c) - 2}px`;
+            box.style.top = `${Math.min(b, d) - 2}px`;
+            box.style.width = `${Math.abs(c - a) + 4}px`;
+            box.style.height = `${Math.abs(d - b) + 4}px`;
+            layer.appendChild(box);
+        }
+        shown.div.appendChild(layer);
+        setTimeout(() => layer.remove(), 1800);
+        return true;
     }
     /** The passage as it reads on the page: words joined across line ends get their space back. */
     display(annotation: Annotation): string | null {
