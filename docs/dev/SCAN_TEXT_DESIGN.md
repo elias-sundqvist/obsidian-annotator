@@ -503,8 +503,87 @@ but breaks some lines in two.
 - *A strongly tilted scan* is therefore the case to measure with the real
   recogniser before anything is promised about Preview and iOS.
 
-**Not built:** the recogniser and its worker, the list of its files, where
-the page's own text is (for pages with a stamp over a scan), the dialog,
+## 14. The spike: which build, and the first real numbers
+
+The owner said yes to the downloads on 2026-11-14: `tesseract-wasm` 0.11.0,
+`tesseract.js` 7.0.0 with its core, and English data
+(`@tesseract.js-data/eng` 1.0.0), as npm packages, for comparison. Both
+builds were given the two picture pages of the scanned fixture (1275 by 1650
+pixels, a little tilted, grainy) with the same English data.
+
+| In Node, on a laptop with an Apple M5 Max | tesseract-wasm | tesseract.js |
+| --- | --- | --- |
+| Words right, in order (page 1; page 2) | 80 of 80; 45 of 45 | 80 of 80; 45 of 45 |
+| Boxes against where the type was set | within 0.17% of the page's width | the same |
+| Extra "words" from the grain | 1 | 4 |
+| Time (page 1; page 2) | 0.42 s; 0.22 s | 0.37 s; 0.20 s |
+| Engine and language as bytes handed to it | yes | no: an address to load the language from |
+| Pixels in | yes | no: an encoded picture |
+| Engine | 1.84 MB | 2.86 MB |
+
+**tesseract-wasm is chosen.** The two read alike and take the same time, as
+they should: both are Tesseract with the same data. tesseract-wasm takes
+bytes and pixels directly, which is what lets the worker be cut off from the
+network, and its engine is a megabyte smaller. tesseract.js and its core are
+not in the repository.
+
+In a browser's worker started from text and given everything as bytes
+(Chromium 156, the engine's own JavaScript bundled, 89 kB), with `fetch`,
+`XMLHttpRequest`, `WebSocket`, `importScripts` and the rest removed inside
+the worker before anything runs:
+
+| | Time | Words right | Engine memory | Interface held at most |
+| --- | ---: | --- | ---: | ---: |
+| Engine and English ready | 0.08 s | | | |
+| Fixture page 1 | 1.0 s | 80 of 80 | 29 MB | 5 ms |
+| Fixture page 2 | 0.5 s | 45 of 45 | 29 MB | 5 ms |
+| A full page of print (552 words), 2550 by 3300 (300 dpi) | 6.6 s | 552 of 552 | 96 MB | 15 ms |
+| The same at 1700 by 2200 (200 dpi) | 6.1 s | 552 of 552 | 96 MB | 6 ms |
+| The same at 1275 by 1650 (150 dpi) | 5.3 s | 552 of 552 | 96 MB | 15 ms |
+| Twenty full pages, one after another | 6.9 s a page | | 96 MB at the end | |
+
+What the numbers say, and what they do not:
+
+- **Time goes with the number of words, not the size of the picture.** A
+  full page of print takes about 6 to 7 seconds here. So 300 full pages are
+  about half an hour on this desktop, not the 5 to 20 minutes section 8
+  guessed. (The browser pane was in the background while this ran, and the
+  same engine read the fixture pages twice as fast in Node, so a visible
+  window may do better. It has not been measured in one.)
+- **Memory is flat:** 96 MB in the engine for a full page at 300 dpi, the
+  same after twenty pages. Section 8 guessed 200 to 350 MB.
+- **The interface is not held:** turning a picture into pixels happens in
+  the worker (0.1 s for the largest), and the page stayed free to within
+  15 ms throughout.
+- The full page is clean type drawn by the browser, so "552 of 552" says
+  the engine works, not how it reads a poor scan. The fixture pages are the
+  only scan-like ones measured.
+- **Not measured:** inside Obsidian; on Android; on iOS; drawing a PDF page
+  to a canvas at 300 dpi (the browser test drew its own pictures); a
+  strongly tilted, faint or photographed page.
+
+One thing to know: the recogniser took a speck of the fixture's grain for a
+full stop and was 78% sure of it. The floor on sureness does not catch such
+a speck; a stray full stop in the text is the price.
+
+**Built on it:** `src/scan-read.ts` (the reader: engine and language in as
+bytes, pixels in, words out), `src/scan-worker.ts` (the worker's whole
+program, carried in `main.js` as text, network removed), `src/scan-engine.ts`
+(the interface thread's side; no recogniser where a worker cannot start),
+`src/scan-manifest.ts` (the engine and English, with the sizes and SHA-256
+of the published npm files, which a test compares with the packages the
+lock file names). `test/scan-read.test.mjs` runs the real engine on the
+fixture's own pictures (read from the PDF by a small JPEG reader written
+for the tests) and through to the searchable copy.
+
+The address in the manifest is this repository's release assets, tag
+`recognition-1`. Nothing is there: putting files there is a release, which
+is the owner's. Until then the files are taken from the plugin's folder
+when put there by hand, if their checksums match.
+
+## 15. Not built yet
+
+Where the page's own text is (for pages with a stamp over a scan), the dialog,
 progress, Stop and Continue, opening the copy and pointing the note at it,
 the measurements of section 8, and the user documentation (README,
 CHANGELOG, SECURITY), which waits until there is something a reader can use.
