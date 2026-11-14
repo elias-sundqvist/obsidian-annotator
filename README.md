@@ -420,6 +420,19 @@ From the sidebar's menu:
 - **Export PDF with annotations** (PDFs).
 - Hypothesis JSON, from the command palette, for other annotation tools.
 
+### Publishing your annotations
+
+A site generator (Zola, Quartz, Hugo and the like) does not run Obsidian's
+plugins, so it shows an annotation note as it is stored: the data as a block
+of code, and a warning about an unknown language. Publish a summary instead:
+**Export annotations to a summary note** writes the passages and your notes
+as ordinary Markdown beside the annotation note. Under **Export style** in
+the settings choose **Plain block quotes** if your generator does not know
+Obsidian's callouts, and turn **Link exports back to the passage** off, since
+those links lead into the annotation note. Then leave the annotation note
+itself out of what you publish. Each export writes a new summary note and
+overwrites nothing, so export again after annotating more.
+
 ## On phones and tablets
 
 <p>
