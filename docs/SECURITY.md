@@ -52,12 +52,14 @@ assets…" (`readers.test.mjs`), "network CSS, dynamic selectors…"
 
 ## Known and not yet changed
 
-- **A note's `annotation-target` is followed without asking.** An http(s)
-  target is fetched, and an absolute path outside the vault is read and, if it
-  is a real PDF or EPUB, copied into the vault, when the note is opened in the
-  reader (automatically only if "open annotation notes in the reader" is on,
-  which is off by default). A note from someone else can therefore cause one
-  fetch or one local read. Planned: confirm once per note and target.
+- **A note's `annotation-target` outside the vault is asked about, once.**
+  Before an http(s) target is fetched, or a file outside the vault is read
+  and copied in, the reader asks, naming the address or the path. The answer
+  is remembered for that address (for a web address it can be given for the
+  whole site), so a later change of the file at the same path or address is
+  not asked about again. A Zotero or Calibre link is first followed to a
+  path inside the folder the settings name, and that path is then asked
+  about in the same way.
 - **Remote video files** (`.mp4` and similar targets) are loaded by the
   built-in player from wherever the target points.
 - **Imported comments** are rendered as Markdown like the user's own.
