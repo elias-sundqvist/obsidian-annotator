@@ -88,6 +88,7 @@ import { EpubView, EPUB_VIEW, type FigureCapture } from './epub';
 import { makeSnapshot, SnapshotHost } from './snapshot';
 import { refreshSnapshotEditors, snapshotEditorExtension } from './snapshot-editor';
 import { noteFolding, refold } from './note-folding';
+import { appLink, calibreFile, followedLinks, zoteroFile } from './app-links';
 import type { EditorView } from '@codemirror/view';
 import { LiveWebHost, type GuestElement, type WebFigureCapture } from './live-web';
 import {
@@ -194,6 +195,8 @@ export default class AnnotatorPlugin extends Plugin {
     }
     private positions: Record<string, ReadingPosition> = {};
     private localVaultTargets: Record<string, string> = {};
+    /** Zotero and Calibre links already followed: the link as written, and the file it was found to mean. */
+    private appLinkPaths: Record<string, string> = {};
     private remoteSources: Record<string, string> = {};
     /** Targets outside the vault the user has allowed: exact addresses, and `origin:https://host` for a whole site. */
     private approvedSources = new Set<string>();
@@ -260,6 +263,8 @@ export default class AnnotatorPlugin extends Plugin {
         /** Whether the annotation sidebar comes forward when a source is opened. */ sidebarOnOpen: boolean;
         /** Whether an annotation's stored data is folded away in Live Preview. */ foldData: boolean;
         /** A second property a note's source is read from when it has no `annotation-target`; empty for none. */ targetAlias: string;
+        /** Zotero's data folder, where its links are followed to; empty for the usual place in the home folder. */ zoteroFolder: string;
+        /** Calibre library folders, one to a line, where its book links are followed to. */ calibreLibraries: string;
         /** What a copied or dragged annotation link is, as a template; empty for the plain link. */ linkTemplate: string;
         /** The heading a new annotation note starts with. */ noteHeading: string;
         /** Whether where the reader was is written to the note on leaving a source. */ progressProperty: boolean;
@@ -272,6 +277,8 @@ export default class AnnotatorPlugin extends Plugin {
         sidebarOnOpen: true,
         foldData: true,
         targetAlias: '',
+        zoteroFolder: '',
+        calibreLibraries: '',
         linkTemplate: '',
         noteHeading: DEFAULT_NOTE_HEADING,
         progressProperty: false,
@@ -410,6 +417,8 @@ export default class AnnotatorPlugin extends Plugin {
             sidebarOnOpen: shown.sidebarOnOpen !== false,
             foldData: shown.foldData !== false,
             targetAlias: targetAliasName(shown.targetAlias),
+            zoteroFolder: typeof shown.zoteroFolder === 'string' ? shown.zoteroFolder.trim().slice(0, 1000) : '',
+            calibreLibraries: typeof shown.calibreLibraries === 'string' ? shown.calibreLibraries.slice(0, 4000) : '',
             linkTemplate: typeof shown.linkTemplate === 'string' ? shown.linkTemplate.slice(0, 2000) : '',
             noteHeading: typeof shown.noteHeading === 'string' ? shown.noteHeading.slice(0, 200) : DEFAULT_NOTE_HEADING,
             progressProperty: shown.progressProperty === true,
@@ -431,6 +440,7 @@ export default class AnnotatorPlugin extends Plugin {
         });
         this.remoteHistory = remoteRevisions(this.savedData.remoteHistory);
         this.localVaultTargets = localVaultAliases(this.savedData.localVaultTargets);
+        this.appLinkPaths = followedLinks(this.savedData.appLinkPaths);
         for (const [path, value] of Object.entries(settingsObject(this.savedData.nativeProgress)))
             if (typeof value === 'string' && value.length < 40) this.progressSeen[path] = value;
         const positions = this.savedData.positions;
@@ -1553,7 +1563,14 @@ export default class AnnotatorPlugin extends Plugin {
             return annotationTarget(this.targetProperty(note, 'annotation-target')) ? `video:${note.path}` : null;
         const raw = annotationTarget(this.targetProperty(note, 'annotation-target'));
         if (!raw) return null;
-        for (const [index, value] of targetCandidates(raw, this.customDefaultPath).entries()) {
+        for (const [index, candidate] of targetCandidates(raw, this.customDefaultPath).entries()) {
+            let value = candidate;
+            // A Zotero or Calibre link is the file it was found to mean; one not yet followed is followed on opening.
+            if (index === 0 && appLink(value)) {
+                const followed = this.appLinkPaths[value.trim()];
+                if (!followed) return `applink:${value.trim()}`;
+                value = followed;
+            }
             if (/^https?:/i.test(value)) {
                 try {
                     const url = httpUrl(value),
@@ -3398,6 +3415,7 @@ export default class AnnotatorPlugin extends Plugin {
                 positions: { ...this.positions },
                 nativeProgress: { ...this.progressSeen },
                 localVaultTargets: { ...this.localVaultTargets },
+                appLinkPaths: { ...this.appLinkPaths },
                 remoteSources: { ...this.remoteSources },
                 approvedSources: [...this.approvedSources],
                 remoteHistory: clone(this.remoteHistory),
@@ -4316,6 +4334,11 @@ export default class AnnotatorPlugin extends Plugin {
             activate && (!destination || this.app.workspace.getMostRecentLeaf() === destination);
         requireCurrent();
         let key = this.targetKey(note);
+        if (key?.startsWith('applink:')) {
+            await this.followAppLink(key.slice(8));
+            requireCurrent();
+            key = this.targetKey(note);
+        }
         if (!key) throw new Error(this.unresolvedTarget(note));
         if (this.targetType(note) === 'video') {
             const leaf = destination || this.app.workspace.getLeaf(newLeaf);
@@ -4525,6 +4548,41 @@ export default class AnnotatorPlugin extends Plugin {
         } finally {
             this.downloads.delete(url);
         }
+    }
+    /**
+     * A Zotero or Calibre link names a file those programs keep, not where it is. It is found once, by looking in the
+     * folder the settings name (Zotero's usual place in the home folder when none is named), and remembered. Nothing is
+     * read yet: the file found is then an ordinary file outside the vault, asked about before it is copied.
+     */
+    private async followAppLink(raw: string) {
+        const link = appLink(raw);
+        if (!link) throw new Error('This is not a Zotero or Calibre link the reader can follow.');
+        if (Platform.isMobile)
+            throw new Error(
+                'Open this note on a computer first: the link is followed there, and the copy kept in the vault is read here afterwards.'
+            );
+        const files = this.desktopFileSystem(),
+            list = async (folder: string) =>
+                (await files.readdir(folder, { withFileTypes: true })).map(entry => ({
+                    name: entry.name,
+                    folder: entry.isDirectory()
+                }));
+        const path =
+            link.app === 'zotero'
+                ? await zoteroFile(link, this.display.zoteroFolder || `${this.homeFolder()}/Zotero`, list)
+                : await calibreFile(link, this.display.calibreLibraries.split(/\r?\n/), list);
+        this.appLinkPaths[raw] = path;
+        await this.persist();
+    }
+    private homeFolder(): string {
+        // The desktop app's own process says where the home folder is; a phone has none to name.
+        const env = (globalThis as unknown as { process?: { env?: Record<string, string | undefined> } }).process?.env,
+            home = env?.HOME || env?.USERPROFILE;
+        if (!home)
+            throw new Error(
+                "Name Zotero's data folder in Annotator's settings: this computer's home folder is not known."
+            );
+        return home.replace(/[\\/]+$/, '');
     }
     private desktopFileSystem(): typeof import('node:fs/promises') {
         // Desktop only, and only when a file outside the vault is read: an import at the top would be loaded on phones too.
@@ -5052,6 +5110,28 @@ class NativeSettings extends PluginSettingTab {
                 control
                     .setValue(plugin.display.sidebarOnOpen)
                     .onChange(value => save(plugin.setDisplay({ sidebarOnOpen: value })))
+            );
+        new Setting(root)
+            .setName('Zotero data folder')
+            .setDesc(
+                'A note may name its source by a Zotero link to a PDF (zotero://open-pdf/library/items/…). The file is looked for in this folder, under "storage". Leave empty for Zotero\'s usual place, the folder Zotero in your home folder. Computers only.'
+            )
+            .addText(control =>
+                control
+                    .setPlaceholder('~/Zotero')
+                    .setValue(plugin.display.zoteroFolder)
+                    .onChange(value => save(plugin.setDisplay({ zoteroFolder: value.trim().slice(0, 1000) })))
+            );
+        new Setting(root)
+            .setName('Calibre library folders')
+            .setDesc(
+                "A note may name its source by a Calibre book link (calibre://show-book/Library/42). Name each library's folder here, one to a line: the book is looked for there, and its EPUB or PDF is the source. Computers only."
+            )
+            .addTextArea(control =>
+                control
+                    .setPlaceholder('/Users/me/Calibre Library')
+                    .setValue(plugin.display.calibreLibraries)
+                    .onChange(value => save(plugin.setDisplay({ calibreLibraries: value.slice(0, 4000) })))
             );
         new Setting(root)
             .setName('Also read the source from this property')

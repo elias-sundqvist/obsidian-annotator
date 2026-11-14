@@ -1318,6 +1318,15 @@
       "dependsOn": [],
       "estimate": 1,
       "notes": "Done 2026-11-14: Built 2026-11-14 on branch feature/fold-stored-data (not merged, not released). Setting 'Also read the source from this property'; targetAliasName in src/preferences.ts; targetProperty in src/main.ts reads it when a note has no usable annotation-target. annotation-target wins where both are there and is still what new notes are written with. Tests in readers.test.mjs and plugin-boundary.test.mjs. Answers GitHub issue 299. Not tried in the running app."
+    },
+    {
+      "id": "app-links",
+      "title": "Zotero and Calibre links as a note's source",
+      "status": "done",
+      "parent": "community",
+      "dependsOn": [],
+      "estimate": 2,
+      "notes": "Done 2026-11-14: Built 2026-11-14 on branch feature/fold-stored-data (not merged, not released). src/app-links.ts recognises zotero://open-pdf|select/(library|groups/N)/items/KEY and calibre://show-book|view-book|book-details/Library/ID, and finds the file by looking in the folder the settings name (Zotero's data folder; Calibre library folders), without the program running or its database read. main.ts follows a link on opening, remembers it, and then treats the file as any file outside the vault (asked about once, copied into Annotator sources). Both programs were installed and looked at: Zotero 10.0.9 keeps an attachment under storage/<attachment key>/, and a link to the parent item names no folder (its local API that could map one to the other is off by default); Calibre 9.18 keeps a book under <Library>/<Author>/<Title> (<id>)/. Tried end to end in the running app on macOS against both real folders. Tests: test/app-links.test.mjs and plugin-boundary.test.mjs. Not tried on Windows or Linux (the Windows path joining is tested). Not done: opening at the page a Zotero link names. Answers GitHub issues 22 and 78."
     }
   ]
 }

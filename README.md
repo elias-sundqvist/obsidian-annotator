@@ -63,6 +63,7 @@ The `annotation-target` may be written in any of the usual ways:
 | An embed | `annotation-target: "![[Attention.pdf]]"` |
 | A Markdown link | `annotation-target: "[Attention](Papers/Attention.pdf)"` |
 | A web address | `annotation-target: https://arxiv.org/pdf/1706.03762` |
+| A Zotero or Calibre link | `annotation-target: zotero://open-pdf/library/items/N7SMB24A` ([Zotero](#with-zotero), [Calibre](#with-calibre)) |
 | An HTML file in the vault | `annotation-target: "[[Saved page.html]]"` |
 | A Dataview inline field | `annotation-target:: [[Attention.pdf]]` in the note's text |
 
@@ -352,13 +353,17 @@ property.
 
 Zotero can stay your library while you annotate in Obsidian.
 
-- **The PDF.** Zotero keeps each attachment in its data folder, under
-  `storage`, in a folder with an eight-character name (in Zotero, right-click
-  the PDF and choose **Show File**). Give that path as the note's
-  `annotation-target`, for example
-  `/Users/me/Zotero/storage/N7SMB24A/Attention.pdf`. The reader asks once,
-  copies the file into `Annotator sources` and reads the copy; Zotero's file
-  is never changed.
+- **The PDF.** Give the note's `annotation-target` Zotero's own link to the
+  PDF, for example `zotero://open-pdf/library/items/N7SMB24A`, where the
+  last part is the PDF's key. On a computer the reader finds the file in
+  Zotero's data folder (the folder
+  `Zotero` in your home folder, or the one named in the setting **Zotero data
+  folder**), asks once, copies it into `Annotator sources` and reads the
+  copy. Zotero need not be running, and its file is never changed. The link
+  must be to the PDF itself: a link to the item it belongs to names no file.
+  The file's path works too
+  (`/Users/me/Zotero/storage/N7SMB24A/Attention.pdf`; in Zotero, right-click
+  the PDF and choose **Show File**).
 - **Highlights made in Zotero's own reader** are kept in Zotero's database,
   not in the PDF, so the file in `storage` does not carry them. Zotero can
   export a copy that does (**File → Export PDF…**). Put that copy in your
@@ -369,9 +374,21 @@ Zotero can stay your library while you annotate in Obsidian.
 - **Details.** **Add the PDF's details to the note** reads what the PDF
   records about itself. Nothing is read from Zotero's database.
 
-The first point was tried on macOS with a folder laid out like Zotero's. The
+Following a link was tried on macOS against a Zotero 10 library. The
 exchange of highlights rests on both programs following the PDF standard and
 has not been tried with Zotero itself.
+
+## With Calibre
+
+A book in a Calibre library can be a note's source by its Calibre link, for
+example `annotation-target: calibre://show-book/Calibre_Library/42` (in
+Calibre, right-click the book's details and choose **Copy link to book**).
+Name the library's folder in the setting **Calibre library folders**. On a
+computer the reader finds the book there, takes its EPUB (or its PDF when
+there is no EPUB, or the one a `view-book` link names), asks once and reads a
+copy kept in `Annotator sources`. Calibre need not be running and its files
+are never changed. A book that has neither format has to be converted in
+Calibre first. This was tried on macOS against a Calibre 9 library.
 
 ## Reading progress
 

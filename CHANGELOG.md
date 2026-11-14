@@ -13,6 +13,10 @@ What changed for someone using Annotator. How to use each thing is in
   (setting **Also read the source from this property**), for notes that
   already name it as `source`, `pdf` or the like. `annotation-target` is
   still what new notes are written with.
+- A note's source can be a Zotero link to a PDF or a Calibre link to a book.
+  On a computer the file is found in Zotero's data folder or in the Calibre
+  library named in the settings, without either program running, and is then
+  asked about and copied in like any file outside the vault.
 
 ## 0.3.1 (2026-11-13)
 

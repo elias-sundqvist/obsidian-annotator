@@ -801,6 +801,28 @@ test('a new annotation note starts as the reader set it: another heading, or a t
   await h.plugin.setDisplay({noteTemplate:'Templates/Gone.md'});await h.plugin.ensureNote('d.pdf');assert.equal(made.at(-1)[1],'---\nannotation-target: "d.pdf"\n---\n\n## Highlights\n');assert.equal(made.length,4);
  }finally{h.dispose();}
 });
+test('a Zotero or Calibre link as a target is followed once to its file, remembered, and then an ordinary file outside the vault',async()=>{
+ const fs=nodeRequire('fs'),os=nodeRequire('os'),path=nodeRequire('path'),root=fs.mkdtempSync(path.join(os.tmpdir(),'annotator-applink-'));
+ const put=file=>{const full=path.join(root,file);fs.mkdirSync(path.dirname(full),{recursive:true});fs.writeFileSync(full,'%PDF-1.7\n');return full;};
+ const paper=put('Zotero/storage/IKUUN4F6/Paper.pdf'),book=put('Books/Jane Doe/A Book (7)/A Book - Jane Doe.epub');
+ const h=host();try{h.plugin.manifest={id:'obsidian-annotator'};let saves=0;h.plugin.persist=async()=>{saves++;};
+  const zotero=h.add('Z.md','',{'annotation-target':'zotero://open-pdf/library/items/IKUUN4F6?page=2'}),calibre=h.add('C.md','',{'annotation-target':'calibre://show-book/Books/7'}),item=h.add('I.md','',{'annotation-target':'zotero://select/library/items/Y2KGGJ99'});
+  await h.plugin.onload();
+  // Not followed yet: the note is an annotation note, and its key says a link is waiting.
+  assert.equal(h.plugin.targetKey(zotero),'applink:zotero://open-pdf/library/items/IKUUN4F6?page=2');assert.equal(h.plugin.targetKey(calibre),'applink:calibre://show-book/Books/7');
+  h.plugin.display={...h.plugin.display,zoteroFolder:path.join(root,'Zotero'),calibreLibraries:`${path.join(root,'Elsewhere')}\n${path.join(root,'Books')}`};
+  await h.plugin.followAppLink('zotero://open-pdf/library/items/IKUUN4F6?page=2');await h.plugin.followAppLink('calibre://show-book/Books/7');
+  assert.deepEqual(h.plugin.appLinkPaths,{'zotero://open-pdf/library/items/IKUUN4F6?page=2':paper,'calibre://show-book/Books/7':book});assert.equal(saves,2);
+  // Followed: the key is the file's, as for any file outside the vault that has not been copied in yet.
+  assert.equal(h.plugin.targetKey(zotero),`remote:file://${paper.split('/').map(encodeURIComponent).join('/')}`);
+  assert.match(h.plugin.targetKey(calibre),/^remote:file:\/\/.*A%20Book%20-%20Jane%20Doe\.epub$/);
+  // A link to the item and not to its PDF cannot be followed, and says what to do; nothing is remembered for it.
+  await assert.rejects(h.plugin.followAppLink('zotero://select/library/items/Y2KGGJ99'),/copy the PDF's own link in Zotero/);assert.equal(h.plugin.targetKey(item),'applink:zotero://select/library/items/Y2KGGJ99');assert.equal(saves,2);
+  await assert.rejects(h.plugin.followAppLink('https://example.org/a.pdf'),/not a Zotero or Calibre link/);
+  // On a phone there is no folder to look in: it says to open the note on a computer first.
+  Platform.isMobile=true;try{await assert.rejects(h.plugin.followAppLink('calibre://show-book/Books/7'),/on a computer first/);}finally{Platform.isMobile=false;}
+ }finally{h.dispose();fs.rmSync(root,{recursive:true,force:true});}
+});
 test('a note may name its source under a second property of the reader\'s choosing; annotation-target wins where both are there',async()=>{
  const {Notice}=await import('./.generated/plugin-boundary.mjs');
  const h=host();try{h.plugin.manifest={id:'obsidian-annotator'};h.add('Paper.pdf');h.add('Other.pdf');
