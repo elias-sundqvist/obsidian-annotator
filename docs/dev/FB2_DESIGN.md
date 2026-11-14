@@ -381,8 +381,8 @@ the same hazard beside another EPUB plugin; that is a separate fix.)
 Nothing the converter uses is desktop-only: `DOMParser` for XML,
 `TextDecoder` with legacy labels, `atob`, `crypto.subtle`, and the unzipper
 already used for EPUB. The reader it feeds is the one that already runs on
-phones and tablets. Not yet tried on a device or in the iOS Simulator
-harness; memory on a phone with a large illustrated book is the open
+phones and tablets. Tried in iOS WebKit in the Simulator harness (section
+9), not on a device; memory on a phone with a large illustrated book is the open
 question (section 4).
 
 For a vault with no FB2 files:
@@ -439,7 +439,7 @@ Tests, by name (those marked ● are in the prototype, `test/fb2.test.mjs`):
 - ● the plugin starts when another plugin already opens `.fb2`, and opens a zipped book in the book view by name
 - ○ every row of the fixture table not marked above (spans in tables, SVG binaries, nested links)
 - ○ a live check in Obsidian on desktop, Android and iOS, with screenshots, as the EPUB results notes have
-- ○ the iOS Simulator harness with an FB2 in its fixture vault
+- ○ the iOS Simulator harness with an FB2 in its fixture vault (done by hand once, section 9; not scripted)
 - ○ proofs: the two laws of section 3, with their negative controls
 
 ## 7. Estimate and recommendation
@@ -539,6 +539,18 @@ closed and reopened.
   pane that was not on screen, so animation frames were replaced by timers for
   the run. Screenshots: [evidence/fb2](evidence/fb2).
 
+- The same build in iOS WebKit, in the repository's Simulator harness app
+  (iPhone 17 Pro; again the stand-in, not Obsidian for iOS): the
+  windows-1251 hand-made book opened in 376 ms and the 1.31 MB book in
+  125 ms; `TextDecoder` knew `windows-1251`, `koi8-r`, `ibm866` and
+  `utf-16le`; a highlight was saved, and restored after the app was
+  relaunched; a footnote reference went to its note and Back returned; both
+  pictures and the table were shown.
+
+**The critique asked for in the brief is not in this note.** A reviewer was
+given the note and the code and had not reported when this was written; its
+findings, and what changes because of them, are still to be added.
+
 **What was not tried.**
 
 - **Obsidian itself**, on any platform. The installed desktop app's
@@ -547,7 +559,7 @@ closed and reopened.
   `fb2`/`fbz`, a click on an `.fb2` in the file explorer, **Annotate** in the
   file menu, `setViewState` for a `.fb2.zip` and what a restored workspace
   does with it, the sidebar beside an FB2, a rename of the file.
-- Phones and tablets, including the iOS Simulator harness.
+- A real phone or tablet, Android, and an iPad.
 - Pages layout, the reading controls, RTL page turns and the annotation
   sidebar with an FB2 on screen (they are the reader's own and are not
   format-specific, but were not looked at).
