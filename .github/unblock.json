@@ -1345,6 +1345,15 @@
       "dependsOn": [],
       "estimate": 1,
       "notes": "Done 2026-11-14: Built 2026-11-14 on branch feature/embedded-highlights (not merged, not released). A target or a default folder that starts with ../ or ./ is taken from the vault's own folder on this computer (desktop only; a phone has no such folder and passes it over). A relative target that is a file of the vault is still that file. Test in plugin-boundary.test.mjs for Linux and Windows base paths. Tried in the running app on macOS: with \"../<folder>/\" as a default folder, a note naming a PDF in the folder beside the vault was resolved there and asked about before copying. This is the part of GitHub issue 150 that was closed as not done."
+    },
+    {
+      "id": "outside-file-guard",
+      "title": "Never write beside a file opened from outside the vault",
+      "status": "done",
+      "parent": "community",
+      "dependsOn": [],
+      "estimate": 1,
+      "notes": "Done 2026-11-14: Built 2026-11-14 on branch feature/embedded-highlights (not merged, not released). Found by the Open-with plan: since Obsidian 1.14.4 a file outside the vault can be opened, its path is a file: address, and the reader would have named its note after it. Now such a source has no key: no painter, no note, no export, no saved position; ensureNote refuses it whatever led there; a notice says why, once per file. Test in plugin-boundary.test.mjs. NOT tried in a running Obsidian 1.14.4 or later: the test vault runs 1.13.7, so what 0.3.1 really did there, and that the guard holds, is unconfirmed in the app."
     }
   ]
 }

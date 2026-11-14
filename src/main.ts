@@ -1274,8 +1274,33 @@ export default class AnnotatorPlugin extends Plugin {
         const selected = this.leafCollections.get(view.leaf);
         return selected?.source === source ? collectionKey(source, selected.note) : source;
     }
+    /**
+     * A file Obsidian opened from outside the vault (it can, since 1.14.4). Its path is a `file:` address, and
+     * Obsidian's own file functions write wherever such a path says. The reader's notes, copies and exports are
+     * named after their source, so such a file is never annotated where it lies: nothing is written beside it.
+     */
+    private outsideVault(file: { path: string }): boolean {
+        return (
+            /^(?:file:|[a-z]:[\\/]|[\\/])/i.test(file.path) ||
+            typeof (file as { getRealPath?: unknown }).getRealPath === 'function'
+        );
+    }
+    private readonly outsideTold = new Set<string>();
+    /** Said once for each such file: why it has no annotations, and how to have them. */
+    private tellOutside(file: { path: string }) {
+        if (this.outsideTold.has(file.path)) return;
+        this.outsideTold.add(file.path);
+        new Notice(
+            "This file is outside your vault, so it is shown without annotations. To annotate it, move or copy it into the vault, or name it in a note's annotation-target.",
+            12000
+        );
+    }
     private baseSourceKey(view: View): string | null {
         if (view instanceof FileView && view.file) {
+            if (this.outsideVault(view.file)) {
+                if (view.getViewType() === 'pdf' || view instanceof EpubView) this.tellOutside(view.file);
+                return null;
+            }
             if (view.getViewType() === 'pdf' || view instanceof EpubView) return view.file.path;
             if (
                 view instanceof MarkdownView &&
@@ -1607,6 +1632,7 @@ export default class AnnotatorPlugin extends Plugin {
         file: unknown
     ) {
         if (this.stopped || !this.display.embeddedHighlights || !(file instanceof TFile) || !embed?.containerEl) return;
+        if (this.outsideVault(file)) return;
         const key = file.path;
         // Only a PDF that has an annotation note costs anything here: no note, no painter.
         if (!this.notes.get(key)?.note && !this.associations[key]) {
@@ -1887,6 +1913,9 @@ export default class AnnotatorPlugin extends Plugin {
             if (binding.file === pdf) binding.host.setAnnotations(this.notes.get(pdf)?.records || []);
     }
     private async ensureNote(pdf: string): Promise<TFile> {
+        // Whatever led here, a note is never made beside a file that is not in the vault.
+        if (this.outsideVault({ path: collectionSource(pdf) }))
+            throw new Error('This file is outside your vault. Move or copy it into the vault to annotate it.');
         let state = this.notes.get(pdf);
         if (!state) {
             await this.loadNote(pdf);
