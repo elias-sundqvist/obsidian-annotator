@@ -19,11 +19,14 @@ const sum = bytes => createHash('sha256').update(bytes).digest('hex');
 
 test('the files the plugin will accept are the published ones: the checksums in its code are those of the npm packages the lock file names', () => {
     assert.deepEqual([SCAN_ENGINE.bytes, SCAN_ENGINE.sha256], [WASM.length, sum(WASM)]);
-    const english = SCAN_LANGUAGES.find(language => language.code === 'eng');
-    assert.deepEqual([english.file.bytes, english.file.sha256], [ENGLISH.length, sum(ENGLISH)]);
+    assert.deepEqual(SCAN_LANGUAGES.map(language => [language.code, language.name]), [['eng', 'English'], ['fra', 'French'], ['deu', 'German'], ['spa', 'Spanish'], ['swe', 'Swedish']]);
     const lock = JSON.parse(readFileSync(new URL('../package-lock.json', import.meta.url), 'utf8')).packages;
-    assert.equal(lock['node_modules/tesseract-wasm'].version, '0.11.0'); assert.equal(lock['node_modules/@tesseract.js-data/eng'].version, '1.0.0');
-    assert.match(SCAN_ENGINE.name, /0\.11\.0/); assert.match(english.file.name, /1\.0\.0/);
+    assert.equal(lock['node_modules/tesseract-wasm'].version, '0.11.0'); assert.match(SCAN_ENGINE.name, /0\.11\.0/);
+    for (const language of SCAN_LANGUAGES) {
+        const data = read(`@tesseract.js-data/${language.code}/4.0.0_best_int/${language.code}.traineddata.gz`);
+        assert.deepEqual([language.file.bytes, language.file.sha256], [data.length, sum(data)], language.name);
+        assert.equal(lock[`node_modules/@tesseract.js-data/${language.code}`].version, '1.0.0'); assert.equal(language.file.name, `${language.code}-1.0.0.traineddata.gz`); assert.equal(language.file.what, language.name);
+    }
     // Every entry is one that may be acted on, and all are fetched from the one address.
     for (const file of [SCAN_ENGINE, ...SCAN_LANGUAGES.map(language => language.file)]) { assert.equal(validScanFile(file), true); assert.equal(file.from, SCAN_FILES_FROM + file.name); }
     assert.equal(new Set(SCAN_LANGUAGES.map(language => language.code)).size, SCAN_LANGUAGES.length);

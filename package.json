@@ -17,7 +17,11 @@
   "devDependencies": {
     "@codemirror/state": "6.5.0",
     "@codemirror/view": "6.38.6",
+    "@tesseract.js-data/deu": "1.0.0",
     "@tesseract.js-data/eng": "1.0.0",
+    "@tesseract.js-data/fra": "1.0.0",
+    "@tesseract.js-data/spa": "1.0.0",
+    "@tesseract.js-data/swe": "1.0.0",
     "@types/css-tree": "3.2.0",
     "@types/node": "^24.0.0",
     "approx-string-match": "^2.0.0",
