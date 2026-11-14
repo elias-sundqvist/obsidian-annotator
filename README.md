@@ -69,6 +69,12 @@ The `annotation-target` may be written in any of the usual ways:
 A name that differs from a file's only by the kind of space in it (a no-break
 space pasted from a web page) still finds that file.
 
+If your notes already name their source in another property (`source`, `pdf`,
+`file`), name that property in the setting **Also read the source from this
+property**: a note without `annotation-target` is then read by it. New
+annotation notes are still written with `annotation-target`, and it wins
+where a note has both.
+
 ### The note is the source's property sheet
 
 A PDF or a book cannot carry properties of its own, so the annotation note is

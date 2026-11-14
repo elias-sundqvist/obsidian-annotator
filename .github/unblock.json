@@ -1309,6 +1309,15 @@
       "dependsOn": [],
       "estimate": 2,
       "notes": "Done 2026-11-14: Built 2026-11-14 on branch prototype/fold-stored-data (not merged, not released). src/note-folds.ts finds the annotations by their shape, for display only; src/note-folding.ts is the editor extension; setting 'Fold annotation data in Live Preview' (on by default). Answers the 'no JSON' requests (issues 24 and 111, forum 2023) with nothing stored changed. Tests: test/note-folding.test.mjs (the annotations found equal those the codec reads in six real notes; what is folded; examples in code fences and properties left alone; the editor's behaviour; a 2,000-annotation note). Tried in the running app on desktop, Obsidian 1.13.7: a small note and a 1.9 MB note with 2,000 annotations (a cursor move 5 ms, a keystroke 25 ms there). Not tried on a phone."
+    },
+    {
+      "id": "target-alias",
+      "title": "Read a note's source from a second property name",
+      "status": "done",
+      "parent": "community",
+      "dependsOn": [],
+      "estimate": 1,
+      "notes": "Done 2026-11-14: Built 2026-11-14 on branch feature/fold-stored-data (not merged, not released). Setting 'Also read the source from this property'; targetAliasName in src/preferences.ts; targetProperty in src/main.ts reads it when a note has no usable annotation-target. annotation-target wins where both are there and is still what new notes are written with. Tests in readers.test.mjs and plugin-boundary.test.mjs. Answers GitHub issue 299. Not tried in the running app."
     }
   ]
 }

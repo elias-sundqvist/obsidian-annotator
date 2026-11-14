@@ -9,6 +9,10 @@ What changed for someone using Annotator. How to use each thing is in
   and tags: each annotation's stored data is folded to a small mark, and
   shown again when the cursor is in it. The file is not changed, and the
   format is the one it always was. A setting turns it off.
+- A note's source can also be read from a second property of your choosing
+  (setting **Also read the source from this property**), for notes that
+  already name it as `source`, `pdf` or the like. `annotation-target` is
+  still what new notes are written with.
 
 ## 0.3.1 (2026-11-13)
 

@@ -122,6 +122,7 @@ import {
     annotationReference,
     annotationTarget,
     targetKeyNearMiss,
+    targetAliasName,
     sourcesBase,
     markdownPreferences,
     type ReaderPreferences,
@@ -258,6 +259,7 @@ export default class AnnotatorPlugin extends Plugin {
         composer: 'page' | 'sidebar';
         /** Whether the annotation sidebar comes forward when a source is opened. */ sidebarOnOpen: boolean;
         /** Whether an annotation's stored data is folded away in Live Preview. */ foldData: boolean;
+        /** A second property a note's source is read from when it has no `annotation-target`; empty for none. */ targetAlias: string;
         /** What a copied or dragged annotation link is, as a template; empty for the plain link. */ linkTemplate: string;
         /** The heading a new annotation note starts with. */ noteHeading: string;
         /** Whether where the reader was is written to the note on leaving a source. */ progressProperty: boolean;
@@ -269,6 +271,7 @@ export default class AnnotatorPlugin extends Plugin {
         composer: 'page',
         sidebarOnOpen: true,
         foldData: true,
+        targetAlias: '',
         linkTemplate: '',
         noteHeading: DEFAULT_NOTE_HEADING,
         progressProperty: false,
@@ -406,6 +409,7 @@ export default class AnnotatorPlugin extends Plugin {
             composer: shown.composer === 'sidebar' ? 'sidebar' : 'page',
             sidebarOnOpen: shown.sidebarOnOpen !== false,
             foldData: shown.foldData !== false,
+            targetAlias: targetAliasName(shown.targetAlias),
             linkTemplate: typeof shown.linkTemplate === 'string' ? shown.linkTemplate.slice(0, 2000) : '',
             noteHeading: typeof shown.noteHeading === 'string' ? shown.noteHeading.slice(0, 200) : DEFAULT_NOTE_HEADING,
             progressProperty: shown.progressProperty === true,
@@ -1517,13 +1521,22 @@ export default class AnnotatorPlugin extends Plugin {
             }
     }
     private targetProperty(note: TFile, name: string): unknown {
-        let value: unknown;
-        try {
-            value = (this.app as unknown as DataviewHost).plugins?.getPlugin('dataview')?.api?.page(note.path)?.[name];
-        } catch {
-            /* The index may be rebuilding; frontmatter remains usable. */
-        }
-        return value || this.app.metadataCache.getFileCache(note)?.frontmatter?.[name];
+        const read = (key: string): unknown => {
+            let value: unknown;
+            try {
+                value = (this.app as unknown as DataviewHost).plugins?.getPlugin('dataview')?.api?.page(note.path)?.[
+                    key
+                ];
+            } catch {
+                /* The index may be rebuilding; frontmatter remains usable. */
+            }
+            return value || this.app.metadataCache.getFileCache(note)?.frontmatter?.[key];
+        };
+        const value = read(name);
+        // A note may name its source under a second property of the reader's choosing. `annotation-target` wins
+        // where a note has both, and is what new notes are written with.
+        if (name !== 'annotation-target' || annotationTarget(value) || !this.display.targetAlias) return value;
+        return read(this.display.targetAlias) || value;
     }
     private targetType(note: TFile): string | null {
         return annotationTarget(this.targetProperty(note, 'annotation-target-type'));
@@ -5039,6 +5052,17 @@ class NativeSettings extends PluginSettingTab {
                 control
                     .setValue(plugin.display.sidebarOnOpen)
                     .onChange(value => save(plugin.setDisplay({ sidebarOnOpen: value })))
+            );
+        new Setting(root)
+            .setName('Also read the source from this property')
+            .setDesc(
+                'A note names its source in the property annotation-target. If your notes already name it in another property (source, pdf, file), write that name here: a note without annotation-target is then read by it. New annotation notes are still written with annotation-target, and Annotator 0.2 on another device reads only that.'
+            )
+            .addText(control =>
+                control
+                    .setPlaceholder('none')
+                    .setValue(plugin.display.targetAlias)
+                    .onChange(value => save(plugin.setDisplay({ targetAlias: targetAliasName(value) })))
             );
         new Setting(root)
             .setName('Fold annotation data in Live Preview')

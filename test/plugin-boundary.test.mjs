@@ -801,6 +801,24 @@ test('a new annotation note starts as the reader set it: another heading, or a t
   await h.plugin.setDisplay({noteTemplate:'Templates/Gone.md'});await h.plugin.ensureNote('d.pdf');assert.equal(made.at(-1)[1],'---\nannotation-target: "d.pdf"\n---\n\n## Highlights\n');assert.equal(made.length,4);
  }finally{h.dispose();}
 });
+test('a note may name its source under a second property of the reader\'s choosing; annotation-target wins where both are there',async()=>{
+ const {Notice}=await import('./.generated/plugin-boundary.mjs');
+ const h=host();try{h.plugin.manifest={id:'obsidian-annotator'};h.add('Paper.pdf');h.add('Other.pdf');
+  const byAlias=h.add('By alias.md','',{source:'Paper.pdf'}),both=h.add('Both.md','',{'annotation-target':'Other.pdf',source:'Paper.pdf'}),link=h.add('Link.md','',{source:'[[Paper.pdf]]'}),empty=h.add('Empty.md','',{'annotation-target':'',source:'Paper.pdf'}),none=h.add('None.md','',{title:'x'});
+  await h.plugin.onload();
+  // With no second property named, only annotation-target is read.
+  for(const note of [byAlias,link,none])assert.equal(h.plugin.targetKey(note),null,note.path);assert.equal(h.plugin.targetKey(both),'Other.pdf');
+  h.plugin.display={...h.plugin.display,targetAlias:'source'};
+  assert.equal(h.plugin.targetKey(byAlias),'Paper.pdf');assert.equal(h.plugin.targetKey(link),'Paper.pdf');assert.equal(h.plugin.targetKey(empty),'Paper.pdf','an empty annotation-target does not hide the second property');
+  assert.equal(h.plugin.targetKey(both),'Other.pdf','annotation-target wins');assert.equal(h.plugin.targetKey(none),null);
+  // The kind of source is still its own property, read as before.
+  const typed=h.add('Typed.md','',{source:'https://example.org/paper','annotation-target-type':'pdf'});assert.equal(h.plugin.targetType(typed),'pdf');
+  // Such a note is an annotation note: nothing is said about a property that is nearly annotation-target.
+  const nearly=h.add('Nearly.md','',{source:'Paper.pdf','annotator-target':'Other.pdf'}),before=Notice.messages.length;
+  const leaf={app:h.app,contentEl:h.dom.window.document.createElement('div'),openFile:async()=>{},setViewState:async()=>{}},view=new MarkdownView(leaf);view.file=nearly;leaf.view=view;h.app.workspace.getMostRecentLeaf=()=>leaf;h.plugin.autoOpen=false;h.events.get('file-open')(nearly);
+  assert.equal(Notice.messages.length,before);
+ }finally{h.dispose();}
+});
 test('the Base of everything annotated is made once, opened, and never written over',async()=>{
  const {Notice}=await import('./.generated/plugin-boundary.mjs');
  const h=host();try{h.plugin.manifest={id:'obsidian-annotator'};const made=[],opened=[];

@@ -179,6 +179,13 @@ test('saved marks open from touch click and keyboard activation without double-o
  button.dispatchEvent(new w.MouseEvent('click',{bubbles:true,detail:0}));assert.equal(opens,3);dom.window.close();
 });
 
+test('the name of a second property for the source is taken as written, and refused when it cannot be one',async()=>{
+ const {targetAliasName}=await import('./.generated/readers/preferences.js');
+ for(const [given,name] of [['source','source'],['  pdf  ','pdf'],['file:','file'],['Zotero PDF','Zotero PDF'],['källa','källa']])assert.equal(targetAliasName(given),name);
+ // Nothing, something that is not text, a name over two lines, one too long, and the reader's own properties: no second property.
+ for(const given of ['','   ',':',null,undefined,7,['source'],'a\nb','x'.repeat(101),'annotation-target','Annotation-Target:','annotation-target-type','annotation-progress','annotation-transcript'])assert.equal(targetAliasName(given),'',String(given));
+});
+
 test('a property that is nearly annotation-target is recognised, and one that only resembles it is not',async()=>{
  const {targetKeyNearMiss}=await import('./.generated/readers/preferences.js');
  // What people wrote: the colon typed into the name in the Properties editor, the plugin's name for the property's, other spacing and case, a slip of a letter.

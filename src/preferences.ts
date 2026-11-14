@@ -155,6 +155,18 @@ export function sourcesBase(): string {
         ''
     ].join('\n');
 }
+/**
+ * The name of a second property to read a note's source from, as the reader
+ * wrote it in the settings: trimmed, without a colon at its end, and nothing
+ * at all when it is empty, too long to be a property's name, or one of the
+ * reader's own properties (which mean something else).
+ */
+export function targetAliasName(value: unknown): string {
+    if (typeof value !== 'string') return '';
+    const name = value.trim().replace(/:+$/, '').trim();
+    if (!name || name.length > 100 || /[\r\n]/.test(name)) return '';
+    return /^annotation-(?:target|target-type|progress|transcript)$/i.test(name) ? '' : name;
+}
 /** How many single letters must be added, dropped or changed to turn one word into the other. */
 function lettersApart(a: string, b: string): number {
     let row = Array.from({ length: b.length + 1 }, (_, at) => at);
