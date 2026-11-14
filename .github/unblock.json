@@ -1327,6 +1327,15 @@
       "dependsOn": [],
       "estimate": 2,
       "notes": "Done 2026-11-14: Built 2026-11-14 on branch feature/fold-stored-data (not merged, not released). src/app-links.ts recognises zotero://open-pdf|select/(library|groups/N)/items/KEY and calibre://show-book|view-book|book-details/Library/ID, and finds the file by looking in the folder the settings name (Zotero's data folder; Calibre library folders), without the program running or its database read. main.ts follows a link on opening, remembers it, and then treats the file as any file outside the vault (asked about once, copied into Annotator sources). Both programs were installed and looked at: Zotero 10.0.9 keeps an attachment under storage/<attachment key>/, and a link to the parent item names no folder (its local API that could map one to the other is off by default); Calibre 9.18 keeps a book under <Library>/<Author>/<Title> (<id>)/. Tried end to end in the running app on macOS against both real folders. Tests: test/app-links.test.mjs and plugin-boundary.test.mjs. Not tried on Windows or Linux (the Windows path joining is tested). Not done: opening at the page a Zotero link names. Answers GitHub issues 22 and 78."
+    },
+    {
+      "id": "embedded-highlights",
+      "title": "Highlights in PDFs embedded in notes and on Canvas",
+      "status": "done",
+      "parent": "community",
+      "dependsOn": [],
+      "estimate": 3,
+      "notes": "Done 2026-11-14: Built 2026-11-14 on branch feature/embedded-highlights, which sits on feature/fold-stored-data (not merged, not released). Obsidian makes an embedded PDF with the same viewer as a PDF tab; its maker (the embed registry's pdf entry, a private part of Obsidian) is wrapped, and an embed of a PDF that has an annotation note gets the reader's painter read-only: marks are shown and a click opens the annotation in the sidebar. The painter lives as long as the embed component; an embed never loaded is let go once it is neither loaded nor on the page. Setting 'Show highlights in embedded PDFs' (on by default). Tests in plugin-boundary.test.mjs. Tried in the running app on desktop, Obsidian 1.13.7: a note embed in Live Preview and Reading view, a Canvas card, tab and mode switches, closing, a note with seven embeds (no long task at load or idle; only the annotated PDF bound). Areas and drawings paint in an embed as in the tab (two PDFs compared element for element). Not tried: a phone, hover previews. Answers the Canvas question and GitHub issue 92 in part (shown, not made)."
     }
   ]
 }

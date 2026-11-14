@@ -262,6 +262,7 @@ export default class AnnotatorPlugin extends Plugin {
         composer: 'page' | 'sidebar';
         /** Whether the annotation sidebar comes forward when a source is opened. */ sidebarOnOpen: boolean;
         /** Whether an annotation's stored data is folded away in Live Preview. */ foldData: boolean;
+        /** Whether a PDF's highlights are shown where it is embedded in a note or placed on a Canvas. */ embeddedHighlights: boolean;
         /** A second property a note's source is read from when it has no `annotation-target`; empty for none. */ targetAlias: string;
         /** Zotero's data folder, where its links are followed to; empty for the usual place in the home folder. */ zoteroFolder: string;
         /** Calibre library folders, one to a line, where its book links are followed to. */ calibreLibraries: string;
@@ -276,6 +277,7 @@ export default class AnnotatorPlugin extends Plugin {
         composer: 'page',
         sidebarOnOpen: true,
         foldData: true,
+        embeddedHighlights: true,
         targetAlias: '',
         zoteroFolder: '',
         calibreLibraries: '',
@@ -341,6 +343,8 @@ export default class AnnotatorPlugin extends Plugin {
     private quietSelect = 0;
     private readingCopyDialogs = new Set<ReadingCopyModal>();
     private bindings = new Map<View, { host: SourceHost; file: string; owner: string }>();
+    /** PDFs shown inside a note or on a Canvas, each standing in for a view, with how to tell that Obsidian has dropped it. Their highlights are shown, not made. */
+    private embedded = new Map<View, () => boolean>();
     private leafCollections = new Map<WorkspaceLeaf, CollectionContext>();
     private collectionStateCleanups = new Map<View, () => void>();
     private associations: Record<string, string> = {};
@@ -416,6 +420,7 @@ export default class AnnotatorPlugin extends Plugin {
             composer: shown.composer === 'sidebar' ? 'sidebar' : 'page',
             sidebarOnOpen: shown.sidebarOnOpen !== false,
             foldData: shown.foldData !== false,
+            embeddedHighlights: shown.embeddedHighlights !== false,
             targetAlias: targetAliasName(shown.targetAlias),
             zoteroFolder: typeof shown.zoteroFolder === 'string' ? shown.zoteroFolder.trim().slice(0, 1000) : '',
             calibreLibraries: typeof shown.calibreLibraries === 'string' ? shown.calibreLibraries.slice(0, 4000) : '',
@@ -517,6 +522,7 @@ export default class AnnotatorPlugin extends Plugin {
                 )
         );
         this.registerEditorExtension(noteFolding(() => this.display.foldData));
+        this.watchEmbeddedPdfs();
         this.registerEditorExtension(
             snapshotEditorExtension(
                 (path, raw, editorView) => {
@@ -1520,6 +1526,16 @@ export default class AnnotatorPlugin extends Plugin {
                     this.resumeElsewhere(key);
                 } else void this.loadNote(key);
             }
+        // An embedded PDF stays bound until Obsidian lets its embed go: a note out of sight is taken off the page and
+        // put back as it was, so being on the page says nothing.
+        for (const [view, gone] of [...this.embedded]) {
+            // An embed that Obsidian never loaded is never unloaded either: one that is neither loaded nor on the page is let go here.
+            if (gone()) {
+                this.embedded.delete(view);
+                continue;
+            }
+            live.add(view);
+        }
         for (const [view, binding] of this.bindings)
             if (!live.has(view)) {
                 this.leaving(binding.file, binding.host);
@@ -1529,6 +1545,88 @@ export default class AnnotatorPlugin extends Plugin {
                 this.collectionStateCleanups.delete(view);
                 if (this.lastSource === view) this.lastSource = null;
             }
+    }
+    /**
+     * Obsidian makes a PDF embedded in a note or placed on a Canvas with the same viewer as a PDF tab. Its maker is
+     * wrapped, so that an embed of a PDF that has an annotation note gets the reader's painter too: the highlights
+     * are shown and a click on one opens it in the sidebar. Nothing is made or changed from an embed, and an embed
+     * of a PDF with no annotation note is left exactly as Obsidian made it.
+     */
+    private watchEmbeddedPdfs() {
+        const registry = (this.app as unknown as { embedRegistry?: { embedByExtension?: Record<string, unknown> } })
+                .embedRegistry?.embedByExtension,
+            original = registry?.pdf;
+        if (!registry || typeof original !== 'function') return;
+        const bind = (embed: unknown, file: unknown) => {
+            try {
+                this.bindEmbeddedPdf(embed as Parameters<AnnotatorPlugin['bindEmbeddedPdf']>[0], file);
+            } catch (error) {
+                console.error('Annotator: an embedded PDF is shown without its highlights.', error);
+            }
+        };
+        const wrapped = function (this: unknown, ...args: unknown[]) {
+            const embed: unknown = (original as (...args: unknown[]) => unknown).apply(this, args);
+            bind(embed, args[1]);
+            return embed;
+        };
+        registry.pdf = wrapped;
+        this.register(() => {
+            if (registry.pdf === wrapped) registry.pdf = original;
+        });
+    }
+    /** Every embedded PDF goes back to how Obsidian shows it: when the setting is turned off. */
+    releaseEmbedded() {
+        for (const view of [...this.embedded.keys()]) {
+            this.embedded.delete(view);
+            this.bindings.get(view)?.host.dispose();
+            this.bindings.delete(view);
+        }
+    }
+    private bindEmbeddedPdf(
+        embed: { containerEl?: HTMLElement; viewer?: unknown; register?(done: () => void): void },
+        file: unknown
+    ) {
+        if (this.stopped || !this.display.embeddedHighlights || !(file instanceof TFile) || !embed?.containerEl) return;
+        const key = file.path;
+        // Only a PDF that has an annotation note costs anything here: no note, no painter.
+        if (!this.notes.get(key)?.note && !this.associations[key]) {
+            const noted = this.app.vault.getMarkdownFiles().some(note => this.noteMatchesSource(note, key));
+            if (!noted) return;
+        }
+        const stand = {
+            contentEl: embed.containerEl,
+            containerEl: embed.containerEl,
+            file,
+            get viewer() {
+                return embed.viewer;
+            }
+        } as unknown as FileView;
+        const host = new NativePdf(
+            stand,
+            () => {},
+            annotation => this.selectAnnotation(key, annotation),
+            () => this.refresh(),
+            this.remoteUrl(key),
+            () => this.reader,
+            undefined,
+            this.pdfText
+        );
+        this.embedded.set(
+            stand,
+            () => (embed as { _loaded?: boolean })._loaded === false && !embed.containerEl?.isConnected
+        );
+        this.bindings.set(stand, { host, file: key, owner: uuid() });
+        const release = () => {
+            if (!this.embedded.delete(stand)) return;
+            this.bindings.delete(stand);
+            host.dispose();
+        };
+        // The embed is an Obsidian component: what is registered on it runs when Obsidian unloads it.
+        // (When the plugin itself is unloaded, every binding is let go together.)
+        if (typeof embed.register === 'function') embed.register(release);
+        host.view.contentEl.classList.toggle('annotator-native-hide-highlights', !this.highlightsVisible);
+        if (this.notes.has(key)) host.setAnnotations(this.notes.get(key)!.records);
+        else void this.loadNote(key);
     }
     private targetProperty(note: TFile, name: string): unknown {
         const read = (key: string): unknown => {
@@ -5143,6 +5241,17 @@ class NativeSettings extends PluginSettingTab {
                     .setPlaceholder('none')
                     .setValue(plugin.display.targetAlias)
                     .onChange(value => save(plugin.setDisplay({ targetAlias: targetAliasName(value) })))
+            );
+        new Setting(root)
+            .setName('Show highlights in embedded PDFs')
+            .setDesc(
+                "A PDF embedded in a note or placed on a Canvas is shown with its highlights, and a click on one opens it in the sidebar. Highlights are made in the PDF's own tab. Applies to embeds shown from now on."
+            )
+            .addToggle(control =>
+                control.setValue(plugin.display.embeddedHighlights).onChange(value => {
+                    save(plugin.setDisplay({ embeddedHighlights: value }));
+                    if (!value) plugin.releaseEmbedded();
+                })
             );
         new Setting(root)
             .setName('Fold annotation data in Live Preview')

@@ -17,6 +17,9 @@ What changed for someone using Annotator. How to use each thing is in
   On a computer the file is found in Zotero's data folder or in the Calibre
   library named in the settings, without either program running, and is then
   asked about and copied in like any file outside the vault.
+- A PDF embedded in a note or placed on a Canvas now shows its highlights,
+  and a click on one opens it in the sidebar. Highlights are still made in
+  the PDF's own tab. A setting turns it off.
 
 ## 0.3.1 (2026-11-13)
 

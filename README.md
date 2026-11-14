@@ -145,6 +145,11 @@ follow a link inside the PDF (a citation, a contents entry), **Back to page
 N** returns you to where you were. The command *PDF: go back to where a link
 was followed* does the same and can be given a hotkey.
 
+Where a PDF is embedded in a note (`![[paper.pdf#page=3]]`) or placed on a
+Canvas, its highlights, areas and drawings are shown there too, and a click
+on one opens it in the sidebar. The setting **Show highlights in embedded
+PDFs** turns this off.
+
 ![A dark page with a marked area, its grips, and a drawing](docs/pdf-dark-area-drawing.jpg)
 
 **Page appearance** chooses the paper: Auto (follows your theme), Light,
@@ -531,8 +536,8 @@ and the PDF export is read back with two independent PDF readers. See
 - A frame of a paused YouTube video includes the player's own controls; take
   it while the video plays.
 - Text in scanned PDFs is not recognised (no OCR).
-- A PDF placed on a Canvas is shown without its highlights; open it in a tab
-  to see and make them.
+- In a PDF embedded in a note or placed on a Canvas, highlights are shown but
+  not made: open the PDF in a tab to annotate it.
 - Drawing is for PDFs; books have highlights, notes and picture notes, videos
   have notes and frame notes.
 - A picture note in a book is not shown by Annotator 0.2 (it has no passage

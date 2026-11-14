@@ -801,6 +801,42 @@ test('a new annotation note starts as the reader set it: another heading, or a t
   await h.plugin.setDisplay({noteTemplate:'Templates/Gone.md'});await h.plugin.ensureNote('d.pdf');assert.equal(made.at(-1)[1],'---\nannotation-target: "d.pdf"\n---\n\n## Highlights\n');assert.equal(made.length,4);
  }finally{h.dispose();}
 });
+test('a PDF embedded in a note or on a Canvas gets its highlights when it has an annotation note, and is let go with its embed',async()=>{
+ const h=host();try{h.plugin.manifest={id:'obsidian-annotator'};const doc=h.dom.window.document,settle=async()=>{for(let turn=0;turn<30;turn++)await new Promise(resolve=>setTimeout(resolve,0));};
+  h.dom.window.ResizeObserver=class{observe(){}unobserve(){}disconnect(){}};
+  const made=[],original=function(info,file,subpath){const containerEl=doc.createElement('div');doc.body.append(containerEl);const embed={containerEl,file,subpath,info,_loaded:true,unloads:[],register(done){this.unloads.push(done);},unload(){this._loaded=false;for(const done of this.unloads.splice(0))done();},self:this};made.push(embed);return embed;};
+  const registry={embedByExtension:{pdf:original,md:()=>null}};h.app.embedRegistry=registry;
+  const paper=h.add('Paper.pdf'),bare=h.add('Bare.pdf');h.add('Paper notes.md','',{'annotation-target':'Paper.pdf'});
+  await h.plugin.onload();
+  // Obsidian's maker is wrapped: it is still called with what it was given, and its embed is handed back as it made it.
+  assert.notEqual(registry.embedByExtension.pdf,original);
+  const info={containerEl:doc.createElement('div')},first=registry.embedByExtension.pdf.call(registry.embedByExtension,info,paper,'#page=2');
+  assert.equal(first,made[0]);assert.equal(first.info,info);assert.equal(first.subpath,'#page=2');assert.equal(first.self,registry.embedByExtension);
+  await settle();
+  assert.equal(h.plugin.embedded.size,1);const [stand]=h.plugin.embedded.keys(),binding=h.plugin.bindings.get(stand);
+  assert.equal(binding.file,'Paper.pdf');assert.equal(stand.contentEl,first.containerEl);assert.equal(stand.file,paper);assert.ok(h.plugin.notes.has('Paper.pdf'),'its annotations are read');
+  // A PDF with no annotation note, something that is not a file, and an embed with no element: made as Obsidian makes them, and nothing more.
+  const untouched=registry.embedByExtension.pdf(info,bare,'');assert.equal(untouched,made[1]);registry.embedByExtension.pdf(info,null,'');registry.embedByExtension.pdf(info,{path:'Paper.pdf'},'');
+  made.push=function(embed){delete embed.containerEl;return Array.prototype.push.call(this,embed);};registry.embedByExtension.pdf(info,paper,'');made.push=Array.prototype.push;
+  await settle();assert.equal(h.plugin.embedded.size,1);assert.equal(first.unloads.length,1);assert.equal(untouched.unloads.length,0);
+  // Looking over the open tabs leaves an embed alone, on the page or off it: a note out of sight is taken off the page and put back.
+  first.containerEl.remove();h.plugin.bindSources();assert.equal(h.plugin.embedded.size,1);assert.ok(h.plugin.bindings.has(stand));doc.body.append(first.containerEl);
+  // When Obsidian unloads the embed, its painter goes with it.
+  let disposed=0;const dispose=binding.host.dispose.bind(binding.host);binding.host.dispose=()=>{disposed++;dispose();};
+  first.unload();assert.equal(h.plugin.embedded.size,0);assert.ok(!h.plugin.bindings.has(stand));assert.equal(disposed,1);first.unload();assert.equal(disposed,1);
+  // An embed Obsidian made and never loaded is never unloaded either: once it is neither loaded nor on the page it is let go.
+  const idle=registry.embedByExtension.pdf(info,paper,'');await settle();assert.equal(h.plugin.embedded.size,1);idle._loaded=false;h.plugin.bindSources();assert.equal(h.plugin.embedded.size,1,'still on the page');idle.containerEl.remove();h.plugin.bindSources();assert.equal(h.plugin.embedded.size,0);assert.equal(h.plugin.bindings.size,0);
+  // The setting: off, embeds are Obsidian's alone, and the ones showing are let go at once.
+  registry.embedByExtension.pdf(info,paper,'');await settle();assert.equal(h.plugin.embedded.size,1);
+  h.plugin.display={...h.plugin.display,embeddedHighlights:false};h.plugin.releaseEmbedded();assert.equal(h.plugin.embedded.size,0);assert.equal(h.plugin.bindings.size,0);
+  registry.embedByExtension.pdf(info,paper,'');await settle();assert.equal(h.plugin.embedded.size,0);
+  // Unloading the plugin gives Obsidian its own maker back.
+  for(const fn of h.plugin.cleanups.splice(0).reverse())fn();assert.equal(registry.embedByExtension.pdf,original);
+ }finally{h.dispose();}
+});
+test('where Obsidian has no embed maker to wrap, nothing is wrapped and nothing breaks',async()=>{
+ for(const registry of [undefined,{},{embedByExtension:{}},{embedByExtension:{pdf:'not a function'}}]){const h=host();try{h.plugin.manifest={id:'obsidian-annotator'};if(registry)h.app.embedRegistry=registry;await h.plugin.onload();assert.equal(h.plugin.embedded.size,0);if(registry?.embedByExtension)assert.equal(registry.embedByExtension.pdf,registry.embedByExtension.pdf);}finally{h.dispose();}}
+});
 test('a Zotero or Calibre link as a target is followed once to its file, remembered, and then an ordinary file outside the vault',async()=>{
  const fs=nodeRequire('fs'),os=nodeRequire('os'),path=nodeRequire('path'),root=fs.mkdtempSync(path.join(os.tmpdir(),'annotator-applink-'));
  const put=file=>{const full=path.join(root,file);fs.mkdirSync(path.dirname(full),{recursive:true});fs.writeFileSync(full,'%PDF-1.7\n');return full;};
