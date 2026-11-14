@@ -464,11 +464,17 @@ bundled. Still open: decisions 3 to 8 above, and a yes to each download.
   text, marks each page, and takes the addition off again.
 - `src/scan-words.ts` and `proofs/scan_text.bend`: from a recogniser's
   report to the words that are kept (section 9).
+- `src/scan-files.ts`: the files a recogniser needs, kept in the plugin's
+  folder and never used unchecked (section 3): fetched only from the address
+  an entry names, checked before they are written and again at every read,
+  deleted and refused when they are not what the plugin's code says. It has
+  no list of files yet: that waits for the choice of build and host.
 - `test/support/fixtures/scanned-pages.pdf`: a scan made by the script
   beside it (a tilted, grainy picture page; a page stored sideways; a text
   page), with where its words are.
-- Tests: `test/pdf-searchable.test.mjs`, `test/scan-words.test.mjs`, and the
-  bridge tests in `proofs/reader.test.mjs`.
+- Tests: `test/pdf-searchable.test.mjs`, `test/scan-words.test.mjs`,
+  `test/scan-files.test.mjs`, and the bridge tests in
+  `proofs/reader.test.mjs`.
 
 **Read back by two other readers, by hand**
 (`test/support/searchable-copy-check.mjs`; the suite pins the copy they
@@ -497,7 +503,7 @@ but breaks some lines in two.
 - *A strongly tilted scan* is therefore the case to measure with the real
   recogniser before anything is promised about Preview and iOS.
 
-**Not built:** the recogniser and its worker, fetching and hashing, where
+**Not built:** the recogniser and its worker, the list of its files, where
 the page's own text is (for pages with a stamp over a scan), the dialog,
 progress, Stop and Continue, opening the copy and pointing the note at it,
 the measurements of section 8, and the user documentation (README,
