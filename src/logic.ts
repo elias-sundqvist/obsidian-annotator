@@ -15,6 +15,25 @@ import {
 } from './codec';
 import { importHypothesis, exportHypothesis } from './exchange';
 import { inspectVideo, createVideo, updateVideo, deleteVideo } from './video-codec';
+import {
+    citationsFromRuns,
+    listFromRuns,
+    proposal,
+    type Checked,
+    type Link,
+    type ListInput,
+    type Run
+} from './citations';
+import type { WorkKey } from './reference-note';
+// @ts-expect-error The proofs' JavaScript wrappers carry no type declarations.
+import * as cite from '../proofs/citations.mjs';
+
+/** The checked decisions about citations (proofs/citations.bend). */
+const checked = cite as unknown as Checked & {
+    noteName(words: string): string;
+    sameWork(a: WorkKey, b: WorkKey): boolean;
+    addSource(sources: number[], source: number): number[];
+};
 
 /** Several annotations added to one note, each with its ink where it has one, as one step. */
 function createMany(
@@ -57,6 +76,19 @@ export const logic = {
     /** Hypothesis JSON in and out of a note. */
     importHypothesis,
     exportHypothesis,
+    /** Citations: a reference list from its pages' text runs, and a page's citations against the lists read. */
+    citeList: (pages: { page: number; height: number; runs: Run[] }[], top: number | null, fromLabel: boolean) =>
+        listFromRuns(checked, pages, top, fromLabel),
+    citePage: (page: number, runs: Run[], links: Link[], lists: ListInput[]) =>
+        citationsFromRuns(checked, page, runs, links, lists),
+    /** What a reference's title, authors, year and DOI probably are: a proposal for a form. */
+    citeProposal: (text: string, lineEnds: number[]) => proposal(text, lineEnds),
+    /** A reference note's file name from words. */
+    citeNoteName: (words: string) => checked.noteName(words),
+    /** Which of the notes are the note of a work. */
+    citeSameWork: (work: WorkKey, notes: WorkKey[]) => notes.map(note => checked.sameWork(work, note)),
+    /** A `cited-by` list with a source added. */
+    citeAddSource: (sources: number[], source: number) => checked.addSource(sources, source),
     /** The video note's own format. */
     inspectVideo,
     createVideo,

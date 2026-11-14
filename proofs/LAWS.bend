@@ -1,3 +1,4 @@
+import ./citations.bend as Cite
 import ./book.bend as Book
 import ./stroke.bend as Stroke
 import ./area.bend as Area
@@ -1214,3 +1215,429 @@ law book_place_real:
 law video_errors_pairwise:
   for +parts: List<&2, VideoDocument.Part>
   {VideoDocument.errors(parts) == VideoDocument.errors_pairwise(parts) : Bool}
+
+# ── Citations: which entries a citation fits ────────────────────────────────
+# A label fits an entry exactly when it is a label at all and is the entry's.
+law cite_fits_label:
+  for label: Nat
+  for own: Nat
+  for first: Nat
+  for others: List<&2, Nat>
+  for years: List<&2, Nat>
+  {Cite.fits(Cite.ByLabel{label}, Cite.Traits{own, first, others, years}) == Bool.and(Cite.some(label), Nat.is_eq(own, label)) : Bool}
+
+# An entry is fitted by its own label.
+law cite_fits_own_label:
+  for +label: Nat
+  for first: Nat
+  for others: List<&2, Nat>
+  for years: List<&2, Nat>
+  {Cite.fits(Cite.ByLabel{1n+label}, Cite.Traits{1n+label, first, others, years}) == True{} : Bool}
+
+# "No label" fits nothing, and neither does "no first author".
+law cite_fits_nothing:
+  for key: Cite.Traits
+  for others: List<&2, Nat>
+  for year: Nat
+  {Bool.or(Cite.fits(Cite.ByLabel{0n}, key), Bool.or(Cite.fits(Cite.Bare{0n}, key), Cite.fits(Cite.ByName{0n, others, year}, key))) == False{} : Bool}
+
+# A name and year fit an entry exactly when the first authors are the same,
+# every other author named is among the entry's authors, and the year is one
+# of the entry's years.
+law cite_fits_name:
+  for name: Nat
+  for named: List<&2, Nat>
+  for year: Nat
+  for own: Nat
+  for first: Nat
+  for others: List<&2, Nat>
+  for years: List<&2, Nat>
+  {Cite.fits(Cite.ByName{name, named, year}, Cite.Traits{own, first, others, years}) == Bool.and(Cite.some(name), Bool.and(Nat.is_eq(first, name), Bool.and(Cite.all_in(named, Con{first, others}), Cite.member(year, years)))) : Bool}
+
+# Every entry taken as fitting fits.
+law cite_fitting_sound:
+  for +item: Cite.Item
+  for +entries: List<&2, Cite.Entry>
+  {Cite.all_fit(item, Cite.fitting(item, entries)) == True{} : Bool}
+
+# No entry left out fits, and every entry is either taken or left out.
+law cite_fitting_complete:
+  for +item: Cite.Item
+  for +entries: List<&2, Cite.Entry>
+  {Cite.none_fit(item, Cite.rejected(item, entries)) == True{} : Bool}
+
+law cite_fitting_all:
+  for +item: Cite.Item
+  for +entries: List<&2, Cite.Entry>
+  {Nat.add(Cite.count(Cite.fitting(item, entries)), Cite.count(Cite.rejected(item, entries))) == Cite.count(entries) : Nat}
+
+# ── Citations: the one rule by which a row names a work ─────────────────────
+# Whatever a verdict shows (the entry named, the entry a link disagrees with,
+# the several to choose from) fits the citation's own text.
+law cite_decide_fits:
+  for +item: Cite.Item
+  for +entries: List<&2, Cite.Entry>
+  for link: Maybe<&2, Nat>
+  for trusted: Bool
+  {Cite.verdict_fits(item, Cite.decide(item, entries, link, trusted)) == True{} : Bool}
+
+# Without a link, a label or a name names an entry exactly when it is the
+# only one that fits: none is "not found", more than one is "several".
+law cite_decide_one:
+  for fit: List<&2, Cite.Entry>
+  for trusted: Bool
+  {Cite.plain(fit, None{}, trusted) == Cite.alone(fit) : Cite.Verdict}
+
+# Among several that fit, links that are not trusted decide nothing.
+law cite_decide_untrusted:
+  for entry: Cite.Entry
+  for next: Cite.Entry
+  for rest: List<&2, Cite.Entry>
+  for link: Maybe<&2, Nat>
+  {Cite.plain(Con{entry, Con{next, rest}}, link, False{}) == Cite.Several{Con{entry, Con{next, rest}}} : Cite.Verdict}
+
+# With a link, whatever is named is the entry the link lands on.
+law cite_decide_link:
+  for +item: Cite.Item
+  for +entries: List<&2, Cite.Entry>
+  for +link: Nat
+  for trusted: Bool
+  {Cite.named_at(link, Cite.decide(item, entries, Some{link}, trusted)) == True{} : Bool}
+
+# One entry fits and the link lands on another: a conflict, and none is named.
+law cite_decide_conflict:
+  for +id: Nat
+  for +key: Cite.Traits
+  for +away: Nat
+  for trusted: Bool
+  {Cite.plain([Cite.Entry{id, key}], Some{Nat.add(id, 1n+away)}, trusted) == Cite.Conflict{Cite.Entry{id, key}, Nat.add(id, 1n+away)} : Cite.Verdict}
+
+law cite_decide_conflict_below:
+  for +id: Nat
+  for +key: Cite.Traits
+  for +away: Nat
+  for trusted: Bool
+  {Cite.plain([Cite.Entry{Nat.add(id, 1n+away), key}], Some{id}, trusted) == Cite.Conflict{Cite.Entry{Nat.add(id, 1n+away), key}, id} : Cite.Verdict}
+
+# A bare number names nothing without a link, and nothing among several.
+law cite_decide_bare:
+  for label: Nat
+  for +entries: List<&2, Cite.Entry>
+  for trusted: Bool
+  {Cite.decide(Cite.Bare{label}, entries, None{}, trusted) == Cite.NotFound{} : Cite.Verdict}
+
+law cite_decide_bare_several:
+  for entry: Cite.Entry
+  for next: Cite.Entry
+  for rest: List<&2, Cite.Entry>
+  for link: Maybe<&2, Nat>
+  {Cite.bare(Con{entry, Con{next, rest}}, link) == Cite.NotFound{} : Cite.Verdict}
+
+# ── Citations: when a page's links may decide ───────────────────────────────
+law cite_trusted_against:
+  for agree: Nat
+  for against: Nat
+  {Cite.trusted(agree, 1n+against) == False{} : Bool}
+
+law cite_trusted_none:
+  for disagree: Nat
+  {Cite.trusted(0n, disagree) == False{} : Bool}
+
+law cite_trusted_one:
+  for disagree: Nat
+  {Cite.trusted(1n, disagree) == False{} : Bool}
+
+law cite_trusted_two:
+  for more: Nat
+  {Cite.trusted(2n+more, 0n) == True{} : Bool}
+
+# ── Citations: which list a citation without a link belongs to ──────────────
+law cite_list_single:
+  for page: Nat
+  for only: Cite.Span
+  {Cite.list_for(page, [only]) == Some{only} : Maybe<&2, Cite.Span>}
+
+# A list that begins before the citing page is passed over.
+law cite_list_passes:
+  for +start: Nat
+  for +end: Nat
+  for +further: Nat
+  for rest: List<&2, Cite.Span>
+  for before: Nat
+  {Cite.walk(Con{Cite.Span{start, end}, rest}, Nat.add(start, 1n+further), before) == Cite.walk(rest, Nat.add(start, 1n+further), end) : Maybe<&2, Cite.Span>}
+
+# The first list that begins on or after the citing page is the only
+# candidate: it is chosen if the page lies after the list before, and
+# otherwise no list is.
+law cite_list_first:
+  for +page: Nat
+  for +further: Nat
+  for +end: Nat
+  for rest: List<&2, Cite.Span>
+  for before: Nat
+  {Cite.walk(Con{Cite.Span{Nat.add(page, further), end}, rest}, page, before) == Cite.candidate(Nat.is_gt(page, before), Cite.Span{Nat.add(page, further), end}) : Maybe<&2, Cite.Span>}
+
+# Whatever is chosen among several begins on or after the citing page.
+law cite_list_after:
+  for +page: Nat
+  for first: Cite.Span
+  for second: Cite.Span
+  for rest: List<&2, Cite.Span>
+  {Cite.begins_after(page, Cite.list_for(page, Con{first, Con{second, rest}})) == True{} : Bool}
+
+# ── Citations: dividing a reference list into entries ───────────────────────
+# Nothing is lost, repeated or moved: the lead followed by the entries is the
+# lines that were given.
+law cite_split_whole:
+  for +lines: List<&2, Cite.Line>
+  {Cite.joined(Cite.split(lines)) == lines : List<&2, Cite.Line>}
+
+# Every entry begins with a beginning line and holds no other, and the lead
+# holds none.
+law cite_split_starts:
+  for +lines: List<&2, Cite.Line>
+  {Cite.well_divided(Cite.split(lines)) == True{} : Bool}
+
+# There are as many entries as beginning lines.
+law cite_split_count:
+  for +lines: List<&2, Cite.Line>
+  {Cite.entry_count(Cite.split(lines)) == Cite.starts(lines) : Nat}
+
+# ── Citations: the sources a reference note is cited by ─────────────────────
+# Adding a source puts it there, once: adding it again changes nothing.
+law cite_add_has:
+  for +source: Nat
+  for +list: List<&2, Nat>
+  {Cite.member(source, Cite.add_source(source, list)) == True{} : Bool}
+
+law cite_add_once:
+  for +source: Nat
+  for +list: List<&2, Nat>
+  {Cite.add_source(source, Cite.add_source(source, list)) == Cite.add_source(source, list) : List<&2, Nat>}
+
+# Everything that was there stays, in its order; at most the source follows.
+law cite_add_keeps:
+  for +source: Nat
+  for +list: List<&2, Nat>
+  {Cite.add_source(source, list) == Cite.append(list, Cite.added(Cite.member(source, list), source)) : List<&2, Nat>}
+
+# ── Citations: whether a note is the note of a cited work ───────────────────
+# The same whole DOI on both sides is the same work.
+law cite_same_doi:
+  for +doi: Nat
+  for title: Nat
+  for long: Bool
+  for year: Nat
+  for first: Nat
+  for title2: Nat
+  for long2: Bool
+  for year2: Nat
+  for first2: Nat
+  {Cite.same_work(Cite.Work{1n+doi, False{}, title, long, year, first}, Cite.Work{1n+doi, False{}, title2, long2, year2, first2}) == True{} : Bool}
+
+# Without a DOI, only title, year and first author together decide.
+law cite_same_all:
+  for cut: Bool
+  for +title: Nat
+  for +long: Bool
+  for +year: Nat
+  for +first: Nat
+  for +other: Cite.Work
+  {Cite.same_work(Cite.Work{0n, cut, title, long, year, first}, other) == Cite.by_all(Cite.Work{0n, cut, title, long, year, first}, other) : Bool}
+
+# A DOI that may be cut never makes two the same, on either side.
+law cite_same_cut:
+  for +doi: Nat
+  for +title: Nat
+  for +long: Bool
+  for +year: Nat
+  for +first: Nat
+  for +other: Cite.Work
+  {Cite.same_work(Cite.Work{doi, True{}, title, long, year, first}, other) == Cite.by_all(Cite.Work{doi, True{}, title, long, year, first}, other) : Bool}
+
+law cite_same_cut_other:
+  for +one: Cite.Work
+  for +doi: Nat
+  for +title: Nat
+  for +long: Bool
+  for +year: Nat
+  for +first: Nat
+  {Cite.same_work(one, Cite.Work{doi, True{}, title, long, year, first}) == Cite.by_all(one, Cite.Work{doi, True{}, title, long, year, first}) : Bool}
+
+# Title, year and first author must all be there, and the title long enough:
+# a title alone never makes two the same.
+law cite_same_needs_title:
+  for doi: Nat
+  for cut: Bool
+  for long: Bool
+  for year: Nat
+  for first: Nat
+  for other: Cite.Work
+  {Cite.by_all(Cite.Work{doi, cut, 0n, long, year, first}, other) == False{} : Bool}
+
+law cite_same_needs_long:
+  for doi: Nat
+  for cut: Bool
+  for title: Nat
+  for year: Nat
+  for first: Nat
+  for other: Cite.Work
+  {Cite.by_all(Cite.Work{doi, cut, title, False{}, year, first}, other) == False{} : Bool}
+
+law cite_same_needs_year:
+  for doi: Nat
+  for cut: Bool
+  for +title: Nat
+  for long: Bool
+  for first: Nat
+  for other: Cite.Work
+  {Cite.by_all(Cite.Work{doi, cut, title, long, 0n, first}, other) == False{} : Bool}
+
+law cite_same_needs_author:
+  for doi: Nat
+  for cut: Bool
+  for +title: Nat
+  for long: Bool
+  for +year: Nat
+  for other: Cite.Work
+  {Cite.by_all(Cite.Work{doi, cut, title, long, year, 0n}, other) == False{} : Bool}
+
+# ── Citations: ranges ───────────────────────────────────────────────────────
+# A range a…a+w is the w+1 numbers from a when it is no wider than 50, and
+# nothing when it is wider.
+law cite_range_exact:
+  for +a: Nat
+  for +w: Nat
+  {Cite.expand(a, Nat.add(a, w)) == Cite.within(Nat.is_le(w, 50n), Cite.count_up(1n+w, a)) : List<&2, Nat>}
+
+law cite_range_length:
+  for +n: Nat
+  for +a: Nat
+  {Cite.length(Cite.count_up(n, a)) == n : Nat}
+
+law cite_range_ascending:
+  for +n: Nat
+  for +a: Nat
+  {Cite.ascending_from(Cite.count_up(n, a), a) == True{} : Bool}
+
+# A range written backwards is refused, and so is one wider than 50.
+law cite_range_backwards:
+  for +b: Nat
+  for +d: Nat
+  {Cite.expand(Nat.add(b, 1n+d), b) == Nil{} : List<&2, Nat>}
+
+law cite_range_wide:
+  for +a: Nat
+  for +d: Nat
+  {Cite.expand(a, Nat.add(a, 51n+d)) == Nil{} : List<&2, Nat>}
+
+# ── Citations: the inside of one bracket ────────────────────────────────────
+# Whatever pieces are written out are read back as exactly those pieces.
+law cite_items_print:
+  for +first: Cite.Piece
+  for +rest: List<&2, Cite.Piece>
+  {Cite.parse(Cite.unparse(first, rest)) == Some{Cite.Parsed{first, rest}} : Maybe<&2, Cite.Parsed>}
+
+# And whatever is read, written out again, is exactly the tokens given: no
+# label is invented, none is dropped, and tokens that are not wholly of the
+# grammar are refused whole.
+law cite_items_written:
+  for +tokens: List<&2, Cite.Token>
+  {Cite.shown(Cite.parse(tokens)) == Cite.kept(Cite.parse(tokens), tokens) : Maybe<&2, List<&2, Cite.Token>>}
+
+# A range inside a bracket is its numbers when no wider than 50; a wider
+# range or one written backwards refuses the bracket.
+law cite_items_range:
+  for +a: Nat
+  for +w: Nat
+  {Cite.items([Cite.Num{a}, Cite.Dash{}, Cite.Num{Nat.add(a, w)}]) == Cite.filled(Cite.within(Nat.is_le(w, 50n), Cite.count_up(1n+w, a))) : Maybe<&2, List<&2, Nat>>}
+
+law cite_items_backwards:
+  for +b: Nat
+  for +d: Nat
+  {Cite.items([Cite.Num{Nat.add(b, 1n+d)}, Cite.Dash{}, Cite.Num{b}]) == None{} : Maybe<&2, List<&2, Nat>>}
+
+# ── Citations: what a numbered list's labels say ────────────────────────────
+# Labels that go up by one from the first, wherever they start, are complete.
+law cite_sequence_complete:
+  for +n: Nat
+  for +m: Nat
+  {Cite.sequence(Cite.count_up(n, m)) == Cite.Complete{} : Cite.Seq}
+
+# Between a label and a later one, exactly the numbers between them are
+# reported missing.
+law cite_sequence_missing:
+  for +p: Nat
+  for +k: Nat
+  {Cite.sequence([p, Nat.add(p, 2n+k)]) == Cite.Missing{Cite.count_up(1n+k, 1n+p)} : Cite.Seq}
+
+# A label that is not above the one before it, anywhere, makes the list wrong.
+law cite_sequence_disorder:
+  for +before: List<&2, Nat>
+  for +x: Nat
+  for +d: Nat
+  for +more: List<&2, Nat>
+  {Cite.sequence(Cite.append(before, Con{Nat.add(x, d), Con{x, more}})) == Cite.Wrong{} : Cite.Seq}
+
+# ── Citations: the works of a page ──────────────────────────────────────────
+# Works are listed where they are first cited.
+law cite_works_order:
+  for +ids: List<&2, Nat>
+  {Cite.row_ids(Cite.works(ids)) == Cite.firsts(ids) : List<&2, Nat>}
+
+# No work is listed twice.
+law cite_works_once:
+  for +ids: List<&2, Nat>
+  {Cite.distinct(Cite.row_ids(Cite.works(ids))) == True{} : Bool}
+
+# A work is listed exactly when it is cited.
+law cite_works_all:
+  for +x: Nat
+  for +ids: List<&2, Nat>
+  {Cite.member(x, Cite.row_ids(Cite.works(ids))) == Cite.member(x, ids) : Bool}
+
+# A work's count is the number of times it is cited.
+law cite_works_each:
+  for +x: Nat
+  for +ids: List<&2, Nat>
+  {Cite.tally(x, Cite.works(ids)) == Cite.occurrences(x, ids) : Nat}
+
+# Every citation is counted once: the counts add up to the citations.
+law cite_works_count:
+  for +ids: List<&2, Nat>
+  {Cite.total(Cite.works(ids)) == Cite.length(ids) : Nat}
+
+# ── Citations: a reference note's name ──────────────────────────────────────
+# What a name may not hold: the characters no file name or link can, tabs and
+# line ends among them; and what it may not begin or end with.
+law cite_name_forbids:
+  {Cite.none_allowed("\\/:*?\"<>|#^[]\n\t") == True{} : Bool}
+
+law cite_name_edges:
+  {Bool.and(Cite.edge(' '), Cite.edge('.')) == True{} : Bool}
+
+# Whatever words it is made from, a name holds no character a file name or a
+# link cannot hold.
+law cite_name_allowed:
+  for +text: String
+  {Cite.all_allowed(Cite.name(text)) == True{} : Bool}
+
+# It neither begins nor ends with a space or a full stop.
+law cite_name_starts:
+  for +text: String
+  {Cite.starts_ok(Cite.name(text)) == True{} : Bool}
+
+law cite_name_ends:
+  for +text: String
+  {Cite.ends_ok(Cite.name(text)) == True{} : Bool}
+
+# At least five characters come before its first full stop: it is not empty,
+# and it is not one of the names systems keep for devices.
+law cite_name_stem:
+  for +text: String
+  {Cite.long(Cite.name(text), 5n) == True{} : Bool}
+
+# It is at most 180 bytes long.
+law cite_name_bytes:
+  for +text: String
+  {Nat.is_le(Cite.bytes(Cite.name(text)), 180n) == True{} : Bool}

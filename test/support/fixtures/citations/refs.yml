@@ -1,0 +1,38 @@
+vaswani2017:
+  type: article
+  title: Attention is all you need
+  author: ["Vaswani, Ashish", "Shazeer, Noam", "Parmar, Niki"]
+  date: 2017
+  parent: { type: proceedings, title: Advances in Neural Information Processing Systems }
+  serial-number: { doi: 10.5555/3295222.3295349 }
+smith2019a:
+  type: article
+  title: First things about measuring
+  author: ["Smith, Jane"]
+  date: 2019
+  parent: { type: periodical, title: Journal of Things, volume: 3 }
+smith2019b:
+  type: article
+  title: Second things about measuring
+  author: ["Smith, Jane"]
+  date: 2019
+  parent: { type: periodical, title: Journal of Things, volume: 4 }
+maaten2008:
+  type: article
+  title: Visualizing data using a map of points
+  author: ["van der Maaten, Laurens", "Hinton, Geoffrey"]
+  date: 2008
+  parent: { type: periodical, title: Journal of Learning, volume: 9 }
+okafor2021:
+  type: article
+  title: Reading lists and how they are divided
+  author: ["Okafor, Ngozi", "Lindqvist, Åsa"]
+  date: 2021
+  parent: { type: periodical, title: Annals of Reading, volume: 12 }
+  serial-number: { doi: 10.1234/reading.2021.0042 }
+zhang2015:
+  type: book
+  title: A long book that nobody cites here
+  author: ["Zhang, Wei"]
+  date: 2015
+  publisher: Open Press

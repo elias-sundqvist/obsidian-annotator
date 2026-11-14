@@ -494,6 +494,15 @@ export class AnnotationView extends ItemView {
             if (file && plugin.canExportPdf(file))
                 menu.addItem(item =>
                     item
+                        .setTitle('Citations on this page')
+                        .setIcon('book-marked')
+                        .onClick(() => {
+                            void plugin.openCitations().catch(error => new Notice(String(error)));
+                        })
+                );
+            if (file && plugin.canExportPdf(file))
+                menu.addItem(item =>
+                    item
                         .setTitle("Take in the PDF's own annotations…")
                         .setIcon('file-up')
                         .onClick(() => {

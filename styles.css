@@ -1590,3 +1590,55 @@ body.annotator-reading-fullscreen .workspace-leaf.mod-active > .workspace-leaf-c
 /* An annotation's stored data, folded away in Live Preview: the small mark that stands for it. */
 .annotator-folded-data { color: var(--text-faint); cursor: pointer; user-select: none; }
 .annotator-folded-data:hover { color: var(--text-muted); }
+/* ── Citations ─────────────────────────────────────────────────────────────
+   The works cited on the page in view. It sits on the sidebar's own surface
+   and uses its variables; what is its own is the marker, the count and the
+   small print saying how a row was matched. */
+.annotator-citations {
+    --annotator-citation-marker-color: var(--text-accent);
+    --annotator-citation-lines: 3;
+    display: flex; flex-direction: column; height: 100%;
+}
+.annotator-citation-source { font-weight: var(--font-semibold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.annotator-citation-page { color: var(--text-faint); font-size: var(--font-ui-smaller); font-variant-numeric: tabular-nums; }
+.annotator-citation-status { margin-top: 6px; padding-bottom: 8px; color: var(--text-muted); font-size: var(--font-ui-smaller); line-height: 1.45; }
+.annotator-citation-status[hidden] { display: none; }
+.annotator-citation-list { padding-top: 6px; }
+.annotator-citation-heading { padding: 6px 8px 2px; color: var(--annotator-label-color); font-size: var(--annotator-label-size); font-weight: var(--font-medium); }
+.annotator-citation { margin: 2px 0; padding: 8px 8px 4px; border-radius: var(--annotator-radius); }
+.annotator-citation:hover { background: var(--annotator-hover); }
+.annotator-citation.is-selected { background: color-mix(in srgb, var(--annotator-citation-marker-color) 12%, transparent); }
+.annotator-citation.is-nested { margin-inline-start: 8px; padding-inline-start: 8px; border-radius: 0; border-inline-start: 1.5px solid var(--annotator-hairline); }
+.annotator-citation.is-nested:hover { background: transparent; }
+.annotator-citation-line { display: flex; align-items: baseline; gap: 8px; }
+.annotator-citation-marker { color: var(--annotator-citation-marker-color); font-weight: var(--font-medium); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.annotator-citation-count { margin-inline-start: auto; color: var(--text-faint); font-size: var(--font-ui-smaller); font-variant-numeric: tabular-nums; }
+.annotator-ui button.annotator-citation-entry {
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--annotator-citation-lines); overflow: hidden;
+    appearance: none; width: 100%; height: auto; margin: 2px 0 0; padding: 0; border: 0; box-shadow: none; background: transparent;
+    color: var(--text-normal); font: inherit; line-height: 1.45; text-align: start; white-space: normal; cursor: pointer; user-select: text;
+}
+.annotator-ui button.annotator-citation-entry.is-open, .annotator-citation-form > .annotator-citation-entry { display: block; -webkit-line-clamp: unset; overflow: visible; }
+.annotator-ui button.annotator-citation-entry:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; border-radius: var(--annotator-radius-small); }
+.annotator-citation-says { margin-top: 2px; color: var(--text-muted); font-size: var(--font-ui-smaller); line-height: 1.45; }
+.annotator-citation-note { margin-top: 3px; font-size: var(--font-ui-smaller); overflow-wrap: anywhere; }
+.annotator-citation-foot { display: flex; align-items: center; gap: 6px; min-height: 28px; }
+.annotator-citation-witness { flex: 1; min-width: 0; color: var(--text-faint); font-size: var(--font-ui-smaller); }
+.annotator-citation-actions { display: flex; gap: 2px; margin-inline-start: auto; }
+.annotator-ui button.annotator-citation-others { appearance: none; display: block; width: 100%; height: auto; margin: 8px 0 0; padding: 6px 8px; border: 0; box-shadow: none; background: transparent; color: var(--text-muted); font-size: var(--font-ui-smaller); line-height: 1.45; text-align: start; white-space: normal; cursor: pointer; }
+.annotator-ui button.annotator-citation-others:hover { color: var(--text-normal); }
+.annotator-citation-other { display: flex; align-items: center; gap: 8px; }
+.annotator-citation-other .annotator-citation-marker { flex: 1; }
+.annotator-ui input.annotator-citation-filter { width: calc(100% - 16px); margin: 2px 8px 6px; }
+.annotator-citation-form { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; padding: 10px; border: 1px solid var(--annotator-hairline); border-radius: var(--annotator-radius); background: var(--annotator-raised); }
+.annotator-citation-field { display: flex; flex-direction: column; gap: 2px; color: var(--annotator-label-color); font-size: var(--annotator-label-size); }
+.annotator-citation-field input, .annotator-citation-field textarea { width: 100%; font-size: var(--font-ui-small); resize: vertical; }
+.annotator-citation-check { display: flex; align-items: flex-start; gap: 6px; color: var(--text-muted); font-size: var(--font-ui-smaller); line-height: 1.45; }
+.annotator-citation-error { color: var(--text-error); font-size: var(--font-ui-smaller); line-height: 1.45; }
+.annotator-citation-buttons { display: flex; justify-content: flex-end; gap: 6px; margin-top: 2px; }
+.is-mobile .annotator-citations .annotator-icon-button { width: 36px; height: 36px; }
+/* Where a citation or an entry is on the page, shown for a moment. */
+.annotator-citation-flash { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+.annotator-citation-flash-box { position: absolute; border-radius: 3px; outline: 2px solid var(--annotator-citation-flash, var(--text-accent)); background: color-mix(in srgb, var(--annotator-citation-flash, var(--text-accent)) 22%, transparent); animation: annotator-citation-flash 1.8s var(--annotator-ease, ease-out) forwards; }
+@keyframes annotator-citation-flash { 0%, 55% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .annotator-citation-flash-box { animation-duration: .01s; animation-delay: 1.7s; } }

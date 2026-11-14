@@ -17,15 +17,15 @@ cd proofs
 node verify.mjs
 ```
 
-The verifier checks all 182 laws, requires 88 deliberately broken programs to
-fail type checking, and runs 61 Node tests against the actual compiled Bend
+The verifier checks all 243 laws, requires 114 deliberately broken programs to
+fail type checking, and runs 75 Node tests against the actual compiled Bend
 modules. It also has the proofs checked a second time by Bend's small kernel
 (`bend PROOF.bend --verdict`), which has its own proof in Lean and accepts
 only defs that are valid proofs and rely on no `@unsafe` or foreign code.
 That step must pass wherever it can run: where Lean v4.34.0 is installed (on
 the PATH or in `~/.elan/bin`) or Bend has already built its kernel; elsewhere
 the verifier says the step was skipped, and `BEND_VERDICT=1` makes its absence
-a failure, as CI does. The kernel accepted all of PROOF.bend on 2026-11-13
+a failure, as CI does. The kernel accepted all of PROOF.bend on 2026-11-14
 (Bend 2.0.40, Lean 4.34.0). It disables the Bend launcher's telemetry/automatic updates for its
 invocations. Set `BEND_BIN` if `bend` is not on PATH. Bend 2.0.40 is a single
 binary with no Node import hook of its own, so the tests import `.bend` files
@@ -269,3 +269,130 @@ further in than the chapter is long. The reader shows the percentage with
 `before` and resumes from a percentage with `place` (`src/progress.ts`), so
 the two agree. The definitions walk chapter by chapter; `reader.mjs` hands
 them a book 2000 chapters at a time and only ever passes over whole chapters.
+
+## Citations
+
+`citations.bend` holds what the citations panel decides once a PDF has been
+read: which entries of a reference list a citation fits, which work a row
+names, which list a citation without a link belongs to, how a list's lines
+divide into entries, and what a reference note is called. `citations.mjs` is
+its wrapper. Text is not compared here. The caller gives every normalised
+string (a label, a surname, a year, a DOI, a title, a file) a whole number,
+equal numbers for equal strings and 0 for "none", so the module works on
+numbers, truth values and lists.
+
+**Fitting** (`fits`, `fitting`)
+
+- `cite_fits_label`, `cite_fits_own_label`, `cite_fits_nothing`: a label fits
+  an entry exactly when it is a label at all and is the entry's; an entry is
+  fitted by its own label; "no label" and "no first author" fit nothing.
+- `cite_fits_name`: a name and year fit exactly when the first authors are
+  the same, every other author named is among the entry's authors, and the
+  year is one of the entry's years.
+- `cite_fitting_sound`, `cite_fitting_complete`, `cite_fitting_all`: every
+  entry taken as fitting fits, none left out does, and every entry is one or
+  the other.
+
+**The one rule** (`decide`)
+
+- `cite_decide_fits`: whatever a verdict shows (the entry named, the entry a
+  link disagrees with, the several to choose from) fits the citation's text.
+- `cite_decide_one`: without a link, an entry is named exactly when it is the
+  only one that fits; none is "not found", more than one is "several".
+- `cite_decide_untrusted`: among several, links that are not trusted decide
+  nothing.
+- `cite_decide_link`: with a link, whatever is named is the entry the link
+  lands on.
+- `cite_decide_conflict`, `cite_decide_conflict_below`: one entry fits and
+  the link lands on another: a conflict, and none is named.
+- `cite_decide_bare`, `cite_decide_bare_several`: a bare number (one that only
+  a link makes a citation) names nothing without a link, and nothing among
+  several of its label.
+- `cite_trusted_against`, `cite_trusted_none`, `cite_trusted_one`,
+  `cite_trusted_two`: a page's links may decide exactly when at least two
+  could be checked and none disagreed.
+
+**Which list** (`list_for`)
+
+- `cite_list_single`: one list is the list.
+- `cite_list_passes`: a list that begins before the citing page is passed
+  over.
+- `cite_list_first`: the first list that begins on or after the page is the
+  only candidate; it is chosen if the page lies after the list before, and
+  otherwise none is.
+- `cite_list_after`: whatever is chosen among several begins on or after the
+  page.
+
+**Dividing a list** (`split`, `sequence`)
+
+- `cite_split_whole`: the lead followed by the entries is the lines given:
+  none lost, repeated or moved.
+- `cite_split_starts`, `cite_split_count`: every entry begins with a
+  beginning line and holds no other, the lead holds none, and there are as
+  many entries as beginning lines.
+- `cite_sequence_complete`: labels that go up by one, from wherever they
+  start, are complete.
+- `cite_sequence_missing`: between a label and a later one, exactly the
+  numbers between them are reported missing.
+- `cite_sequence_disorder`: a label not above the one before it, anywhere in
+  the list, makes the list wrong.
+
+**The inside of a bracket** (`parse`, `items`, `expand`)
+
+- `cite_items_print`: pieces written out are read back as exactly those
+  pieces.
+- `cite_items_written`: whatever is read, written out again, is the tokens
+  given. With the law above: no label is invented, none is dropped, and
+  tokens not wholly of the grammar are refused whole.
+- `cite_range_exact`, `cite_range_length`, `cite_range_ascending`: a range
+  `a–a+w` is the `w+1` numbers going up by one from `a` when `w` is at most
+  50.
+- `cite_range_backwards`, `cite_range_wide`, `cite_items_range`,
+  `cite_items_backwards`: a range written backwards or wider than 50 gives
+  nothing, and inside a bracket refuses the bracket.
+
+**The works of a page** (`works`)
+
+- `cite_works_order`, `cite_works_once`, `cite_works_all`: works are listed
+  where they are first cited, none twice, and a work is listed exactly when
+  it is cited.
+- `cite_works_each`, `cite_works_count`: a work's count is the number of
+  times it is cited, and the counts add up to the citations.
+
+**The reference note** (`name`, `same_work`, `add_source`)
+
+- `cite_name_forbids`, `cite_name_edges`: what a name may not hold
+  (`\ / : * ? " < > | # ^ [ ]`, tabs and line ends) and may not begin or
+  end with (a space, a full stop).
+- `cite_name_allowed`, `cite_name_starts`, `cite_name_ends`: whatever words a
+  name is made from, it holds none of the first and neither begins nor ends
+  with the second.
+- `cite_name_stem`: at least five characters come before its first full
+  stop, so it is not empty and is not a name systems keep for devices (CON,
+  NUL, COM1 …).
+- `cite_name_bytes`: it is at most 180 bytes long (UTF-8), and is cut only
+  between characters.
+- `cite_same_doi`, `cite_same_all`, `cite_same_cut`, `cite_same_cut_other`:
+  the same whole DOI on both sides is the same work; without a DOI, or with
+  one that may be cut on either side, only title, year and first author
+  together decide.
+- `cite_same_needs_title`, `cite_same_needs_long`, `cite_same_needs_year`,
+  `cite_same_needs_author`: each of those must be there, and the title long
+  enough. A title alone never makes two the same.
+- `cite_add_has`, `cite_add_once`, `cite_add_keeps`: adding a source to
+  `cited-by` puts it there once; everything that was there stays in its
+  order, and at most the source follows.
+
+What is not proved, and is the caller's: the numbering of strings (that
+equal strings get equal numbers and different strings different ones), the
+cutting of a bracket into tokens, the reading of an entry's key (where its
+surnames and years stand), everything about positions on a page, and whether
+a link lands on an entry. `name` is not proved to leave a name it made
+unchanged; and `decide` guarantees that what is named fits the text, not that
+the entry was divided and keyed correctly.
+
+The definitions recurse once per element. Compiled, a list of 6,000 lines,
+entries or labels passes and one of 7,000 exhausts the stack (Node 26, its
+usual stack), so `citations.mjs` takes at most 5,000 of each in one call and
+refuses more with a plain error; a longer list is handed over in parts by
+its caller. Deciding 60 items against 400 entries takes under 3 ms.

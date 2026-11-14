@@ -102,6 +102,8 @@ import {
 } from './source';
 
 import { AnnotationView } from './sidebar';
+import { CitationsView, CITATIONS_VIEW } from './citations-view';
+import type { CiteLogic } from './pdf-citations';
 import { SelectionActions } from './selection-actions';
 import { installAnnotationLinks } from './link-navigation';
 import {
@@ -271,6 +273,7 @@ export default class AnnotatorPlugin extends Plugin {
         /** Whether where the reader was is written to the note on leaving a source. */ progressProperty: boolean;
         /** A note whose text a new annotation note starts as; empty for none. */ noteTemplate: string;
         /** Whether a tablet's drawer has been docked beside the page for the annotations once; after that the reader's own choice stands. */ tabletDocked: boolean;
+        /** The folder notes for cited works are made in; empty for where Obsidian puts new notes. */ referenceFolder: string;
     } = {
         compact: false,
         alwaysActions: false,
@@ -285,7 +288,8 @@ export default class AnnotatorPlugin extends Plugin {
         noteHeading: DEFAULT_NOTE_HEADING,
         progressProperty: false,
         noteTemplate: '',
-        tabletDocked: false
+        tabletDocked: false,
+        referenceFolder: ''
     };
     /** The composer floating beside the passage, when notes are written on the page. */
     private floating: FloatingComposer | null = null;
@@ -428,7 +432,8 @@ export default class AnnotatorPlugin extends Plugin {
             noteHeading: typeof shown.noteHeading === 'string' ? shown.noteHeading.slice(0, 200) : DEFAULT_NOTE_HEADING,
             progressProperty: shown.progressProperty === true,
             noteTemplate: typeof shown.noteTemplate === 'string' ? shown.noteTemplate.slice(0, 400) : '',
-            tabletDocked: shown.tabletDocked === true
+            tabletDocked: shown.tabletDocked === true,
+            referenceFolder: typeof shown.referenceFolder === 'string' ? shown.referenceFolder.slice(0, 400) : ''
         };
         this.register(() => {
             this.floating?.close();
@@ -600,6 +605,21 @@ export default class AnnotatorPlugin extends Plugin {
             }
         });
         this.registerView(VIEW, leaf => new AnnotationView(leaf, this));
+        this.registerView(CITATIONS_VIEW, leaf => new CitationsView(leaf, this));
+        this.addCommand({
+            id: 'open-citations',
+            name: 'Citations: show the works cited on this page',
+            callback: () => {
+                void this.openCitations().catch(error => this.fail(error));
+            }
+        });
+        this.addCommand({
+            id: 'reference-note-from-selection',
+            name: 'Citations: make a reference note from the selection',
+            callback: () => {
+                void this.referenceFromSelection().catch(error => this.fail(error));
+            }
+        });
         this.addCommand({
             id: 'open-annotation-sidebar',
             name: 'Open annotations sidebar',
@@ -1995,6 +2015,48 @@ export default class AnnotatorPlugin extends Plugin {
         new AnnotationSearch(this, await scanAnnotations(this), (note, id) => {
             void this.openNoteTarget(note, id, 'reuse').catch(error => this.fail(error));
         }).open();
+    }
+    /** The reading and deciding about citations, done by the logic worker. */
+    readonly citeLogic: CiteLogic = {
+        citeList: (pages, top, fromLabel) => this.logic.call('citeList', pages, top, fromLabel),
+        citePage: (page, runs, links, lists) => this.logic.call('citePage', page, runs, links, lists)
+    };
+    /** The reader of a PDF that is open, or null for any other source. */
+    pdfFor(source: string | null): NativePdf | null {
+        const host: unknown = source ? this.bindingFor(source)?.host : undefined;
+        return host instanceof NativePdf ? host : null;
+    }
+    /** A source's annotation note, made if it has none (as "Add the PDF's details" makes it). */
+    annotationNote(source: string): Promise<TFile> {
+        return this.ensureNote(source);
+    }
+    /** The Citations view, in a part of the right sidebar of its own (under the annotations), so both show while reading. */
+    async openCitations(): Promise<CitationsView | null> {
+        let leaf = this.app.workspace.getLeavesOfType(CITATIONS_VIEW)[0];
+        if (!leaf) {
+            const made = this.app.workspace.getRightLeaf(true) || this.app.workspace.getRightLeaf(false);
+            if (!made) throw new Error('Could not open the Citations view.');
+            leaf = made;
+            await leaf.setViewState({ type: CITATIONS_VIEW, active: true });
+        }
+        await this.app.workspace.revealLeaf(leaf);
+        this.app.workspace.rightSplit.expand();
+        return leaf.view instanceof CitationsView ? leaf.view : null;
+    }
+    /** A reference note for whatever reference is selected in the PDF: the same form, with nothing recognised for it. */
+    async referenceFromSelection() {
+        const host: unknown = this.currentFile ? this.bindingFor(this.currentFile)?.host : undefined;
+        const chosen = host instanceof NativePdf ? host.view.contentEl.ownerDocument.getSelection()?.toString() : '';
+        const text = (chosen || '')
+            .replace(/-\s*\n\s*/g, '-')
+            .replace(/\s+/g, ' ')
+            .trim();
+        if (!(host instanceof NativePdf) || text.length < 8) {
+            new Notice('Select a reference in a PDF first.');
+            return;
+        }
+        const view = await this.openCitations();
+        await view?.startForm('selection', text.slice(0, 2000));
     }
     private async toggleSidebar() {
         const leaf = this.app.workspace.getLeavesOfType(VIEW)[0],
@@ -5189,6 +5251,15 @@ class NativeSettings extends PluginSettingTab {
                     .setPlaceholder('Templates/Annotation note')
                     .setValue(plugin.display.noteTemplate)
                     .onChange(value => save(plugin.setDisplay({ noteTemplate: value.slice(0, 400) })))
+            );
+        new Setting(root)
+            .setName('Folder for reference notes')
+            .setDesc('Where the Citations view makes a note for a cited work. Empty: where Obsidian puts new notes.')
+            .addText(control =>
+                control
+                    .setPlaceholder('References')
+                    .setValue(plugin.display.referenceFolder)
+                    .onChange(value => save(plugin.setDisplay({ referenceFolder: value.slice(0, 400) })))
             );
         new Setting(root)
             .setName('Keep reading progress in the note')

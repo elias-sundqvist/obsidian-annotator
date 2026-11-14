@@ -22,3 +22,4 @@ export {placeComposer, around} from '../../src/floating-composer';
 export {foldingField, noteFolding, refold} from '../../src/note-folding';
 export {foldedBlocks} from '../../src/note-folds';
 export {EditorState, EditorSelection} from '@codemirror/state';
+export {CitationsView, CITATIONS_VIEW} from '../../src/citations-view';

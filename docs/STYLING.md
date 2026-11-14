@@ -48,6 +48,21 @@ body {
 - Exported summaries write `> [!quote|blue]`; the stylesheet tints those
   callouts with the same ink via `data-callout-metadata`.
 
+- The Citations view is `.annotator-citations`, on the sidebar's surface and
+  with its classes for the header, buttons and empty state. Its own: a row
+  `.annotator-citation` (`.is-selected`, `.is-nested`, `.is-missing`,
+  `.is-several`, `.is-conflict`, `.is-linked`), the citation
+  `.annotator-citation-marker`, how often `.annotator-citation-count`, the
+  reference `.annotator-citation-entry` (`.is-open`), how it was matched
+  `.annotator-citation-witness`, the note's link `.annotator-citation-note`,
+  the form `.annotator-citation-form`, and on the page for a moment
+  `.annotator-citation-flash-box`. Variables on `.annotator-citations`:
+  `--annotator-citation-marker-color` (the accent) and
+  `--annotator-citation-lines` (3: how many lines of a reference show before
+  it is opened). The flash is drawn on the page, outside the view: its
+  colour is `--annotator-citation-flash`, set on `body` (the accent where it
+  is not set).
+
 ## Colour names
 
 Settings → Highlight colours lets each ink be named ("Key idea", "Question").
