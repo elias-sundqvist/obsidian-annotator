@@ -89,6 +89,7 @@ import { makeSnapshot, SnapshotHost } from './snapshot';
 import { refreshSnapshotEditors, snapshotEditorExtension } from './snapshot-editor';
 import { noteFolding, refold } from './note-folding';
 import { appLink, calibreFile, followedLinks, zoteroFile } from './app-links';
+import { selectionLink, type SelectionLink } from './selection-links';
 import type { EditorView } from '@codemirror/view';
 import { LiveWebHost, type GuestElement, type WebFigureCapture } from './live-web';
 import {
@@ -774,6 +775,13 @@ export default class AnnotatorPlugin extends Plugin {
             name: 'Take in the annotations this PDF already holds',
             callback: () => {
                 void this.importPdfAnnotations().catch(error => this.fail(error));
+            }
+        });
+        this.addCommand({
+            id: 'import-selection-links',
+            name: "Take in links to this PDF's passages (Obsidian, PDF++)",
+            callback: () => {
+                void this.importSelectionLinks().catch(error => this.fail(error));
             }
         });
         this.addCommand({
@@ -1862,7 +1870,20 @@ export default class AnnotatorPlugin extends Plugin {
     private async readNote(pdf: string, generation: number) {
         try {
             let note: TFile | null = null;
-            const associated = collectionContext(pdf)?.note || this.associations[pdf];
+            let associated: string | undefined = collectionContext(pdf)?.note || this.associations[pdf];
+            // The note this source was tied to is gone: deleted or renamed while the reader was not running, or by a
+            // sync. Once the vault is fully there, the tie is dropped and the source's note is looked for afresh, so
+            // the one note that names the source is found again and a source with none is simply unannotated.
+            if (
+                associated &&
+                !collectionContext(pdf) &&
+                this.layoutReady &&
+                !(this.app.vault.getAbstractFileByPath(associated) instanceof TFile)
+            ) {
+                delete this.associations[pdf];
+                associated = undefined;
+                void this.persist();
+            }
             if (associated) {
                 const file = this.app.vault.getAbstractFileByPath(associated);
                 if (!(file instanceof TFile))
@@ -3971,6 +3992,103 @@ export default class AnnotatorPlugin extends Plugin {
                     }
                 }
             }
+            this.fail(error);
+        } finally {
+            working.hide();
+            this.busy = false;
+            this.refresh();
+        }
+        const stored = added && last ? this.notes.get(key)?.records.find(row => row.id === last) : undefined;
+        if (stored && !this.stopped) this.selectAnnotation(key, stored);
+    }
+    /**
+     * Links to passages of this PDF that other notes hold (`paper.pdf#page=3&selection=4,0,6,12`, as Obsidian's own
+     * "Copy link to selection" and PDF++ write them) become highlights of this reader, each saying which notes link
+     * to it. The notes and their links are left as they are. Taking in again adds only what is new.
+     */
+    async importSelectionLinks(key: string | null = this.currentFile) {
+        const host: unknown = key ? this.bindingFor(key)?.host : undefined,
+            source = host instanceof NativePdf ? host.view.file : null;
+        if (!key || !(host instanceof NativePdf) || !(source instanceof TFile)) {
+            new Notice('Open a PDF to take in the links to its passages.');
+            return;
+        }
+        if (this.damaged(key)) return;
+        if (this.busy) {
+            new Notice('Still saving the last change; try again in a moment.');
+            return;
+        }
+        // Every link in the vault's notes that names this file and a selection on one of its pages.
+        const found = new Map<string, { link: SelectionLink; notes: string[] }>(),
+            own = this.notes.get(key)?.note?.path;
+        for (const note of this.app.vault.getMarkdownFiles()) {
+            if (note.path === own) continue;
+            const cache = this.app.metadataCache.getFileCache(note) as {
+                links?: { link: string }[];
+                embeds?: { link: string }[];
+                frontmatterLinks?: { link: string }[];
+            } | null;
+            for (const made of [
+                ...(cache?.links || []),
+                ...(cache?.embeds || []),
+                ...(cache?.frontmatterLinks || [])
+            ]) {
+                const link = typeof made?.link === 'string' ? selectionLink(made.link) : null;
+                if (!link || this.app.metadataCache.getFirstLinkpathDest(link.path, note.path) !== source) continue;
+                const entry = found.get(link.key) || { link, notes: [] };
+                if (!entry.notes.includes(note.path)) entry.notes.push(note.path);
+                found.set(link.key, entry);
+            }
+        }
+        if (!found.size) {
+            new Notice('No note links to a passage of this PDF.', 8000);
+            return;
+        }
+        const working = new Notice('Reading the links to this PDF…', 0);
+        this.busy = true;
+        let added = 0,
+            last = '';
+        try {
+            const plan = await host.selectionPlan(
+                [...found.values()].map(({ link, notes }) => ({
+                    link,
+                    text: `Linked from ${notes.map(path => `[[${path.replace(/\.md$/i, '')}]]`).join(', ')}.`
+                })),
+                this.importedKeys(key)
+            );
+            if (this.stopped) return;
+            const already = plan.known,
+                left = plan.skipped.length;
+            if (!plan.rows.length) {
+                new Notice(
+                    already && !left
+                        ? `All ${already} linked ${already === 1 ? 'passage is' : 'passages are'} in your notes already.`
+                        : `None of the ${left} linked ${left === 1 ? 'passage' : 'passages'} could be placed: ${plan.skipped[0]?.reason || ''}`,
+                    10000
+                );
+                return;
+            }
+            const note = await this.ensureNote(key);
+            await this.rewrite(note, async text => {
+                if (this.stopped) throw new Error('The reader was closed before the annotations were saved.');
+                if (!this.noteMatchesSource(note, key))
+                    throw new Error('The annotation note target changed; nothing was taken in.');
+                return this.codec.createMany(
+                    text,
+                    plan.rows.map(({ annotation, ink }) =>
+                        ink !== DEFAULT_INK ? { annotation, ink } : { annotation }
+                    ),
+                    { ...this.markdown }
+                );
+            });
+            added = plan.rows.length;
+            last = plan.rows[0].annotation.id;
+            await this.loadNote(key);
+            new Notice(
+                `${added} linked ${added === 1 ? 'passage' : 'passages'} taken in as ${added === 1 ? 'a highlight' : 'highlights'}.${already ? ` ${already} ${already === 1 ? 'was' : 'were'} here already.` : ''}${left ? ` ${left} could not be placed.` : ''}`,
+                10000
+            );
+        } catch (error) {
             this.fail(error);
         } finally {
             working.hide();

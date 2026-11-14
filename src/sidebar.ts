@@ -509,6 +509,14 @@ export class AnnotationView extends ItemView {
                             void plugin.importPdfAnnotations(file).catch(error => new Notice(String(error)));
                         })
                 );
+            menu.addItem(item =>
+                item
+                    .setTitle("Take in links to this PDF's passages…")
+                    .setIcon('file-up')
+                    .onClick(() => {
+                        void plugin.importSelectionLinks(file).catch(error => new Notice(String(error)));
+                    })
+            );
             if (file && plugin.canExportPdf(file))
                 menu.addItem(item =>
                     item

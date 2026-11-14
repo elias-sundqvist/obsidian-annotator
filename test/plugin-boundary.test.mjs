@@ -801,6 +801,55 @@ test('a new annotation note starts as the reader set it: another heading, or a t
   await h.plugin.setDisplay({noteTemplate:'Templates/Gone.md'});await h.plugin.ensureNote('d.pdf');assert.equal(made.at(-1)[1],'---\nannotation-target: "d.pdf"\n---\n\n## Highlights\n');assert.equal(made.length,4);
  }finally{h.dispose();}
 });
+test('links to passages of a PDF in other notes are taken in as highlights, once, and the notes are left alone',async()=>{
+ const {Notice}=await import('./.generated/plugin-boundary.mjs');
+ const h=host();try{h.plugin.manifest={id:'obsidian-annotator'};h.dom.window.ResizeObserver=class{observe(){}unobserve(){}disconnect(){}};
+  const pdf=h.add('Papers/Paper.pdf'),settle=async()=>{for(let turn=0;turn<40;turn++)await new Promise(resolve=>setTimeout(resolve,0));};
+  // One page, in runs as the PDF library gives them: an empty run at a line's end, and a ligature the page shows as one letter.
+  const read=['Trace-based ','Just-in-Time','',' is efficient'],shown=['Trace-based ','Just-in-Time','',' is efﬁcient'];
+  const page={getTextContent:async options=>({items:(options?.disableNormalization?shown:read).map(str=>({str}))})};
+  const leaf=new WorkspaceLeaf();leaf.contentEl=h.dom.window.document.createElement('div');h.dom.window.document.body.append(leaf.contentEl);leaf.app=h.app;leaf.view=new FileView(leaf);leaf.view.file=pdf;leaf.view.getViewType=()=>'pdf';leaf.view.getState=()=>({file:pdf.path,page:1});
+  leaf.view.viewer={child:{pdfViewer:{pdfViewer:{currentPageNumber:1,pdfDocument:{fingerprints:['selectionfixture'],numPages:1,getPage:async()=>page}}}}};
+  h.app.workspace.getLeavesOfType=type=>type==='pdf'?[leaf]:type==='annotator-sidebar'?[{}]:[];h.app.workspace.getMostRecentLeaf=()=>leaf;h.app.workspace.iterateAllLeaves=fn=>{fn(leaf);};
+  h.app.vault.process=async(file,change)=>{const next=change(h.contents.get(file.path));h.contents.set(file.path,next);return next;};h.app.vault.create=async(path,text)=>h.add(path,text,{'annotation-target':'Papers/Paper.pdf'});
+  h.app.metadataCache.getFirstLinkpathDest=path=>path==='Paper.pdf'||path==='Papers/Paper.pdf'?pdf:h.files.get(path)||null;
+  // Two notes link to passages; one link is to the page only, one to another file, one to a page the PDF has not.
+  const first='Reading notes.md',second='Folder/Other.md';
+  h.add(first,'kept as written',{});h.metadata.set(first,{frontmatter:{},links:[{link:'Paper.pdf#page=1&selection=0,0,1,4&color=blue'},{link:'Paper.pdf#page=1'},{link:'Elsewhere.pdf#page=1&selection=0,0,0,3'}],embeds:[{link:'Papers/Paper.pdf#page=1&selection=3,4,3,12'}]});
+  h.add(second,'also kept',{});h.metadata.set(second,{frontmatter:{},links:[{link:'Paper.pdf#page=1&selection=0,0,1,4'},{link:'Paper.pdf#page=7&selection=0,0,0,3'},{link:'Paper.pdf#page=1&selection=3,0,9,2'}]});
+  await h.plugin.onload();h.plugin.bindSources();await settle();const binding=h.plugin.bindings.get(leaf.view);await binding.host.loading;await settle();
+  const before=Notice.messages.length;await h.plugin.importSelectionLinks('Papers/Paper.pdf');await settle();
+  const rows=h.plugin.notes.get('Papers/Paper.pdf').records,quote=row=>row.target[0].selector.find(each=>each.type==='TextQuoteSelector').exact;
+  // The two passages, each once: the one two notes link to names both, and the ligature is the reader's two letters.
+  assert.deepEqual(rows.map(quote).sort(),['Trace-based Just','efficient']);
+  const both=rows.find(row=>quote(row)==='Trace-based Just'),lig=rows.find(row=>quote(row)==='efficient');
+  assert.equal(both.text,'Linked from [[Reading notes]], [[Folder/Other]].');assert.equal(lig.text,'Linked from [[Reading notes]].');
+  assert.equal(both.nativePdf.from,'selection:1:0,0,1,4');assert.equal(lig.nativePdf.from,'selection:1:3,4,3,12');
+  assert.match(String(Notice.messages.slice(before).at(-1)),/2 linked passages taken in as highlights\. 2 could not be placed\./);
+  // The first link's colour is its highlight's ink; the notes that hold the links are untouched.
+  const note=h.plugin.notes.get('Papers/Paper.pdf').note,stored=h.contents.get(note.path);assert.match(stored,/"exact":"Trace-based Just"/);assert.equal(h.contents.get(first),'kept as written');assert.equal(h.contents.get(second),'also kept');
+  // Again: nothing new, and it says so.
+  const again=Notice.messages.length;await h.plugin.importSelectionLinks('Papers/Paper.pdf');await settle();assert.equal(h.plugin.notes.get('Papers/Paper.pdf').records.length,2);assert.equal(h.contents.get(note.path),stored);
+  assert.match(String(Notice.messages.slice(again).at(-1)),/could be placed|already/);
+  // A PDF no note links to says so and makes no note.
+  h.metadata.set(first,{frontmatter:{}});h.metadata.set(second,{frontmatter:{}});const quiet=Notice.messages.length;await h.plugin.importSelectionLinks('Papers/Paper.pdf');assert.match(String(Notice.messages.slice(quiet).at(-1)),/No note links to a passage of this PDF/);
+ }finally{h.dispose();}
+});
+test('a source tied to a note that is gone finds the note that names it, or is simply unannotated',async()=>{
+ const h=host();try{h.plugin.manifest={id:'obsidian-annotator'};let saves=0;const persist=h.plugin.persist.bind(h.plugin);h.plugin.persist=async()=>{saves++;return persist();};
+  h.add('Paper.pdf');h.add('Lone.pdf');h.add('Twice.pdf');const real=h.add('Real notes.md','',{'annotation-target':'Paper.pdf'});h.add('One.md','',{'annotation-target':'Twice.pdf'});h.add('Two.md','',{'annotation-target':'Twice.pdf'});
+  await h.plugin.onload();
+  // Ties to notes that no longer exist, as a deletion or a rename outside the app leaves them.
+  h.plugin.associations['Paper.pdf']='Gone.md';h.plugin.associations['Lone.pdf']='Also gone.md';h.plugin.associations['Twice.pdf']='Gone too.md';
+  await h.plugin.loadNote('Paper.pdf');assert.equal(h.plugin.notes.get('Paper.pdf').note,real);assert.equal(h.plugin.notes.get('Paper.pdf').error,undefined);assert.notEqual(h.plugin.associations['Paper.pdf'],'Gone.md');
+  await h.plugin.loadNote('Lone.pdf');assert.equal(h.plugin.notes.get('Lone.pdf').note,null);assert.equal(h.plugin.notes.get('Lone.pdf').error,undefined);assert.equal(h.plugin.associations['Lone.pdf'],undefined);
+  // Two notes name the source and the tie cannot say which: that is said, as before.
+  await h.plugin.loadNote('Twice.pdf');assert.match(h.plugin.notes.get('Twice.pdf').error,/Multiple annotation notes target this source/);
+  assert.ok(saves>=3,'the dropped ties are saved');
+  // While the vault is still being read, a missing note may only be not there yet: the tie is kept and the wait is said.
+  h.plugin.layoutReady=false;h.plugin.associations['Lone.pdf']='Not yet.md';await h.plugin.loadNote('Lone.pdf');assert.match(h.plugin.notes.get('Lone.pdf').error,/Associated annotation note is missing/);assert.equal(h.plugin.associations['Lone.pdf'],'Not yet.md');
+ }finally{h.dispose();}
+});
 test('a file Obsidian opened from outside the vault is shown without annotations, and nothing is written beside it',async()=>{
  const {Notice}=await import('./.generated/plugin-boundary.mjs');
  const h=host();try{h.plugin.manifest={id:'obsidian-annotator'};h.dom.window.ResizeObserver=class{observe(){}unobserve(){}disconnect(){}};

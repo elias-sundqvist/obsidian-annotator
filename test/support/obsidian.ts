@@ -26,7 +26,7 @@ export class TFile {
     constructor(public path:string){this.extension=path.split('.').at(-1)||'';this.basename=path.split('/').at(-1)!.replace(/\.[^.]+$/,'');}
 }
 export class Menu { items:any[]=[]; shown=0; native=true; setUseNativeMenu(on:boolean){this.native=on;return this;} addItem(build:(item:any)=>void){const item:any={title:'',checked:false,warning:false,run:()=>{}};for(const key of ['setIcon','setDisabled','setSection'])item[key]=()=>item;item.setTitle=(title:string)=>{item.title=title;return item;};item.setChecked=(on:boolean)=>{item.checked=!!on;return item;};item.setWarning=(on:boolean)=>{item.warning=!!on;return item;};item.onClick=(run:()=>void)=>{item.run=run;return item;};build(item);this.items.push(item);return this;} addSeparator(){return this;} showAtMouseEvent(_event:unknown){this.shown++;return this;} showAtPosition(_position:unknown){this.shown++;return this;} }
-export class Notice { static messages:string[]=[];constructor(message:string){Notice.messages.push(message);} }
+export class Notice { static messages:string[]=[];constructor(message:string){Notice.messages.push(message);} hide(){} }
 export class Modal {contentEl!:HTMLElement;modalEl!:HTMLElement;constructor(public app:any){}open(){}close(){} }
 export class FuzzySuggestModal<T> extends Modal { emptyStateText='';limit=0;setPlaceholder(_text:string){} setInstructions(_items:unknown[]){} getItems():T[]{return [];} }
 export class PluginSettingTab {containerEl!:HTMLElement;constructor(public app:any,_plugin:any){} }

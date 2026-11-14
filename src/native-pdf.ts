@@ -40,7 +40,9 @@ import {
 import type { Annotation } from './codec';
 
 interface PdfPage {
-    getTextContent(): Promise<{ items: { str?: string; hasEOL?: boolean }[] }>;
+    getTextContent(options?: { disableNormalization?: boolean }): Promise<{
+        items: { str?: string; hasEOL?: boolean }[];
+    }>;
 }
 interface ExportPage {
     view?: number[];
@@ -78,6 +80,7 @@ export { annotationQuote } from './pdf-annotation';
 import { annotationQuote, otherCopy, resolvePdfAnnotation, resolvePdfAnnotationEarly } from './pdf-annotation';
 import type { Progress } from './progress';
 import type { PdfTextMemory } from './pdf-text-memory';
+import { selectionOffsets, type SelectionLink } from './selection-links';
 import { PdfCitations, type CiteLogic } from './pdf-citations';
 import type { Link, Rect, Run } from './citations';
 /** What the reader says while it reads the document's text. Highlights are painted meanwhile; everything else waits. */
@@ -611,6 +614,104 @@ export class NativePdf {
             }
         }
         return { rows, skipped, ours: plan.ours, known: plan.known };
+    }
+    /**
+     * Links to passages of this PDF, written in other notes by Obsidian's own "Copy link to selection" or by PDF++,
+     * as annotations of this reader: each is the passage its four numbers mark on its page, saved with the same
+     * verified anchors as a selection. `known` holds what was taken in before. Nothing is saved here.
+     */
+    async selectionPlan(
+        links: readonly { link: SelectionLink; text: string }[],
+        known: ReadonlySet<string> = new Set()
+    ): Promise<{
+        rows: { annotation: Annotation; ink: Ink }[];
+        skipped: { key: string; reason: string }[];
+        known: number;
+    }> {
+        await this.loading;
+        const doc = this.document,
+            file = this.view.file;
+        if (!doc || !file || this.error) throw new Error(this.error || 'The PDF is still loading.');
+        const rows: { annotation: Annotation; ink: Ink }[] = [],
+            skipped: { key: string; reason: string }[] = [],
+            seen = new Set<string>(),
+            runs = new Map<number, { read: string[]; shown: string[] | null } | string>(),
+            now = new Date().toISOString();
+        let already = 0;
+        for (const { link, text } of links) {
+            if (seen.has(link.key)) continue;
+            seen.add(link.key);
+            if (known.has(link.key)) {
+                already++;
+                continue;
+            }
+            const page = this.pages.find(item => item.number === link.page);
+            if (!page) {
+                skipped.push({ key: link.key, reason: `The PDF has no page ${link.page}.` });
+                continue;
+            }
+            let found = runs.get(link.page);
+            if (!found) {
+                try {
+                    const made = await doc.getPage(link.page),
+                        read = (await made.getTextContent()).items.map(item => item.str || '');
+                    // The page's text as the reader holds it must be these runs joined: the numbers in a link count them.
+                    if (read.join('') !== page.text) found = 'The text of this page is read differently now.';
+                    else {
+                        let shown: string[] | null = null;
+                        try {
+                            shown = (await made.getTextContent({ disableNormalization: true })).items.map(
+                                item => item.str || ''
+                            );
+                        } catch {
+                            shown = null;
+                        }
+                        found = { read, shown: shown && shown.length === read.length ? shown : null };
+                    }
+                } catch (error) {
+                    found = String(error instanceof Error ? error.message : error);
+                }
+                runs.set(link.page, found);
+            }
+            if (typeof found === 'string') {
+                skipped.push({ key: link.key, reason: found });
+                continue;
+            }
+            const where = selectionOffsets(found.read, found.shown, link.range),
+                exact = where ? page.text.slice(where.start, where.end) : '';
+            if (!where || !normalize(exact).text) {
+                skipped.push({ key: link.key, reason: 'The link marks no text on its page as the page is now.' });
+                continue;
+            }
+            try {
+                const made = await this.payload(
+                    {
+                        file: file.path,
+                        page: link.page,
+                        exact,
+                        start: where.start,
+                        end: where.end,
+                        prefix: page.text.slice(Math.max(0, where.start - 64), where.start),
+                        suffix: page.text.slice(where.end, where.end + 64),
+                        revision: `${revision(this.view)}:${this.generation}`
+                    },
+                    text,
+                    uuid().replaceAll('-', '')
+                );
+                rows.push({
+                    annotation: {
+                        ...made,
+                        created: now,
+                        updated: now,
+                        nativePdf: { ...(made.nativePdf as object), from: link.key }
+                    },
+                    ink: link.ink
+                });
+            } catch (error) {
+                skipped.push({ key: link.key, reason: String(error instanceof Error ? error.message : error) });
+            }
+        }
+        return { rows, skipped, known: already };
     }
     /**
      * Where each annotation goes when it is written into the PDF file itself:
