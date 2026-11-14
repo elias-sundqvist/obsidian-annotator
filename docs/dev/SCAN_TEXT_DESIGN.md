@@ -327,51 +327,47 @@ Limits, to be written in the README:
 ## 9. What is pure logic, and its laws
 
 With B, nothing new is stored in a note, so the note codecs are untouched.
-What is new and pure is geometry, of the kind `area.bend` and `stroke.bend`
-already hold: a module `proofs/scan_text.bend`, laws in `LAWS.bend`, proofs
-in `PROOF.bend`.
+What is new and pure is which of a recogniser's words are kept. That is in
+Bend (`proofs/scan_text.bend`, built; laws in `LAWS.bend`, proofs in
+`PROOF.bend`), in the whole page units `area.bend` uses:
 
-1. **Cleaning what the recogniser says** (`clean`): words that are empty,
-   hold white space, have no size, or fall under the confidence floor are
-   dropped; counts are capped.
-   - Every word that comes out is non-empty, without white space, with a
-     box at least one unit each way, on the page.
-   - Cleaning twice is cleaning once. Order is kept.
-2. **From the picture's pixels to the page** (`fit`), in the page units of
-   `area.bend`.
-   - For every input (a box outside the picture, a picture of no size) the
-     result is on the page and at least one unit each way.
-   - Corners in either order give the same box. The whole picture is the
-     whole page.
-   - A box not to the right of another is not to the right of it afterwards
-     (rounding may make them meet, never cross).
-3. **From the page to the PDF's own coordinates** (`place`), given the
-   page's box and its turn.
-   - Every placed box lies in the page's box.
-   - The four turns are consistent: turning the page four times is turning
-     it not at all.
-   - It agrees with where areas are written by the export, so recognised
-     text and a marked area of the same words coincide.
-4. **Stretching a word to its box** (`stretch`): the horizontal scale that
-   makes a word of n characters in the glyphless font as wide as its box.
-   - Never zero. The written width differs from the box's by less than one
-     unit.
-5. **Nothing twice** (`apart`): a recognised word is dropped when its
-   centre lies in a box of text the page already has.
-   - No kept word's centre lies in such a box. With no text on the page,
-     every word is kept.
+1. **Sifting** (`sift`): a word is kept only if the recogniser is at least
+   `floor` sure of it and its box, held on the page, has some extent each
+   way. The box is made by `Area.fit`, whose laws were already proved.
+   - Every kept word is sound: sure enough, with a box that may be drawn
+     (`scan_sift_sound`).
+   - Corners in either order give the same word (`scan_sift_either_corner`).
+   - Each word is judged alone and order is kept: sifting two lists one after
+     the other is sifting them joined (`scan_sift_append`).
+2. **A cap** (`first`): never more words than the most allowed, and they are
+   still sound (`scan_first_capped`, `scan_first_sound`).
+3. **Nothing twice** (`apart`): a word whose middle lies on text the page
+   already has is left out.
+   - No kept word's middle lies on such text (`scan_apart_clear`); with no
+     text on the page every word is kept (`scan_apart_nothing`); leaving out
+     twice is leaving out once (`scan_apart_once`); order is kept
+     (`scan_apart_append`); what was sound stays sound (`scan_apart_sound`).
+   - A word in the middle of a box does lie on it (`scan_covers_centre`), so
+     the test is not one nothing passes.
 
-Tested, not proved, as the export is: the bytes written (read back by
-independent PDF readers: every word found, at its box, in order; the
-original's bytes unchanged at the front; taking the addition off gives the
-original exactly), the worker, fetching and hashing, the dialog.
+Each law has a deliberately broken implementation that the proof check must
+refuse (seven negative controls in `proofs/verify.mjs`).
 
-If A is chosen instead, the logic also decides what is stored in a note
-(the quote, the line boxes, reading untrusted boxes back from a note and
-words from a vault file), and the laws grow accordingly: a quote of whole
-words that is exactly the text of the words its boxes cover; each line box
-the tight bound of its words; at most 256 boxes read, each on the page;
-what was written read back unchanged.
+**Not in Bend, and why.** The draft of this section also put the mapping to
+the PDF's own coordinates and the stretch of a word into Bend. Those are
+fractions in PDF units under a page's box and turn, which is float
+arithmetic; Bend's laws here are over whole numbers. They are in
+`src/pdf-searchable.ts` and tested instead, the way the export's `pagePoint`
+is (and they use that same function, so recognised text and a marked area of
+the same words coincide by construction): the written words are read back
+from the bytes and compared with their boxes, on an upright page, a cropped
+one and pages turned a quarter and three quarters; and the copy is read by
+two other PDF readers. Taking the addition off again is tested to give the
+original, byte for byte.
+
+If A is chosen later, the logic also decides what is stored in a note (the
+quote, the line boxes, reading untrusted boxes back from a note), and laws
+for that would be added.
 
 ## 10. What the critic found, and what changed
 
@@ -455,3 +451,54 @@ copy holds the scan's text and is as private as the PDF. The README gains a
    and Spanish, each fetched only when chosen.
 7. **The fixture:** a generated scan, or a real one the owner provides.
 8. **A yes to each download** of section 11, when the time comes.
+
+## 13. Decided so far, and what is built
+
+**Decided by the owner (2026-11-13):** it goes into the plugin, as the
+searchable copy (B); the engine and language data are fetched on demand, not
+bundled. Still open: decisions 3 to 8 above, and a yes to each download.
+
+**Built, without any download** (nothing a reader can reach yet):
+
+- `src/pdf-searchable.ts`: writes a page's words into a copy as invisible
+  text, marks each page, and takes the addition off again.
+- `src/scan-words.ts` and `proofs/scan_text.bend`: from a recogniser's
+  report to the words that are kept (section 9).
+- `test/support/fixtures/scanned-pages.pdf`: a scan made by the script
+  beside it (a tilted, grainy picture page; a page stored sideways; a text
+  page), with where its words are.
+- Tests: `test/pdf-searchable.test.mjs`, `test/scan-words.test.mjs`, and the
+  bridge tests in `proofs/reader.test.mjs`.
+
+**Read back by two other readers, by hand**
+(`test/support/searchable-copy-check.mjs`; the suite pins the copy they
+were given by its checksum): pdf.js 5.3.34 as Obsidian ships it reports the
+same document (same fingerprint), one run of text per printed line, in
+order, each as wide as its print, also on the sideways page. Apple's PDFKit
+reads the upright page line by line as printed and finds a phrase where it
+is printed; on the sideways page it reads the same words in the same order
+but breaks some lines in two.
+
+**Found while building, and what was done:**
+
+- *Apple's reader orders text by how high each run stands.* Words written
+  each at its own height (as a recogniser boxes them), or along a line that
+  leans even slightly, came out a word to a line and out of order in PDFKit.
+  So the words of a line are set on one straight line, and a line that is
+  nearly level is set level. A line that leans by more than half its height
+  from end to end keeps its lean, so its words stay on the ink; in Preview
+  and on iOS such a line may read out of order. pdf.js reads in the order
+  written either way.
+- *Apple's reader wants the font to say how far it descends.* A descent of
+  zero made it read no text at all; the font says -1, as Tesseract's own
+  does.
+- *The space after a word fills exactly the gap to the next word,* so no two
+  runs of text overlap.
+- *A strongly tilted scan* is therefore the case to measure with the real
+  recogniser before anything is promised about Preview and iOS.
+
+**Not built:** the recogniser and its worker, fetching and hashing, where
+the page's own text is (for pages with a stamp over a scan), the dialog,
+progress, Stop and Continue, opening the copy and pointing the note at it,
+the measurements of section 8, and the user documentation (README,
+CHANGELOG, SECURITY), which waits until there is something a reader can use.

@@ -58,6 +58,9 @@ Some checks are made by hand and are not part of `npm test`:
   dependency of this repository; each is named by the note in `docs/dev/`
   whose result it produced.
 - `test/support/codec-bench.mjs` times the note codec.
+- `test/support/searchable-copy-check.mjs` writes the searchable copy of the
+  scanned fixture and has pdf.js (as Obsidian ships it) and Apple's PDFKit
+  read it back. The suite pins the copy they were given by its checksum.
 - `test/support/ios/` runs the built plugin in iOS WebKit in the Simulator
   (its README says how).
 - `npm run proofs` also has the proofs checked a second time by Bend's kernel

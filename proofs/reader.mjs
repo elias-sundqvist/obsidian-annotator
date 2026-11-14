@@ -8,6 +8,7 @@ import Digest from './digest.bend';
 import Area from './area.bend';
 import Stroke from './stroke.bend';
 import Book from './book.bend';
+import Scan from './scan_text.bend';
 import { list, array } from './lists.mjs';
 import { parseJson, stringifyJson } from './typed-annotations.mjs';
 
@@ -182,4 +183,33 @@ export function bookBefore(lengths, chapter, offset) {
     let before = 0, start = 0;
     for (; chapter - start >= STRETCH && start < lengths.length; start += STRETCH) before += Book.total(list(lengths.slice(start, start + STRETCH)));
     return before + Book.before(list(lengths.slice(start, start + STRETCH)), { $: 'Place', chapter: chapter - start, offset });
+}
+
+// ── Words recognised on a scanned page (scan_text.bend) ─────────────────────
+/** How many words of one page are kept at most, how many boxes of a page's own text are compared with, and how sure a recogniser is at most. */
+export const SCAN_MOST = 20000, SCAN_BOXES = 1000, SCAN_SURE = 100;
+// The definitions walk a list one call inside the last, so a page is given to them a stretch of words at a time.
+// Each word is judged on its own and the kept words stay in order (laws scan_sift_append, scan_apart_append), so
+// sifting the stretches one after another is sifting the page.
+const SCAN_STRETCH = 500;
+const seenWord = value => !!value && [value.sure, value.ax, value.ay, value.bx, value.by].every(whole);
+/**
+ * The words of a recogniser that are kept for page `page` (from 1): those it is at least `floor` sure of whose box,
+ * held on the page, has some extent each way (law scan_sift_sound), less those whose middle lies on one of `boxes`,
+ * the text the page already has (scan_apart_clear). `seen` is a list of { sure, ax, ay, bx, by }: how sure (0 to
+ * 100) and two opposite corners in page units, in either order (scan_sift_either_corner) and possibly past the
+ * page's edge. What comes back is, for each kept word in order, its place in `seen` and its box:
+ * { index, sure, page, x, y, w, h }. At most SCAN_MOST words are kept (scan_first_capped). Null for what is not
+ * whole numbers, or for more boxes than a scanned page has text.
+ */
+export function scanWords(page, floor, seen, boxes = []) {
+    if (!whole(page) || !whole(floor) || !Array.isArray(seen) || !seen.every(seenWord)) return null;
+    if (!Array.isArray(boxes) || boxes.length > SCAN_BOXES || !boxes.every(region)) return null;
+    const own = list(boxes.map(toBend)), out = [];
+    for (let start = 0; start < seen.length && out.length < SCAN_MOST; start += SCAN_STRETCH) {
+        const stretch = list(seen.slice(start, start + SCAN_STRETCH).map((word, at) => ({ $: 'Seen', index: start + at, sure: Math.min(word.sure, SCAN_SURE), ax: word.ax, ay: word.ay, bx: word.bx, by: word.by })));
+        const kept = Scan.first(SCAN_MOST - out.length, Scan.apart(own, Scan.sift(AREA_FULL, floor, page, stretch)));
+        for (const word of array(kept)) out.push({ index: word.index, sure: word.sure, ...fromBend(word.area) });
+    }
+    return out;
 }

@@ -528,3 +528,5 @@ export function searchablePdf(
     if (!written.length) return { bytes: source.slice(), written, skipped };
     return { bytes: appendUpdate(file, source, objects, size), written, skipped };
 }
+// What a caller needs to read a file with (`pageFrame` takes a page of one), from the same place as what writes it.
+export { PdfFile, Dict, List, Ref, PdfExportError, readPdfText } from './pdf-write';

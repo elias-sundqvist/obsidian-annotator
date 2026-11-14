@@ -1145,7 +1145,7 @@
       "status": "doing",
       "parent": "fork-ideas",
       "dependsOn": ["store-release"],
-      "notes": "Idea from this-scott's fork (tesseract.js, unfinished). Today scanned pages can only take area notes. Optional, on demand per document, fully offline, with the result cached beside the source rather than rewriting the PDF. Weigh the size of a recogniser and language data against the 1.3 MB bundle (download on first use?)."
+      "notes": "Idea from this-scott's fork (tesseract.js, unfinished). Design: docs/dev/SCAN_TEXT_DESIGN.md. Decided by the owner on 2026-11-13: it goes in, as a searchable copy saved beside the PDF (the original untouched), with the recogniser and language data fetched on demand. Built so far, with no download: the writer of the copy (src/pdf-searchable.ts), the sifting of a recogniser's words (src/scan-words.ts, proofs/scan_text.bend with its laws), a scanned fixture, tests; the copy was read back by pdf.js as Obsidian ships it and by Apple's PDFKit. Not built: the recogniser, fetching, everything the reader sees. Waiting on the owner: a yes to each download, and decisions 3 to 8 of the design note."
     },
     {
       "id": "worker",

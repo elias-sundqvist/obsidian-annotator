@@ -1,6 +1,7 @@
 import ./book.bend as Book
 import ./stroke.bend as Stroke
 import ./area.bend as Area
+import ./scan_text.bend as Scan
 import ./segments.bend as Segments
 import ./ink.bend as Ink
 import ./shelf.bend as Shelf
@@ -1189,6 +1190,102 @@ law stroke_box_holds:
   for +first: Stroke.Point
   for +rest: List<&2, Stroke.Point>
   {Stroke.holds_all(Stroke.box(first, rest), Con{first, rest}) == True{} : Bool}
+
+# ── The words recognised on a scanned page ──────────────────────────────────
+# A recogniser's words are sifted before they are written into a searchable
+# copy of a PDF (scan_text.bend). For EVERY page size, floor, page and list
+# of words a recogniser may hand over:
+#   - every word kept is one the recogniser was sure enough of, with a box
+#     that may be drawn: on a page, with some extent, nothing past the edge;
+#   - a word's corners may be given in either order;
+#   - each word is judged on its own and the kept words stay in their order:
+#     sifting two lists one after the other is sifting them joined;
+#   - no more words are kept than the most allowed, and they are still sound.
+law scan_sift_sound:
+  for +full: Nat
+  for +floor: Nat
+  for +page: Nat
+  for +seen: List<&2, Scan.Seen>
+  {Scan.sound(full, floor, Scan.sift(full, floor, page, seen)) == True{} : Bool}
+
+law scan_sift_either_corner:
+  for +full: Nat
+  for +floor: Nat
+  for +page: Nat
+  for +index: Nat
+  for +sure: Nat
+  for +ax: Nat
+  for +ay: Nat
+  for +bx: Nat
+  for +by: Nat
+  for +rest: List<&2, Scan.Seen>
+  {Scan.sift(full, floor, page, Con{Scan.Seen{index, sure, ax, ay, bx, by}, rest}) == Scan.sift(full, floor, page, Con{Scan.Seen{index, sure, bx, by, ax, ay}, rest}) : List<&2, Scan.Kept>}
+
+law scan_sift_append:
+  for +full: Nat
+  for +floor: Nat
+  for +page: Nat
+  for +a: List<&2, Scan.Seen>
+  for +b: List<&2, Scan.Seen>
+  {Scan.sift(full, floor, page, List.append(&2, Scan.Seen, a, b)) == List.append(&2, Scan.Kept, Scan.sift(full, floor, page, a), Scan.sift(full, floor, page, b)) : List<&2, Scan.Kept>}
+
+law scan_first_capped:
+  for +most: Nat
+  for +words: List<&2, Scan.Kept>
+  {Nat.is_ge(most, Scan.count(Scan.first(most, words))) == True{} : Bool}
+
+law scan_first_sound:
+  for +full: Nat
+  for +floor: Nat
+  for +most: Nat
+  for +words: List<&2, Scan.Kept>
+  for kept: {Scan.sound(full, floor, words) == True{} : Bool}
+  {Scan.sound(full, floor, Scan.first(most, words)) == True{} : Bool}
+
+# Words that lie on text the page already has are left out. For EVERY list of
+# boxes of such text and every list of words:
+#   - no word that is kept has its middle on one of the boxes;
+#   - a page with no text of its own keeps every word;
+#   - leaving out twice is leaving out once;
+#   - each word is judged on its own and the kept words stay in their order;
+#   - what was sound before is sound after.
+law scan_apart_clear:
+  for +boxes: List<&2, Area.Area>
+  for +words: List<&2, Scan.Kept>
+  {Scan.all_clear(boxes, Scan.apart(boxes, words)) == True{} : Bool}
+
+law scan_apart_nothing:
+  for +words: List<&2, Scan.Kept>
+  {Scan.apart(Nil{}, words) == words : List<&2, Scan.Kept>}
+
+law scan_apart_once:
+  for +boxes: List<&2, Area.Area>
+  for +words: List<&2, Scan.Kept>
+  {Scan.apart(boxes, Scan.apart(boxes, words)) == Scan.apart(boxes, words) : List<&2, Scan.Kept>}
+
+law scan_apart_append:
+  for +boxes: List<&2, Area.Area>
+  for +a: List<&2, Scan.Kept>
+  for +b: List<&2, Scan.Kept>
+  {Scan.apart(boxes, List.append(&2, Scan.Kept, a, b)) == List.append(&2, Scan.Kept, Scan.apart(boxes, a), Scan.apart(boxes, b)) : List<&2, Scan.Kept>}
+
+law scan_apart_sound:
+  for +full: Nat
+  for +floor: Nat
+  for +boxes: List<&2, Area.Area>
+  for +words: List<&2, Scan.Kept>
+  for kept: {Scan.sound(full, floor, words) == True{} : Bool}
+  {Scan.sound(full, floor, Scan.apart(boxes, words)) == True{} : Bool}
+
+# A word whose middle is the middle of a box lies on it, wherever that is and
+# whatever their sizes: the test is not one that nothing passes.
+law scan_covers_centre:
+  for +page: Nat
+  for +x: Nat
+  for +y: Nat
+  for +w: Nat
+  for +h: Nat
+  {Scan.covers(Area.Area{page, x, y, w, h}, Area.Area{page, x, y, w, h}) == True{} : Bool}
 
 # ── How far through a book ──────────────────────────────────────────────────
 # The place found for a character is the place of exactly that character: as
