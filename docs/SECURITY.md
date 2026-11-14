@@ -60,6 +60,11 @@ assets…" (`readers.test.mjs`), "network CSS, dynamic selectors…"
   not asked about again. A Zotero or Calibre link is first followed to a
   path inside the folder the settings name, and that path is then asked
   about in the same way.
+- **Nothing is written beside a file outside the vault.** Since 1.14.4
+  Obsidian can open a file that is not in the vault, and its file functions
+  then write wherever that file's path says. The reader names its notes and
+  exports after their source, so a source that is not in the vault is not
+  annotated where it lies: it gets no note, no export and no saved position.
 - **Remote video files** (`.mp4` and similar targets) are loaded by the
   built-in player from wherever the target points.
 - **Imported comments** are rendered as Markdown like the user's own.

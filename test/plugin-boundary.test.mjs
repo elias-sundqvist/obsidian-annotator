@@ -801,6 +801,33 @@ test('a new annotation note starts as the reader set it: another heading, or a t
   await h.plugin.setDisplay({noteTemplate:'Templates/Gone.md'});await h.plugin.ensureNote('d.pdf');assert.equal(made.at(-1)[1],'---\nannotation-target: "d.pdf"\n---\n\n## Highlights\n');assert.equal(made.length,4);
  }finally{h.dispose();}
 });
+test('a file Obsidian opened from outside the vault is shown without annotations, and nothing is written beside it',async()=>{
+ const {Notice}=await import('./.generated/plugin-boundary.mjs');
+ const h=host();try{h.plugin.manifest={id:'obsidian-annotator'};h.dom.window.ResizeObserver=class{observe(){}unobserve(){}disconnect(){}};
+  const created=[];
+  // As Obsidian 1.14.4 and later hand them over: a path that is a file address, and a way to ask for the real path.
+  const outside=new TFile('file:/Users/someone/Downloads/Paper.pdf');outside.getRealPath=()=>'/Users/someone/Downloads/Paper.pdf';
+  const inside=h.add('Papers/Inside.pdf');
+  const leaves=[],leaf=file=>{const item=new WorkspaceLeaf();item.contentEl=h.dom.window.document.createElement('div');h.dom.window.document.body.append(item.contentEl);item.app=h.app;item.view=new FileView(item);item.view.file=file;item.view.getViewType=()=>'pdf';item.view.viewer={child:{pdfViewer:{pdfViewer:null}}};leaves.push(item);return item;};
+  const there=leaf(outside),here=leaf(inside);
+  h.app.workspace.getLeavesOfType=type=>type==='pdf'?leaves:type==='annotator-sidebar'?[{}]:[];h.app.workspace.getMostRecentLeaf=()=>there;
+  const before=Notice.messages.length;await h.plugin.onload();
+  // Every way the plugin writes a file is watched from here on.
+  const write=h.app.vault.adapter.write,binary=h.app.vault.createBinary;h.app.vault.create=async(path,text)=>{created.push(path);return h.add(path,text);};h.app.vault.createBinary=async(path,bytes)=>{created.push(path);return binary(path,bytes);};h.app.vault.adapter.write=async(path,raw)=>{created.push(path);return write(path,raw);};
+  h.plugin.bindSources();h.plugin.bindSources();for(let turn=0;turn<20;turn++)await new Promise(resolve=>setTimeout(resolve,0));
+  // The file in the vault is annotated as ever; the one outside gets no painter and no note is looked for.
+  assert.ok(h.plugin.bindings.has(here.view));assert.ok(!h.plugin.bindings.has(there.view));assert.equal(h.plugin.sourceKey(there.view),null);assert.equal(h.plugin.sourceKey(here.view),'Papers/Inside.pdf');
+  // Said once, however often the tabs are looked over.
+  const said=Notice.messages.slice(before).filter(message=>/outside your vault/.test(String(message)));assert.equal(said.length,1);assert.match(said[0],/shown without annotations/);
+  // Whatever asks for its note is refused, in every form such a path takes, and nothing was written anywhere.
+  for(const key of ['file:/Users/someone/Downloads/Paper.pdf','file:///C:/Users/someone/Paper.pdf','/Users/someone/Downloads/Paper.pdf','C:\\Users\\someone\\Paper.pdf'])await assert.rejects(h.plugin.ensureNote(key),/outside your vault/,key);
+  assert.deepEqual(created.filter(path=>/Downloads|someone|^file:|^\//.test(path)),[]);
+  // An embed of such a file is left as Obsidian made it.
+  const embed={containerEl:h.dom.window.document.createElement('div'),register(){}};h.plugin.bindEmbeddedPdf(embed,outside);assert.equal(h.plugin.embedded.size,0);
+  // Paths of the vault are never taken for outside ones.
+  for(const path of ['Papers/Inside.pdf','a.pdf','file notes/a.pdf','C/a.pdf','Annotator sources/abc.pdf'])assert.equal(h.plugin.outsideVault({path}),false,path);
+ }finally{h.dispose();}
+});
 test('a default folder written from the vault\'s own folder ("../papers/") names the same place beside the vault on every computer',async()=>{
  const h=host();try{h.plugin.manifest={id:'obsidian-annotator'};await h.plugin.onload();
   const named=h.add('Named.md','',{'annotation-target':'a.pdf'}),direct=h.add('Direct.md','',{'annotation-target':'../papers/b.pdf'}),inner=h.add('Notes/Inner.md','',{'annotation-target':'../Kept.pdf'});h.add('Kept.pdf');

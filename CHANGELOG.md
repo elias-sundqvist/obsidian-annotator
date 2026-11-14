@@ -23,6 +23,9 @@ What changed for someone using Annotator. How to use each thing is in
 - A default folder, or a target, may be written from the vault's own folder
   (`../papers/`), so one synced setting names a folder beside the vault on
   every computer.
+- A PDF or book that Obsidian itself opened from outside the vault (it can,
+  since Obsidian 1.14.4) is shown without annotations, and says why. Before,
+  the reader could have made its note beside that file, outside the vault.
 
 ## 0.3.1 (2026-11-13)
 

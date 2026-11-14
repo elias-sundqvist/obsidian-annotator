@@ -339,6 +339,11 @@ first time, the reader asks, then downloads or copies it once into
 `Annotator sources` in your vault and reads it from there. If that fails it
 says why, and nothing is left behind.
 
+A file that Obsidian itself opened from outside the vault (for example with
+"Open with") is shown without annotations: the reader writes nothing beside
+a file that is not in your vault. Name it in a note's `annotation-target`
+instead, and it is copied in as above.
+
 A file on your computer is written as its full path, the way your system
 writes it, or as a `file:` address:
 
