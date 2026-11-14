@@ -581,9 +581,63 @@ The address in the manifest is this repository's release assets, tag
 is the owner's. Until then the files are taken from the plugin's folder
 when put there by hand, if their checksums match.
 
-## 15. Not built yet
+## 15. What a reader can now do, and where it was tried
 
-Where the page's own text is (for pages with a stamp over a scan), the dialog,
-progress, Stop and Continue, opening the copy and pointing the note at it,
-the measurements of section 8, and the user documentation (README,
-CHANGELOG, SECURITY), which waits until there is something a reader can use.
+Built on the recogniser: **Recognise text…** in the sidebar of a scan, its
+menu and the command palette; the dialog (language, pages, what would be
+fetched or that everything is on the device); the run, with a strip at the
+foot of the page and Stop; the copy, written beside the PDF; a second run on
+the copy for the pages still without text; the closing message with *Open
+the copy* and, where the PDF has an annotation note, *Annotate the copy from
+now on* (`src/scan-run.ts`, `src/scan-dialog.ts`, and the glue in
+`src/main.ts`, `src/native-pdf.ts`, `src/sidebar.ts`).
+
+Two things changed in the copy when it was first read in the reader:
+
+- **Each word is a run of text of its own.** pdf.js gathers a line's words
+  into one run and spreads its letters evenly over the line's length, so a
+  highlight sat on an even share of the line, up to a letter away from its
+  word. The font now goes by two names, used in turn; a reader starts a new
+  run where the font's name changes, so every word is placed and sized by
+  its own box.
+- **The font says it reaches 800 above and 200 below its line,** and the
+  glyphs stand that much above the foot of their box. pdf.js places selected
+  text by the stand-in font it shows it in, not by what the PDF's font says;
+  with these numbers it and Apple's reader put a selection on the word's box
+  alike.
+
+Tried with the project's WebKit harness (`test/support/ios`: the built
+plugin, Obsidian's own pdf.js, a stand-in for Obsidian's shell and vault),
+the recogniser's two files put into the plugin's folder by hand:
+
+| | Chromium 156 (desktop) | iOS WebKit in the Simulator (iPhone, iOS 18.7) |
+| --- | --- | --- |
+| The dialog, with what it says | yes | yes |
+| A run over both scanned pages, and the copy written | 1.0 s | 1.1 s |
+| The copy opened: every page has its text, nothing left to recognise | yes | yes |
+| A highlight made on recognised words: stored as an ordinary annotation (quote and position), found on its page, painted on its words | yes | not tried |
+| One page first, then the rest in a second run on the copy; a third run says there is nothing to do | not tried (the browser pane stopped answering) | yes |
+
+**Not tried:** in Obsidian itself, on any platform. Fetching the files (there
+is nothing at the address yet). *Annotate the copy from now on*. Stop in the
+middle of a long run. A long document. Android: an emulator with Obsidian was
+running, but it is driven by taps under an authorisation the owner gave
+another session, so it was left alone.
+
+One fault met on the way was the harness's, and was put right there: its
+stand-in for "does this file exist" fetched the whole file and never read
+it, which left the page without connections after a few large files.
+
+## 16. Not built yet
+
+- Any language but English (each needs its data downloaded once, to pin its
+  checksum).
+- Pages that have some text of their own: `pageWords` and the checked logic
+  take the boxes of that text, but nothing gives them yet, so only pages
+  with no text are offered.
+- *Recognise again in another language* (the writer can take the addition
+  off again; nothing asks it to).
+- A list of the recogniser's files in the settings, with Remove.
+- Remembering the pages done if the app closes in the middle of a run: what
+  is done is written only when the run ends or is stopped.
+- The measurements of section 8 inside Obsidian and on a phone.

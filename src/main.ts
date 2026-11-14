@@ -3842,7 +3842,10 @@ export default class AnnotatorPlugin extends Plugin {
             new ScanDialog(
                 this.app,
                 {
-                    copy: searchableName('', source.basename),
+                    // A PDF that is itself a searchable copy takes the words into itself.
+                    copy: / \(searchable\)(?: \d+)?$/.test(source.basename)
+                        ? null
+                        : searchableName('', source.basename),
                     current: host.currentPage() ?? 0,
                     without,
                     languages: SCAN_LANGUAGES.map(language => ({ code: language.code, name: language.name })),
@@ -3871,20 +3874,26 @@ export default class AnnotatorPlugin extends Plugin {
         this.scanRun = { file: source.name, stop };
         try {
             host.showRun('Preparing the recogniser…', stop);
-            // Only what is missing is fetched, each file from the one address the plugin's code names, and only now that the reader has said so.
-            for (const file of await missingFiles(adapter, folder, [SCAN_ENGINE, language.file])) {
-                if (over()) return;
+            // Each file is read from the plugin's folder and checked; one that is not there is fetched, from the one
+            // address the plugin's code names, and only now that the reader has said so.
+            const ready = async (file: typeof SCAN_ENGINE) => {
+                const held = await heldFile(adapter, folder, file).catch(error => {
+                    // A file that was there and wrong is gone now, and is fetched afresh like one that never was.
+                    if (error instanceof ScanFileError && error.reason !== 'entry') return null;
+                    throw error;
+                });
+                if (held || over()) return held;
                 host.showRun(`Fetching ${file.what.toLowerCase()}…`, stop);
-                await fetchFile(
+                return fetchFile(
                     adapter,
                     folder,
                     file,
                     async url => (await requestUrl({ url, throw: true })).arrayBuffer
                 );
-            }
-            const engine = await heldFile(adapter, folder, SCAN_ENGINE),
-                model = await heldFile(adapter, folder, language.file);
-            if (!engine || !model) throw new Error('The recogniser is not on this device.');
+            };
+            const engine = await ready(SCAN_ENGINE),
+                model = engine && (await ready(language.file));
+            if (!engine || !model) return;
             if (over()) return;
             await recogniser.open(engine, model);
             const outcome = await recognisePages(

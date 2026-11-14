@@ -3,6 +3,20 @@
 What changed for someone using Annotator. How to use each thing is in
 [README.md](README.md).
 
+## Unreleased
+
+- **Scanned PDFs: recognise the text.** A PDF that is pictures of pages now
+  offers **Recognise text…**. It reads the words on your device and saves
+  them in a copy, `<name> (searchable).pdf`, beside the PDF, which is not
+  changed. In the copy the words can be selected, highlighted, quoted, found
+  and exported like any other PDF's, in Obsidian and in any PDF program. A
+  dialog asks first, in which language and on which pages; a strip says how
+  far it is, and Stop keeps the pages done. English so far.
+- The recogniser is not carried in the plugin. It is fetched the first time,
+  when you say so, from this project's releases on GitHub (4.8 MB with
+  English), kept in the plugin's folder and checked before every use. See
+  "Network use" under "Scanned PDFs" in the README.
+
 ## 0.3.1 (2026-11-13)
 
 - A note whose property is nearly `annotation-target` (the colon typed into

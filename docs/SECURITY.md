@@ -68,6 +68,54 @@ assets…" (`readers.test.mjs`), "network CSS, dynamic selectors…"
   keyboard (`tabindex`), which the page's own scripts can see; it is removed
   when you leave.
 
+## Recognising text in scans
+
+The words of a scanned PDF are read by Tesseract, built to WebAssembly (the
+npm package `tesseract-wasm` 0.11.0), with a language's data (the npm
+packages `@tesseract.js-data/<language>` 1.0.0). Neither is carried in the
+plugin.
+
+- **What is fetched, and when.** Two files, only when the reader presses
+  **Download and recognise** in a dialog that names each with its size and
+  host: the engine (`tesseract-core-0.11.0.wasm`, 1,839,004 bytes) and a
+  language (`eng-1.0.0.traineddata.gz`, 2,952,873 bytes), from this
+  repository's release assets on `github.com`, which hands the download to
+  its file host (`githubusercontent.com`). Nothing is fetched at start, in
+  the background, or to look for a newer one.
+- **No script is fetched.** The JavaScript that drives the engine is part of
+  `main.js` and is reviewed with it. What is fetched is the engine's
+  WebAssembly and data.
+- **Every file is checked before every use.** The size and SHA-256 of each
+  file are written in the plugin's code (`src/scan-manifest.ts`). A file is
+  checked after it is fetched, before it is written, and again each time it
+  is read; one that differs is deleted and refused, in words. A different
+  engine can therefore arrive only with a new version of the plugin. The
+  checksums are those of the files in the published npm packages; a test
+  compares them with the packages `package-lock.json` names, so anyone can
+  confirm what they stand for.
+- **What the host learns.** That a download of that file happened, from which
+  address and when. No page, picture, word or file name leaves the device:
+  recognition runs on it.
+- **Where the engine runs.** In a worker of its own, which has no access to
+  the vault, the page or Obsidian. Before anything else it removes `fetch`,
+  `XMLHttpRequest`, `WebSocket`, `EventSource`, `importScripts`, `indexedDB`
+  and `caches` from itself. It is handed the engine and the language as bytes
+  and pictures of pages, and hands back words with their boxes. It never runs
+  on the interface thread.
+- **Recognised words are words from a source,** and are not trusted: which
+  are kept is decided by checked logic (`proofs/scan_text.bend`), and they
+  are written into the copy as text and nothing else. A highlight made on
+  them goes into a note by the same inert-words rule as any passage.
+- **The searchable copy** is a file in the vault that holds the scan's text.
+  It is as private as the PDF, and syncs with whatever syncs the vault.
+- **Files put there by hand** (where GitHub cannot be reached) are taken only
+  if their checksums match; the plugin has no way to accept another file.
+
+Known and not yet changed: the files are kept in the plugin's folder, so a
+tool that syncs that folder carries them to other devices, where they are
+checked again; there is no button yet to remove them (deleting the
+`recognition` folder does it).
+
 ## What is kept on the device outside the vault
 
 - **The text of PDFs you have opened**, so that their highlights can be placed

@@ -7,7 +7,8 @@ import { Modal, Setting, type App } from 'obsidian';
  * until its button is pressed; closing it any other way is a no.
  */
 export interface ScanQuestion {
-    /** The name the copy will have. */ copy: string;
+    /** The name the copy will have; null when the PDF is itself such a copy and takes the words into itself. */
+    copy: string | null;
     /** The page in view, and the pages (numbers from 1) that have no text of their own. */ current: number;
     without: readonly number[];
     languages: readonly { code: string; name: string }[];
@@ -38,7 +39,9 @@ export class ScanDialog extends Modal {
         this.setTitle?.('Recognise text');
         this.modalEl.addClass('annotator-confirm');
         this.contentEl.createEl('p', {
-            text: `Reads the words on scanned pages, on this device. Nothing is sent anywhere. The words are saved in a copy, ${question.copy}, beside the PDF; the PDF itself is not changed.`
+            text: question.copy
+                ? `Reads the words on scanned pages, on this device. Nothing is sent anywhere. The words are saved in a copy, ${question.copy}, beside the PDF; the PDF itself is not changed.`
+                : 'Reads the words on scanned pages, on this device. Nothing is sent anywhere. This PDF is a searchable copy already: the words are added to it.'
         });
         let language = question.languages[0]?.code || '',
             which: 'this' | 'all' | 'range' = question.phone && without.includes(question.current) ? 'this' : 'all',
