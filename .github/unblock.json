@@ -1399,6 +1399,15 @@
       "dependsOn": [],
       "estimate": 2,
       "notes": "Done 2026-11-15: Built 2026-11-15 on branch next (not released). Setting 'Write new annotations under this heading'; src/note-place.ts finds the end of the heading's section; codec.createUnder writes with the checked append into the part before it and refuses unless the rest of the note is byte for byte unchanged. Tried through the logic worker in Obsidian 1.13.7. Tests: note-place.test.mjs, design.test.mjs. Answers the two open requests about where annotations are written in a note."
+    },
+    {
+      "id": "open-with-annotator",
+      "title": "Open a PDF or book from outside Obsidian in Annotator (\"Open with\")",
+      "status": "todo",
+      "parent": "community",
+      "dependsOn": [],
+      "estimate": 5,
+      "notes": "Plan written 2026-11-14: docs/dev/OPEN_WITH_DESIGN.md (reviewed by a sceptical subagent and revised). Outcome: no helper app for a first version. Obsidian 1.14+ lists itself under \"Open with\" on desktop and opens outside files in place (said of Markdown; for PDF and EPUB read in 1.15.0's code only, not seen), and Obsidian for Android takes shared PDFs (not EPUBs). Stage 0: one live test of \"Open with → Obsidian\" on a PDF and an EPUB, and a guard so the plugin never writes beside a file outside the vault (ensureNote, PDF export, import archive, positions all derive paths from view.file.path). Stage 1, in the plugin only: the address obsidian://annotator-open (file= everywhere; source= on desktop only with a per-device key, so a web page gets nothing), an offer to copy in a file Obsidian opened from outside, an item in the phone share menu (undocumented receive-files-menu), and recipes printed by the settings. Later on demand: annotate in place, a Windows helper through the Microsoft Store, an Android helper for EPUB. Left out: an iOS app. Waits on the owner's six decisions at the end of the plan. Nothing built."
     }
   ]
 }
