@@ -625,3 +625,41 @@ test('after a link inside a PDF is followed, the reader can go back to where it 
   h.viewer.pdfDocument={fingerprints:['two'],numPages:2,async getPage(){return{async getTextContent(){return{items:[{str:'Other'}]};}};}};h.adapter.schedule();await h.flush();assert.equal(h.adapter.canGoBack,false);
  }finally{h.close();}
 });
+
+test('citations cost nothing until asked for: an opened PDF is asked for each page\'s text once and for no link or destination; the reader is made on asking and let go with the document',async()=>{
+ const asked={text:0,annotations:0,destinations:0};
+ const pdf={fingerprints:['one'],numPages:3,async getPage(number){return{view:[0,0,600,800],async getTextContent(){asked.text++;return{items:number===3?[{str:'References',hasEOL:true,transform:[14,0,0,14,60,760],width:70,height:14},{str:'[1] A. Author. A title. Journal, 2001.',hasEOL:true,transform:[10,0,0,10,60,700],width:180,height:10},{str:'[2] B. Other. Another title. Journal, 2002.',hasEOL:true,transform:[10,0,0,10,60,680],width:200,height:10},{str:'[3] C. Third. A third title. Journal, 2003.',hasEOL:true,transform:[10,0,0,10,60,660],width:200,height:10}]:[{str:`Page ${number} cites [2] here.`,hasEOL:true,transform:[10,0,0,10,60,700],width:120,height:10}]};},async getAnnotations(){asked.annotations++;return number===1?[{subtype:'Link',dest:'cite.b',rect:[108,698,118,710]},{subtype:'Link',url:'https://example.org',rect:[0,0,1,1]}]:[];}};},async getDestination(name){asked.destinations++;return name==='cite.b'?[{num:9,gen:0},{name:'XYZ'},60,692,null]:null;},async getPageIndex(){return 2;}};
+ const h=host(pdf);h.page();await h.adapter.loading;await h.flush();
+ assert.deepEqual(asked,{text:3,annotations:0,destinations:0});
+ assert.equal(h.adapter.textRead,true);
+ const {logic}=await import('./.generated/readers/logic.js');
+ const cite={citeList:async(...args)=>logic.citeList(...args),citePage:async(...args)=>logic.citePage(...args)};
+ const reader=h.adapter.citations(cite);
+ assert.equal(h.adapter.citations(cite),reader,'one reader for a document');
+ assert.deepEqual(asked,{text:3,annotations:0,destinations:0},'making the reader reads nothing');
+ const view=await reader.page(1);
+ assert.equal(asked.annotations,3);
+ assert.equal(asked.destinations,1);
+ // The list's page and the page itself were read again, with their places; page 2 was not.
+ assert.equal(asked.text,5);
+ assert.deepEqual(view.citations.rows.map(row=>[row.kind,row.entries,view.lists[row.list].read.entries[row.entries[0]].label]),[['work',[1],'2']]);
+ // The page's links are the PDF's links inside the document, with where they lead.
+ assert.deepEqual(view.lists.map(list=>[list.start,list.end]),[[3,3]]);
+ // Going to a place is a followed link: Back returns from it. Showing a place draws on the page and takes it away again.
+ const shown=h.dom.window.document.createElement('div');h.root.append(shown);
+ const went=[];Object.assign(h.viewer,{scrollPageIntoView:to=>went.push(to),getPageView:()=>({div:shown,viewport:{convertToViewportRectangle:rect=>rect.map(value=>value*2)}})});
+ assert.equal(h.adapter.canGoBack,false);
+ assert.equal(h.adapter.goTo(3,692,60),true);
+ assert.deepEqual(went,[{pageNumber:3,destArray:[null,{name:'XYZ'},60,692,null]}]);
+ assert.equal(h.adapter.canGoBack,true);
+ assert.equal(h.adapter.flash(1,[[100,690,120,702]]),true);
+ const box=shown.querySelector('.annotator-citation-flash .annotator-citation-flash-box');
+ assert.deepEqual([box.style.left,box.style.top,box.style.width,box.style.height],['198px','1378px','44px','28px']);
+ // A new document gets a new reader; the old one is let go and answers nothing more.
+ h.viewer.pdfDocument={...pdf,fingerprints:['two']};h.view.file.stat.mtime=2;
+ await new Promise(resolve=>setTimeout(resolve,800));await h.adapter.loading;await h.flush();
+ const next=h.adapter.citations(cite);
+ assert.notEqual(next,reader);
+ assert.equal(await reader.page(2),null);
+ h.close();
+});

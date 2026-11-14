@@ -451,8 +451,21 @@ function authorsEnd(text: string, order: NameOrder): number {
     for (const stop of text.matchAll(/\.(?=\s|\p{Lu}|$)/gu)) {
         const before = /([\p{L}’'-]+)$/u.exec(text.slice(0, stop.index))?.[1] || '';
         if (!before) continue;
+        if (order === 'surname,' && /^\p{Lu}{1,3}$/u.test(before)) {
+            // "Okafor, N. & Lindqvist, Å. Title…": the authors go on while another "Surname, I." follows, and end at "et al."
+            const rest = text.slice(stop.index! + 1);
+            const others = /^\s*et\s+al\b\.?/i.exec(rest);
+            if (others) return stop.index! + 1 + others[0].length - 1;
+            if (/^(?:\s*-?\p{Lu}\.)/u.test(rest)) continue;
+            if (
+                /^\s*,?\s*(?:and\s+|&\s*|\.\.\.\s*|…\s*)?(?:(?:van|von|de|der|den|del|di|da|du|la|le)\s+)*\p{Lu}[\p{L}’'-]+(?:\s+[\p{L}’'-]+){0,2},\s*(?:\p{Lu}(?!\p{L})|\p{Lu}\p{Ll}+\s*[,.&])/u.test(
+                    rest
+                )
+            )
+                continue;
+            return stop.index!;
+        }
         if (order !== 'surname initials' && /^\p{Lu}$/u.test(before)) continue;
-        if (order === 'surname,' && /^\p{Lu}{1,3}$/u.test(before)) continue;
         if (/^(?:jr|sr|st|dr|eds?|mr|mrs|ms|prof)$/i.test(before)) continue;
         return stop.index!;
     }
@@ -466,7 +479,7 @@ const lastWord = (text: string) => {
         .filter(word => /\p{L}{2}/u.test(word));
     return words.length ? plain(words[words.length - 1]) : '';
 };
-function entryNames(authors: string, order: NameOrder): { first: string; others: string[] } {
+function entryNames(authors: string, order: NameOrder): { first: string; others: string[]; sorted: string } {
     const lead =
         order === 'surname,'
             ? authors.split(',')[0]
@@ -478,7 +491,8 @@ function entryNames(authors: string, order: NameOrder): { first: string; others:
     for (const word of authors.split(/[^\p{L}\p{N}’'¨´`ˆ˜-]+/u))
         if (/^\p{Lu}/u.test(word) && /\p{L}{2}/u.test(word)) others.add(plain(word));
     others.delete('');
-    return { first, others: [...others] };
+    // What the list is sorted by: the first author as written where surnames come first ("Van de Poel" stands under V), else the surname.
+    return { first, others: [...others], sorted: order === 'given surname' ? first : plain(lead) };
 }
 
 /**
@@ -506,13 +520,22 @@ export function readList(
     pages.forEach((page, index) => {
         if (ended) return;
         const repeated = new Set<Line>();
-        for (const near of [pages[index - 1], pages[index + 1]])
+        // Books set one running head on left pages and another on right ones: a line may repeat two pages on.
+        for (const near of [pages[index - 1], pages[index + 1], pages[index - 2], pages[index + 2]])
             if (near)
                 for (const line of edgeLines(page))
                     if (edgeLines(near).some(other => same(line, other))) repeated.add(line);
         for (const line of page.lines) {
             if (ended) break;
             if (repeated.has(line)) continue;
+            // A running head with its page number, at the head of the page: "3 Core values…" or "…in Cybersecurity 71".
+            if (
+                line.y > page.height * 0.92 &&
+                kept.length &&
+                (/^\d{1,4}\s+\p{Lu}/u.test(line.text) || /\p{L}\s+\d{1,4}$/u.test(line.text)) &&
+                !LABEL_FORMS.some(([form]) => form.test(line.text))
+            )
+                continue;
             if (
                 /^(?:[-–—]\s*)?(?:page\s+)?\d{1,4}(?:\s*(?:of|\/)\s*\d{1,4})?(?:\s*[-–—])?$/i.test(line.text) &&
                 (line.y > page.height * 0.88 || line.y < page.height * 0.12)
@@ -625,7 +648,8 @@ export function readList(
         return text;
     });
     // A dash in place of the authors means those of the entry before.
-    const authorsOf: string[] = [];
+    const authorsOf: string[] = [],
+        sortedBy: string[] = [];
     const order = nameOrder(stripped.filter(text => !/^[-—–_]{2,}/.test(text)));
     const ends = stripped.map(text => authorsEnd(text, order));
     const front =
@@ -638,6 +662,7 @@ export function readList(
         if (/^[-—–_]{2,}/.test(text) && id) authors = authorsOf[id - 1];
         authorsOf.push(authors);
         const names = entryNames(authors, order);
+        sortedBy.push(names.sorted);
         const found = yearsIn(text),
             near = found.find(year => year.at >= ends[id] - 1 && year.at <= ends[id] + 22),
             chosen = front ? near || found[found.length - 1] : found[found.length - 1],
@@ -672,7 +697,7 @@ export function readList(
     if (!list.labelled) {
         // Author–year lists are in alphabetical order; a list that is not was not divided rightly.
         const sort = new Intl.Collator('en', { sensitivity: 'base' });
-        const keys = list.entries.map((entry, at) => (/^[-—–_]{2,}/.test(entry.text) && at ? '' : entry.first));
+        const keys = list.entries.map((entry, at) => (/^[-—–_]{2,}/.test(entry.text) && at ? '' : sortedBy[at]));
         let pairs = 0,
             inOrder = 0;
         for (let at = 1; at < keys.length; at++) {
