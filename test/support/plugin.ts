@@ -18,3 +18,7 @@ export {INKS, inkOf, inkAt, inkLabel, noteGist} from '../../src/ink';
 export {themeChooser, openPageAppearance, PAGE_THEMES} from '../../src/appearance';
 export {annotationNotes} from '../../src/annotation-notes';
 export {placeComposer, around} from '../../src/floating-composer';
+
+export {foldingField, noteFolding, refold} from '../../src/note-folding';
+export {foldedBlocks} from '../../src/note-folds';
+export {EditorState, EditorSelection} from '@codemirror/state';

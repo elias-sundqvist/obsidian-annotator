@@ -1300,6 +1300,15 @@
       "dependsOn": ["community-review"],
       "estimate": 1,
       "notes": "COMMUNITY_REVIEW.md 3.5. PDF annotation is 'Planned' on Obsidian's public roadmap and people recommend waiting for it. Now: one honest paragraph (annotations are notes in the vault; they can be exported as standard PDF annotations and taken in from a PDF; nothing can be said about a feature that does not exist yet). Later, when it ships: check taking in what Obsidian writes and whether exported annotations show in its viewer.\n\nDone 2026-11-13: 2026-11-13: README section 'If Obsidian adds PDF annotation of its own' (the roadmap entry was read that day: 'PDF annotation' under Planned). No promise is made. When the core feature ships, a new task: take in what Obsidian writes, and see whether exported annotations show in its viewer."
+    },
+    {
+      "id": "fold-data-live-preview",
+      "title": "In Live Preview, fold an annotation's stored data away",
+      "status": "done",
+      "parent": "community",
+      "dependsOn": [],
+      "estimate": 2,
+      "notes": "Done 2026-11-14: Built 2026-11-14 on branch prototype/fold-stored-data (not merged, not released). src/note-folds.ts finds the annotations by their shape, for display only; src/note-folding.ts is the editor extension; setting 'Fold annotation data in Live Preview' (on by default). Answers the 'no JSON' requests (issues 24 and 111, forum 2023) with nothing stored changed. Tests: test/note-folding.test.mjs (the annotations found equal those the codec reads in six real notes; what is folded; examples in code fences and properties left alone; the editor's behaviour; a 2,000-annotation note). Tried in the running app on desktop, Obsidian 1.13.7: a small note and a 1.9 MB note with 2,000 annotations (a cursor move 5 ms, a keystroke 25 ms there). Not tried on a phone."
     }
   ]
 }

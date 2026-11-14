@@ -87,6 +87,8 @@ import { NativePdf } from './native-pdf';
 import { EpubView, EPUB_VIEW, type FigureCapture } from './epub';
 import { makeSnapshot, SnapshotHost } from './snapshot';
 import { refreshSnapshotEditors, snapshotEditorExtension } from './snapshot-editor';
+import { noteFolding, refold } from './note-folding';
+import type { EditorView } from '@codemirror/view';
 import { LiveWebHost, type GuestElement, type WebFigureCapture } from './live-web';
 import {
     digest,
@@ -255,6 +257,7 @@ export default class AnnotatorPlugin extends Plugin {
         alwaysActions: boolean;
         composer: 'page' | 'sidebar';
         /** Whether the annotation sidebar comes forward when a source is opened. */ sidebarOnOpen: boolean;
+        /** Whether an annotation's stored data is folded away in Live Preview. */ foldData: boolean;
         /** What a copied or dragged annotation link is, as a template; empty for the plain link. */ linkTemplate: string;
         /** The heading a new annotation note starts with. */ noteHeading: string;
         /** Whether where the reader was is written to the note on leaving a source. */ progressProperty: boolean;
@@ -265,6 +268,7 @@ export default class AnnotatorPlugin extends Plugin {
         alwaysActions: false,
         composer: 'page',
         sidebarOnOpen: true,
+        foldData: true,
         linkTemplate: '',
         noteHeading: DEFAULT_NOTE_HEADING,
         progressProperty: false,
@@ -401,6 +405,7 @@ export default class AnnotatorPlugin extends Plugin {
             alwaysActions: shown.alwaysActions === true,
             composer: shown.composer === 'sidebar' ? 'sidebar' : 'page',
             sidebarOnOpen: shown.sidebarOnOpen !== false,
+            foldData: shown.foldData !== false,
             linkTemplate: typeof shown.linkTemplate === 'string' ? shown.linkTemplate.slice(0, 2000) : '',
             noteHeading: typeof shown.noteHeading === 'string' ? shown.noteHeading.slice(0, 200) : DEFAULT_NOTE_HEADING,
             progressProperty: shown.progressProperty === true,
@@ -497,6 +502,7 @@ export default class AnnotatorPlugin extends Plugin {
                     (file, destination) => this.openPlainNote(file, destination)
                 )
         );
+        this.registerEditorExtension(noteFolding(() => this.display.foldData));
         this.registerEditorExtension(
             snapshotEditorExtension(
                 (path, raw, editorView) => {
@@ -4170,6 +4176,13 @@ export default class AnnotatorPlugin extends Plugin {
             if (!file || file === pending.note) this.openMarkdownNote(pending.note, false, leaf);
         }
     }
+    /** Open editors look again at what is folded, after the setting changed. */
+    refold() {
+        this.app.workspace.iterateAllLeaves(leaf => {
+            const editor = (leaf.view as unknown as { editor?: { cm?: EditorView } }).editor?.cm;
+            if (editor?.dispatch) editor.dispatch({ effects: refold.of(null) });
+        });
+    }
     private readonly hintedTargetKeys = new Set<string>();
     /**
      * A note whose property is nearly `annotation-target` ("annotation-target:" with the colon in its name,
@@ -5026,6 +5039,17 @@ class NativeSettings extends PluginSettingTab {
                 control
                     .setValue(plugin.display.sidebarOnOpen)
                     .onChange(value => save(plugin.setDisplay({ sidebarOnOpen: value })))
+            );
+        new Setting(root)
+            .setName('Fold annotation data in Live Preview')
+            .setDesc(
+                'In an annotation note, shows each annotation as its passage, link, note and tags, with the stored data folded to a small mark. Put the cursor in an annotation to see it as written. Nothing in the file changes; Source mode shows everything.'
+            )
+            .addToggle(control =>
+                control.setValue(plugin.display.foldData).onChange(value => {
+                    save(plugin.setDisplay({ foldData: value }));
+                    plugin.refold();
+                })
             );
         new Setting(root)
             .setName('Always show card actions')

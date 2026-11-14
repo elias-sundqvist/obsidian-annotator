@@ -1,6 +1,7 @@
 // Minimal host boundary for automated integration tests; never shipped.
 import {StateField} from '@codemirror/state';
 export const editorInfoField = StateField.define({create:()=>null,update:value=>value});
+export const editorLivePreviewField = StateField.define<boolean>({ create: () => true, update: value => value });
 export const Platform = {isMobile:false,isPhone:false,isTablet:false,isWin:false};
 export const Keymap = { isModEvent:(event:MouseEvent)=>event.ctrlKey || event.metaKey || event.button === 1 ? 'tab' : event.shiftKey ? 'split' : false };
 export class Component { private domCleanups:(()=>void)[]=[];registerDomEvent(element:HTMLElement,type:string,fn:EventListener){element.addEventListener(type,fn);this.domCleanups.push(()=>element.removeEventListener(type,fn));} load(){} unload(){for(const cleanup of this.domCleanups.splice(0))cleanup();} addChild<T>(child:T){return child;} removeChild(_child:unknown){} }

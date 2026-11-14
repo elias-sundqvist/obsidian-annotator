@@ -1586,3 +1586,7 @@ body.annotator-reading-fullscreen .workspace-leaf.mod-active > .workspace-leaf-c
     /* Obsidian's own menus are see-through on such a browser; the reader's are given a ground. */
     .is-mobile .menu.annotator-appearance, .is-mobile .annotator-book-contents.menu { background-color: var(--background-secondary); }
 }
+
+/* An annotation's stored data, folded away in Live Preview: the small mark that stands for it. */
+.annotator-folded-data { color: var(--text-faint); cursor: pointer; user-select: none; }
+.annotator-folded-data:hover { color: var(--text-muted); }

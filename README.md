@@ -42,6 +42,13 @@ Each source has one annotation note: a Markdown note with an
 source, and the reader shows both. The note is yours to move, rename and edit;
 the sidebar's menu has **Open annotation note**.
 
+In Live Preview an annotation reads as its passage, its link, your note and
+its tags: the data stored with it is folded to a small mark (⋯). Put the
+cursor in an annotation, or click the mark, to see it exactly as it is
+written; Source mode always shows everything, and the setting **Fold
+annotation data in Live Preview** turns the folding off. Nothing in the file
+is changed by it.
+
 A new annotation note starts with the heading "Annotations". In the settings
 you can choose another heading, or name a template note: its properties and
 text are kept (`{{title}}`, `{{date}}` and `{{target}}` are filled in) and

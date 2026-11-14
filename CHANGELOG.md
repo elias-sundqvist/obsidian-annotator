@@ -3,6 +3,13 @@
 What changed for someone using Annotator. How to use each thing is in
 [README.md](README.md).
 
+## Unreleased
+
+- In Live Preview, an annotation note now reads as passages, links, notes
+  and tags: each annotation's stored data is folded to a small mark, and
+  shown again when the cursor is in it. The file is not changed, and the
+  format is the one it always was. A setting turns it off.
+
 ## 0.3.1 (2026-11-13)
 
 - A note whose property is nearly `annotation-target` (the colon typed into
