@@ -397,6 +397,16 @@
       "notes": "Check the new margins and top edge in paged mode and right-to-left books; page-turn zones and swipe on touch; the sliced top line while scrolling.\n\nDone 2026-11-12: Paged layout: page margins moved inside the pages (they were on the reader, which cut every page off at the right on phones and misaligned later pages); page turns counted from whole pages (a fraction of a pixel on dense screens blocked turning back); the end of a chapter restores onto its last page (turning back across a chapter landed on its first); swipe and edge-tap page turns on touch, kept from the app's drawer gesture; sideways scrollbar hidden; ink mixed for the paper actually shown (highlights were invisible on a book's own white paper in a dark app) and such paper gets margins. Checked on desktop and Android. Not checked visually: right-to-left and vertical books (logic is direction-aware and covered by existing tests)."
     },
     {
+      "id": "fb2-support",
+      "title": "FictionBook (FB2) books in the book reader",
+      "status": "todo",
+      "parent": "epub",
+      "dependsOn": [],
+      "estimate": 8,
+      "tags": ["fb2", "books"],
+      "notes": "Issue 263 (fb2/fb3, maybe MOBI). Investigated 2026-11-14: docs/dev/FB2_DESIGN.md. Recommendation: build FB2; not FB3, not MOBI.\n\nFinding: an FB2 converts to the Publication the book reader already consumes (src/fb2-book.ts, openFictionBook), chosen at one call in EpubView.onLoadFile. Contents, find, highlights, notes, picture notes and reading position then work unchanged; the stored note format and proofs are untouched. Cost to vaults without FB2: +14.2 KB in main.js, no start-up work, no new dependency.\n\nPrototype on the investigation branch (not pushed): .fb2, .fb2.zip, .fbz; encodings by declaration (windows-1251, koi8-r, UTF-16); cover, pictures, footnotes by jump and Back, poems, epigraphs, tables. 611 reader tests pass (16 new in test/fb2.test.mjs, 1 in plugin-boundary), lint and format clean. Run in Chromium and in iOS WebKit through the harness (not Obsidian): opens, highlight saved and restored after reload, footnote and Back.\n\nNot done: the subagent critique of the design (started, no report yet); any run in Obsidian itself (its command line is off); Android and real devices; a corpus of real FB2 files (only two real books, both flat UTF-8 text); the two anchoring rules as Bend laws; wording (EPUB in labels); README and CHANGELOG.\n\nOwner decisions: build at all (about 10 more points); open .fb2 by default (registerExtensions throws if another plugin has the extension, so it is guarded); the two anchoring rules (leaf sections are chapters; chapter text is the book text character for character) before anything ships; a different FB2 of the same book stays 'kept, not painted' or gets an explicit re-association; strict XML or a repair pass; footnote pop-up later; no remote FB2 addresses."
+    },
+    {
       "id": "pdf",
       "title": "PDF reader",
       "dependsOn": []
