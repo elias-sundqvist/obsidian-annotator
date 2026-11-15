@@ -576,6 +576,11 @@ FB3 file was found to test with in this investigation. Recommended answer:
 not planned until someone brings files; say so on the issue. The issue's
 title asks for both; FB2 is the one people have shelves of.
 
+*Since then (2026-11-15):* the owner asked for FB3 too, and it is built
+(section 15). The format's schemas were last changed in 2019, not 2008 as
+said above after Wikipedia; its authors' converter was still being changed
+in 2026.
+
 ## 9. The prototype
 
 On this branch: `src/fb2-book.ts` (the converter, `openFictionBook`), the
@@ -674,13 +679,12 @@ left open was taken as it proposed:
    The largest book of the corpus has 524 chapters.
 9. **Footnotes**: jump and Back. A pop-up for both formats is a follow-up.
 10. **Remote FB2 addresses** as `annotation-target` are not supported.
-11. **Issue 263**: what to say about FB3 and MOBI is the owner's (below).
+11. **Issue 263**: what to say about MOBI is the owner's (below). FB3 was
+    asked for by the owner afterwards and is built (section 15).
 
-**For the owner to put to the issue, not done here**: FB3 and MOBI are
-proposed as not planned (section 8: FB3's public specification is a 2008
-beta that no popular reader supports; MOBI is a retired, often protected
-binary format that Calibre converts well). Nothing has been closed or
-answered.
+**For the owner to put to the issue, not done here**: MOBI is proposed as
+not planned (section 8: a retired, often protected binary format that
+Calibre converts well). Nothing has been closed or answered.
 
 ## 11. A reviewer's criticism, and what changed
 
@@ -858,3 +862,142 @@ chapter's first character with the border's top edge, not the content's, so
 on going to a chapter its first line sits under the toolbar's edge (seen with
 a two-line chapter heading). By reading, EPUB is affected the same way. A
 follow-up for the book reader.
+
+## 15. FictionBook 3
+
+Built 2026-11-15, on its own branch, after the owner asked for FB3 as well.
+`src/fb3-book.ts` reads the package and translates the body; from there an FB3
+is converted by the same code as an FB2 (`fictionPublication` in
+`src/fb2-book.ts`), so the rules of section 3 and everything section 9 lists
+hold for it. Tests: `test/fb3.test.mjs` (14), and the FictionBook test in
+`test/plugin-boundary.test.mjs`.
+
+### What was read
+
+The format's authors' repository, [gribuser/fb3](https://github.com/gribuser/fb3):
+`fb3_body.xsd` and `fb3_descr.xsd` (and the schema documentation generated from
+them under `schema_docs/`), `fb3_general.xsd` (the UUID pattern),
+`opc-relationships.xsd` and `opc-contentTypes.xsd`, the three example books
+under `Examples/` ("Anathomy tutorial", "Hardcore file structure", "Biology"),
+the authors' own conversions `fb3_2_fb2_body.xsl` (FB3 to FB2) and `body.xsl`
+(FB2 to FB3), and one of their converter's test books
+(`t/examples/cutfb3/o0_img_and_links_152022.fb3`). None of it is in this
+repository; the tests' books are made by hand after it. The schemas were last
+changed in 2019; the converter in 2026.
+
+What was relied on:
+
+- **The package** follows the Open Packaging Conventions. `_rels/.rels` leads
+  to the description by a relationship of type
+  `http://www.fictionbook.org/FictionBook3/relationships/Book`; the
+  description's own relationships (`_rels/<name>.rels` beside it) lead to the
+  body (`…/relationships/body`); the body's to its pictures
+  (`…/relationships/image`, an `img`'s `src` is the relationship's `Id`, not a
+  file name). The cover is the package's thumbnail relationship. The
+  "Hardcore" example exists to show that none of these parts has a fixed name:
+  its description is `фб3/foo/meta.xml`, reached as `%D1%84%D0%B13/FOO/meta.xml`,
+  its body a part called `книга` with no extension, its relationship part
+  `_RELS/META.XML.RELS`, a target climbs with `../../`. So parts are found by
+  relationships, names are compared as the conventions say (ASCII case
+  ignored, escapes read), and a target is resolved from its part's folder or
+  from the root. Where a relationship is missing, the part `[Content_Types].xml`
+  declares as `application/fb3-description+xml` or `application/fb3-body+xml`
+  is used, then `fb3/description.xml` and `fb3/body.xml`.
+- **The description** (`fb3-description`): its required `id` (a UUID, "to
+  tell apart books of the same name") is the book's identity, as an FB2's
+  `document-info/id` is; `title/main` its title; `lang` its language.
+- **The body** (`fb3-body`): a title and epigraphs, then `section`s (each with
+  a required, unique UUID `id`), then `notes` of `notebody`s. A section holds
+  either sections or content, as in FB2. Content: `p`, `subtitle`, `ol`/`ul`
+  of `li` (nested lists inside the list), `pre` and `blockquote` (holders of
+  paragraphs), `table` (with a title; cells hold paragraphs), `poem` (stanzas
+  of `p` lines), `div` (a set block with an optional title and a marker
+  picture), `br`, and a closing `subscription` (FB2's `text-author`, grown to
+  several paragraphs). Inline: `strong`, `em`, `strikethrough`, `sub`, `sup`,
+  `code`, `underline`, `spacing`, `smallcaps`, `span class`, `a xlink:href`,
+  `note href autotext` (a footnote reference by plain id), `img`, and
+  `paper-page-break`. A section may also carry `fb3-relations` and
+  `fb3-classification`, which are of the description's namespace: catalogue
+  data, not text.
+
+### How it is read
+
+The body is translated to FB2's markup, element by element, much as the
+authors' own `fb3_2_fb2_body.xsl` does, and then converted as an FB2. Where
+FB2 has a word, it is used: `em` is `emphasis`, `blockquote` is `cite`,
+`subscription` is `text-author` lines, a stanza's `p` is `v`, `br` is
+`empty-line`, `note` is `a type="note"`, `img` is `image`, `notes` is a body
+of notes and `notebody` a note's section. Where FB2 has none, the translation
+does not do what the XSL does (a list as a quotation with "•" written into
+its text, underlining dropped): lists, set blocks, preformatted text,
+underlining, letter spacing, small capitals and a table cell's lines are
+elements in a namespace of the reader's own, which the converter sets as
+`ol`/`ul`/`li`, `div`, `pre`, `u` and spans styled by the built-in sheet. No
+FB2 file uses that namespace, so FB2s convert exactly as before (their tests
+are unchanged and pass).
+
+Rule 2 (a chapter's text is the book's text) holds as for an FB2, with these
+separators in addition: a line break after each list item, each line of a
+preformatted block and each paragraph of a subscription; a table cell of
+several paragraphs is several lines. Three FB3 matters are decided, and
+written down beside the generated books of `test/fb3.test.mjs`:
+
+- **A paragraph that holds a picture and nothing else is the picture**, set
+  apart as FB2 sets a picture (as the authors' XSL does). It adds no line
+  break.
+- **A note reference with no words of its own is numbered**: its number among
+  the body's note references, written as its `autotext` asks (1, i, a, *).
+  This is the one place the converter writes text the file does not hold. A
+  reference with words (what the authors' converter writes from an FB2's
+  `[1]`) shows them.
+- **What is dropped holds no text**: `fb3-relations` and `fb3-classification`
+  inside a section, and `paper-page-break`.
+
+Rule 3 changes for FB3, because FB3 requires every section to carry a UUID:
+**a chapter's place and name are both its section's UUID**
+(`<uuid>.xhtml`, `dc.identifier` the UUID). A section added before it, or a
+title corrected, changes neither, so a chapter note stays on its chapter
+where an FB2's is kept aside (the test shows both). A chapter whose section's
+id is missing, is not a UUID, or is shared with another chapter's section
+(the authors' trial-fragment test book gives five sections one id) is named as
+an FB2 chapter is, by its place (`s3`) and titles. Notes are `body2`,
+`body3`… as in an FB2.
+
+Pictures: a picture's path is its part's name (as compared: `fb3/img/a.png`),
+so a picture note names the file, not the relationship id an editor may
+renumber. A part is served only if the body's image relationships or the
+package's thumbnail name it, and only if its bytes are a PNG, JPEG, GIF or
+WebP, or an SVG (by content type or extension) made passive; 12 MiB each, 64
+MiB the package, 64 MiB the body, 4 MiB each other XML part, 10,000 parts. An
+`img` whose relationship is missing, or leads out of the package
+(`TargetMode="External"`, an address, a path that climbs out), names a path
+that no part can have (`Missing/<id>`: part names are compared in lower
+case), so nothing is fetched and nothing else is shown in its place. Every
+XML part is refused before parsing if it declares entities or names an
+external document type, as an FB2 is.
+
+### What FB3 has that is not used
+
+- `div`'s `float`, `border`, `on-one-page`, `bindto`, `align`, and every
+  picture's and block's `width`, `min-width`, `max-width`: the reader's layout
+  decides, as for an FB2's pictures. `br clear` likewise.
+- A section's `output` (whether it belongs to a sample, the full text or
+  both), `clipped`, `first-char-pos`, `article`, `doi`; the description's
+  `fb3-fragment`: every section the file holds is shown. A shop's full book
+  has had its sample-only sections removed already.
+- `span class`, `notes show`, a note's `xlink:role` (footnote or endnote):
+  read as plain runs, a notes body, a link.
+- The description's subtitle, authors, sequences, classification, history,
+  annotation and paper edition: metadata, not shown, as an FB2's are not.
+- `meta/core.xml` (the package's own properties).
+- Remote FB3 addresses as `annotation-target`; "Open with" and a phone's
+  share, which take PDFs and EPUBs (as for an FB2).
+
+### What was not done
+
+- No FB3 book from a shop (LitRes) was opened: none was at hand, and their
+  sold books are not free to fetch. The tests' books follow the schemas and
+  the authors' three examples; the "Hardcore" layout is reproduced by hand.
+- Not tried in a running Obsidian, on any platform, nor in the iOS harness.
+- Nothing in `proofs/` changed: the chapter gathering is the same call.
+

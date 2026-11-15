@@ -1,9 +1,11 @@
 /**
  * A FictionBook 2 file (`.fb2`, or zipped as `.fb2.zip` / `.fbz`) read as the
  * publication the book reader already works with: chapters of plain HTML, a
- * contents list and pictures by path. Nothing of the file is run or installed;
- * the HTML written here is what `inertHtml` parses and `projectHtml` copies,
- * as it is for a chapter of an EPUB.
+ * contents list and pictures by path. (The conversion after the file is read,
+ * `fictionPublication`, also reads a FictionBook 3 book, whose body
+ * `src/fb3-book.ts` translates to FB2's markup.) Nothing of the file is run or
+ * installed; the HTML written here is what `inertHtml` parses and `projectHtml`
+ * copies, as it is for a chapter of an EPUB.
  *
  * What a chapter is, and what its text is, decide where an annotation is
  * anchored, so both are rules rather than choices made per book
@@ -59,8 +61,14 @@ export const FB2_STYLE = `
 .fb2-note-title { font-weight: bold; margin-bottom: 0; text-indent: 0; }
 .fb2-align-center { text-align: center; }
 .fb2-align-right { text-align: right; }
+.fb2-block { margin-top: 1em; margin-bottom: 1em; }
+.fb2-pre { white-space: pre-wrap; text-indent: 0; }
+.fb2-spacing { letter-spacing: 0.15em; }
+.fb2-smallcaps { font-variant-caps: small-caps; }
 `;
 const LANGUAGE = /^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/;
+// A section's id as FictionBook 3 writes it (its schema's UUIDType), lower-cased.
+const UUID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 // Languages written from right to left, by their primary subtag.
 const RTL = new Set('ar he iw fa ur yi ji ps sd ug dv ckb syr nqo'.split(' '));
 const INLINE: Record<string, string> = {
@@ -239,6 +247,54 @@ interface Draft {
     notes: boolean;
     /** The headings this chapter stands under and its own title, outermost first. */ trail: string[];
     /** Whether the last of them is the chapter's own title. */ titled: boolean;
+    /** The section (or body) whose text opens the chapter. */ opener?: Element;
+}
+
+/**
+ * A FictionBook's XML, parsed. No entity of the file's own is ever expanded and nothing outside it is named: an
+ * entity declaration anywhere, or a document type that is more than the bare name, is refused before the file is
+ * parsed. With `root`, a document whose outermost element is another is refused as not well-formed.
+ */
+export function parseFictionXml(text: string, doc: Document, names: { a: string; the: string }, root?: string) {
+    if (
+        /<!ENTITY/i.test(text) ||
+        (text.match(/<!DOCTYPE[^>]*>?/gi) || []).some(found => !/^<!DOCTYPE\s+[A-Za-z_][\w:.-]*\s*>$/i.test(found))
+    )
+        throw new Error(`${names.a} that declares XML entities or an external document type is not supported.`);
+    const xml = new doc.defaultView!.DOMParser().parseFromString(text, 'application/xml'),
+        failure = xml.getElementsByTagName('parsererror')[0];
+    if (failure || !xml.documentElement || (root && xml.documentElement.localName !== root)) {
+        const why = (failure?.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 240);
+        throw new Error(
+            `${names.the} is not well-formed XML and cannot be read${why ? `: ${why}` : '.'} Calibre can repair it.`
+        );
+    }
+    return xml;
+}
+
+/** A picture the book holds, read when it is shown. */
+export type PictureBytes = { bytes: Uint8Array; mime: string } | null;
+/**
+ * What the conversion reads: a book's bodies in FictionBook 2's markup (a FictionBook 3 body is translated to it
+ * first, `src/fb3-book.ts`), and what is known of the book apart from its text.
+ */
+export interface FictionText {
+    /** The text, then each body of notes. */
+    bodies: Element[];
+    title: string;
+    language: string;
+    identifier: string;
+    hash: string;
+    /** The path a picture element names (whether or not the book has the picture); empty where it names nothing in the book. */
+    picturePath(element: Element): string;
+    image(path: string): Promise<PictureBytes>;
+    /** The path of the cover, where the book has one that can be shown; empty where it has none. */
+    cover: string;
+    /**
+     * Whether a chapter is named by the id of the section that opens it, where that is a UUID no other chapter's
+     * section has (FictionBook 3, whose every section must carry one), rather than by its place and titles.
+     */
+    sectionIds: boolean;
 }
 
 export async function openFictionBook(source: ArrayBuffer, doc: Document): Promise<Publication> {
@@ -249,21 +305,7 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
     const text = fb2Text(bytes);
     if (!/<(?:[A-Za-z_][\w.-]*:)?FictionBook[\s>]/.test(text))
         throw new Error('This file is not a FictionBook (it has no FictionBook element).');
-    // No entity of the file's own is ever expanded and nothing outside it is named: an entity declaration anywhere,
-    // or a document type that is more than the bare name, is refused before the file is parsed.
-    if (
-        /<!ENTITY/i.test(text) ||
-        (text.match(/<!DOCTYPE[^>]*>?/gi) || []).some(found => !/^<!DOCTYPE\s+[A-Za-z_][\w:.-]*\s*>$/i.test(found))
-    )
-        throw new Error('A FictionBook that declares XML entities or an external document type is not supported.');
-    const xml = new doc.defaultView!.DOMParser().parseFromString(text, 'application/xml'),
-        failure = xml.getElementsByTagName('parsererror')[0];
-    if (failure || xml.documentElement?.localName !== 'FictionBook') {
-        const why = (failure?.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 240);
-        throw new Error(
-            `This FictionBook is not well-formed XML and cannot be read${why ? `: ${why}` : '.'} Calibre can repair it.`
-        );
-    }
+    const xml = parseFictionXml(text, doc, { a: 'A FictionBook', the: 'This FictionBook' }, 'FictionBook');
     const root = xml.documentElement,
         description = first(root, 'description'),
         titleInfo = first(description, 'title-info'),
@@ -285,11 +327,59 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
             type: (binary.getAttribute('content-type') || '').toLowerCase()
         });
     }
-    /** The path a picture element names: a binary's (whether or not the book has it), or what it says where that is no binary. */
+    /** The path a picture element names: a binary's (whether or not the book has it), or none where that is no binary. */
     const picturePath = (element: Element) => {
         const href = hrefOf(element);
         return href.startsWith('#') ? `images/${pictureName(href.slice(1))}` : '';
     };
+    // The cover is the book's first page, where it has one that can be shown.
+    const coverpage = first(titleInfo, 'coverpage'),
+        cover = coverpage
+            ? named(coverpage, 'image').find(image => pictureBytes(pictures.get(picturePath(image)), doc))
+            : undefined;
+    return fictionPublication({
+        bodies,
+        title,
+        language,
+        identifier,
+        hash: await digest(bytes.slice().buffer),
+        picturePath,
+        image: binaryShelf(pictures, doc),
+        cover: cover ? picturePath(cover) : '',
+        sectionIds: false
+    });
+}
+
+/** The book's pictures as the open book keeps them: their base64 text, decoded when one is shown. */
+function binaryShelf(pictures: Map<string, Held>, doc: Document) {
+    return (path: string) => Promise.resolve(pictureBytes(pictures.get(path), doc));
+}
+
+/**
+ * The namespace of what a FictionBook 3 body is translated to where FictionBook 2 has no word for it (lists, set
+ * blocks, preformatted text, underlining, the lines of a table cell). No FB2 file uses it, so an FB2 is read exactly
+ * as before.
+ */
+export const FB3_EXTRA = 'urn:x-annotator:fictionbook-3';
+/** Whether a node is one of those elements (of that name). */
+const extra = (node: Node, name?: string) =>
+    node.nodeType === 1 &&
+    (node as Element).namespaceURI === FB3_EXTRA &&
+    (name === undefined || (node as Element).localName === name);
+// Words set in a way FictionBook 2 cannot say: underlined, spaced out, in small capitals.
+const EXTRA_INLINE: Record<string, [string, string]> = {
+    u: ['u', ''],
+    spacing: ['span', 'spacing'],
+    smallcaps: ['span', 'smallcaps']
+};
+
+/**
+ * A FictionBook's text as the publication the book reader opens: the chapters, the contents, and the pictures by
+ * path. What a chapter is and what its text is are the rules of `docs/dev/FB2_DESIGN.md`, whichever format the
+ * bodies came from.
+ */
+export async function fictionPublication(book: FictionText): Promise<Publication> {
+    const { bodies, picturePath, language, title } = book;
     const pictureSrc = (element: Element) => {
         const path = picturePath(element);
         return path ? path.split('/').map(encodeURIComponent).join('/') : hrefOf(element);
@@ -391,14 +481,15 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
             gathered = null;
         }
         if (!gathered) throw new Error('This book has more headings in a row than can be read.');
-        const draft = (ids: number[], place: string, trail: string[], titled: boolean): Draft => ({
+        const draft = (ids: number[], place: string, trail: string[], titled: boolean, opener?: Element): Draft => ({
             place,
             idref: place,
             pieces: ids.map(id => row[id].piece),
             linear: true,
             notes: false,
             trail,
-            titled
+            titled,
+            opener
         });
         // A book in which nothing opens a chapter (headings alone) is one chapter of what it has.
         if (!gathered.chapters.length) return gathered.loose.length ? [draft(gathered.loose, 's0', [], false)] : [];
@@ -407,7 +498,8 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
                 [...chapter.lead, chapter.open, ...chapter.tail],
                 row[chapter.open].place!,
                 row[chapter.open].trail!,
-                !!row[chapter.open].titled
+                !!row[chapter.open].titled,
+                row[chapter.open].piece.owner
             )
         );
     };
@@ -416,11 +508,29 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
     if (drafts.length > CHAPTER_LIMIT) drafts = plan(1);
     if (drafts.length > CHAPTER_LIMIT) throw new Error('This book has more sections than can be listed (2000).');
     if (!drafts.length) throw new Error('This FictionBook has no text.');
+    // Where every section carries a UUID of its own, a chapter is named by its section's, in both of its names: a
+    // section added before it, or a title corrected, changes neither. A chapter whose section's id is missing, not a
+    // UUID or shared with another chapter's is named as a FictionBook 2 chapter is.
+    const byId = new Set<Draft>();
+    if (book.sectionIds) {
+        const idOfDraft = (draft: Draft) =>
+                draft.opener?.localName === 'section'
+                    ? (draft.opener.getAttribute('id') || '').trim().toLowerCase()
+                    : '',
+            seen = new Map<string, number>();
+        for (const draft of drafts) seen.set(idOfDraft(draft), (seen.get(idOfDraft(draft)) || 0) + 1);
+        for (const draft of drafts) {
+            const id = idOfDraft(draft);
+            if (!UUID.test(id) || seen.get(id) !== 1) continue;
+            draft.place = draft.idref = id;
+            byId.add(draft);
+        }
+    }
     // A titled chapter's name in an annotation is made from its titles (and which of several with the same titles it is).
     const met = new Map<string, number>();
     await Promise.all(
         drafts.map(draft => {
-            if (!draft.trail.length) return null;
+            if (!draft.trail.length || byId.has(draft)) return null;
             const key = JSON.stringify(draft.trail),
                 nth = (met.get(key) || 0) + 1;
             met.set(key, nth);
@@ -484,7 +594,22 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
                 const element = node as Element,
                     name = element.localName,
                     children = Array.from(element.childNodes);
-                if (INLINE[name]) {
+                if (extra(element) && EXTRA_INLINE[name]) {
+                    const [tag, cls] = EXTRA_INLINE[name];
+                    out.push(
+                        `<${tag}${cls ? ` class="fb2-${cls}"` : ''}${idOf(element.getAttribute('id'))}${langOf(element)}>`
+                    );
+                    inline(children, inLink);
+                    out.push(`</${tag}>`);
+                } else if (extra(element, 'line')) {
+                    // A paragraph of a table cell: the cell's lines, one below another, as a title's are.
+                    let before = element.previousSibling;
+                    while (before && !/\S/.test(before.textContent || '')) before = before.previousSibling;
+                    if (before) out.push('<br/>\n');
+                    out.push(`<span${idOf(element.getAttribute('id'))}${langOf(element)}>`);
+                    inline(children, inLink);
+                    out.push('</span>');
+                } else if (INLINE[name]) {
                     out.push(`<${INLINE[name]}${idOf(element.getAttribute('id'))}${langOf(element)}>`);
                     inline(children, inLink);
                     out.push(`</${INLINE[name]}>`);
@@ -588,7 +713,10 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
         /** Whether a node, met among blocks, is part of a run of words: text, or an element that belongs inside a paragraph. */
         const runs = (node: Node) =>
             isText(node) ||
-            (node.nodeType === 1 && (!!INLINE[(node as Element).localName] || (node as Element).localName === 'a'));
+            (node.nodeType === 1 &&
+                (extra(node)
+                    ? !!EXTRA_INLINE[(node as Element).localName]
+                    : !!INLINE[(node as Element).localName] || (node as Element).localName === 'a'));
         const blocks = (nodes: Node[], depth: number, owner?: Element) => {
             let headed = false;
             for (let at = 0; at < nodes.length; at++) {
@@ -609,7 +737,35 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
                 const element = node as Element,
                     name = element.localName,
                     children = Array.from(element.childNodes);
-                if (name === 'p') paragraph('p', '', element, children);
+                if (extra(element)) {
+                    // What FictionBook 3 can say and FictionBook 2 cannot: lists, set blocks, preformatted text.
+                    const id = idOf(element.getAttribute('id')) + langOf(element);
+                    if (name === 'ol' || name === 'ul') {
+                        out.push(`<${name}${id}>`);
+                        blocks(children, depth);
+                        out.push(`</${name}>`);
+                    } else if (name === 'li') paragraph('li', '', element, children);
+                    else if (name === 'block') {
+                        out.push(`<div class="fb2-block"${id}>`);
+                        blocks(children, depth);
+                        out.push('</div>');
+                    } else if (name === 'pre') {
+                        // Each paragraph a line, its spaces as the book has them.
+                        out.push(`<pre class="fb2-pre"${id}>`);
+                        for (const child of children)
+                            if (child.nodeType === 1 && (child as Element).localName === 'p') {
+                                out.push(
+                                    `<span${idOf((child as Element).getAttribute('id'))}${langOf(child as Element)}>`
+                                );
+                                inline(Array.from(child.childNodes));
+                                out.push('</span>\n');
+                            } else blocks([child], depth);
+                        out.push('</pre>');
+                    } else {
+                        mark(element, 'div');
+                        blocks(children, depth);
+                    }
+                } else if (name === 'p') paragraph('p', '', element, children);
                 else if (PARAGRAPH[name]) paragraph('p', PARAGRAPH[name], element, children);
                 else if (name === 'v') paragraph('div', 'v', element, children);
                 else if (name === 'title') {
@@ -686,17 +842,13 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
         chapters.push({ idref, href, path: href, title: name, linear });
     };
     // The cover is the book's first page, where it has one that can be shown.
-    const coverpage = first(titleInfo, 'coverpage'),
-        cover = coverpage
-            ? named(coverpage, 'image').find(image => pictureBytes(pictures.get(picturePath(image)), doc))
-            : undefined;
-    if (cover)
+    if (book.cover)
         add(
             'cover',
             'cover',
             'Cover',
             true,
-            `<div class="fb2-cover"><img src="${attr(pictureSrc(cover))}" alt="Cover"/></div>`
+            `<div class="fb2-cover"><img src="${attr(book.cover.split('/').map(encodeURIComponent).join('/'))}" alt="Cover"/></div>`
         );
     drafts.forEach((draft, index) => {
         const body = render(draft);
@@ -723,30 +875,33 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
         add(draft.place, draft.idref, name, draft.linear, body);
     });
 
-    return shelve(
-        { language, identifier, title, chapters, nav, hash: await digest(bytes.slice().buffer), texts, pictures },
-        doc
-    );
+    return shelve({
+        language,
+        identifier: book.identifier,
+        title,
+        chapters,
+        nav,
+        hash: book.hash,
+        texts,
+        image: book.image
+    });
 }
 
 /**
  * The publication the reader keeps while the book is open. It is made here, apart from the conversion, so that it
  * holds the chapters and pictures and nothing else: the parsed file is let go once the book is converted.
  */
-function shelve(
-    book: {
-        language: string;
-        identifier: string;
-        title: string;
-        chapters: Chapter[];
-        nav: Publication['nav'];
-        hash: string;
-        texts: Map<string, string>;
-        pictures: Map<string, Held>;
-    },
-    doc: Document
-): Publication {
-    const { language, identifier, title, chapters, nav, texts, pictures } = book;
+function shelve(book: {
+    language: string;
+    identifier: string;
+    title: string;
+    chapters: Chapter[];
+    nav: Publication['nav'];
+    hash: string;
+    texts: Map<string, string>;
+    image(path: string): Promise<PictureBytes>;
+}): Publication {
+    const { language, identifier, title, chapters, nav, texts, image } = book;
     return {
         ...(language ? { language } : {}),
         identifiers: identifier ? [identifier] : [],
@@ -760,6 +915,6 @@ function shelve(
             const found = texts.get(path);
             return found === undefined ? Promise.reject(new Error('Missing book resource')) : Promise.resolve(found);
         },
-        image: path => Promise.resolve(pictureBytes(pictures.get(path), doc))
+        image
     };
 }

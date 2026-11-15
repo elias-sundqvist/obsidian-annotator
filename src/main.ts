@@ -790,7 +790,7 @@ export default class AnnotatorPlugin extends Plugin {
         this.registerExtensions(['epub'], EPUB_VIEW);
         // FictionBook files open in the book reader too. Obsidian refuses an extension another plugin has already taken;
         // the plugin must still start then, and such a book is opened from its menu (Annotate) or its annotation note.
-        for (const extension of ['fb2', 'fbz'])
+        for (const extension of ['fb2', 'fbz', 'fb3'])
             try {
                 this.registerExtensions([extension], EPUB_VIEW);
             } catch {
@@ -1258,7 +1258,7 @@ export default class AnnotatorPlugin extends Plugin {
         });
         this.addCommand({
             id: 'open-fictionbook',
-            name: 'Open a FictionBook (FB2) from this vault…',
+            name: 'Open a FictionBook (FB2 or FB3) from this vault…',
             callback: () => {
                 new FictionBookSwitcher(
                     this.app,

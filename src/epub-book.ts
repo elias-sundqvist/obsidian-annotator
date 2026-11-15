@@ -57,9 +57,9 @@ export interface Publication {
     font?(path: string): Promise<Uint8Array | null>;
     image(path: string): Promise<{ bytes: Uint8Array; mime: string } | null>;
 }
-/** Whether a file's name says it is a FictionBook 2 book: `.fb2`, or zipped as `.fb2.zip` or `.fbz`. */
+/** Whether a file's name says it is a FictionBook: `.fb2`, zipped as `.fb2.zip` or `.fbz`, or FictionBook 3's `.fb3`. */
 export function fictionBookName(name: string): boolean {
-    return /\.(?:fb2|fbz|fb2\.zip)$/i.test(name);
+    return /\.(?:fb2|fbz|fb2\.zip|fb3)$/i.test(name);
 }
 export function archivePath(base: string, href: string): { path: string; fragment: string } {
     if (/^[a-z][\w+.-]*:|^\/\//i.test(href)) throw new Error('External archive reference');

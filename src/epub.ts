@@ -239,9 +239,11 @@ export class EpubView extends FileView {
         try {
             const revision = fileRevision(file),
                 bytes = await this.app.vault.readBinary(file),
-                book = fictionBook
-                    ? await (await import('./fb2-book')).openFictionBook(bytes, this.contentEl.ownerDocument)
-                    : await openPublication(bytes, this.contentEl.ownerDocument);
+                book = !fictionBook
+                    ? await openPublication(bytes, this.contentEl.ownerDocument)
+                    : /\.fb3$/i.test(file.path)
+                      ? await (await import('./fb3-book')).openFictionBook3(bytes, this.contentEl.ownerDocument)
+                      : await (await import('./fb2-book')).openFictionBook(bytes, this.contentEl.ownerDocument);
             if (epoch !== this.epoch || this.stopped || fileRevision(file) !== revision) return;
             const sections = await publicationSections(
                 book,

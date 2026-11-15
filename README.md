@@ -3,7 +3,7 @@
 
 # Annotator
 
-Read and annotate PDFs, books (EPUB and FB2), web pages and videos inside
+Read and annotate PDFs, books (EPUB, FB2 and FB3), web pages and videos inside
 [Obsidian](https://obsidian.md), and keep what you mark as Markdown in your
 vault. Every annotation is a block in an ordinary note, so it links, embeds,
 searches and syncs like the rest of your notes.
@@ -595,7 +595,7 @@ keeps working beside it.
   for a figure or a table) becomes a marked area there, with its picture and
   the same note. One that lies off its page is left out.
 
-## Books (EPUB and FB2)
+## Books (EPUB, FB2 and FB3)
 
 ![A book in the Pages layout: a page is turned, a sentence is highlighted, and the text is made larger from the reading controls](docs/book.gif)
 
@@ -638,11 +638,11 @@ Poems, epigraphs, citations and tables are set as the book marks them, in your
 theme's colours and the typeface you chose.
 
 - Obsidian does not show a `.fb2.zip` in its file list unless *Detect all file
-  extensions* is on. **Open a FictionBook (FB2) from this vault…** lists every
-  FictionBook in the vault, zipped or not.
-- If another plugin already opens `.fb2` files, Annotator leaves them to it;
-  **Annotate** in the file's menu, the command above and the book's annotation
-  note still open it here.
+  extensions* is on. **Open a FictionBook (FB2 or FB3) from this vault…** lists
+  every FictionBook in the vault, zipped or not.
+- If another plugin already opens `.fb2` (or `.fb3`) files, Annotator leaves
+  them to it; **Annotate** in the file's menu, the command above and the book's
+  annotation note still open it here.
 - A book is known by the identifier its maker gave it, so a copy of the same
   file downloaded again, or a newer version of it, finds its annotations. A
   different library's file of the same work is a different book: its
@@ -650,7 +650,17 @@ theme's colours and the typeface you chose.
 - Older Russian files written in windows-1251, KOI8-R and the like are read as
   they declare. A file that is not well-formed XML is refused with the reason;
   [Calibre](https://calibre-ebook.com) can repair it.
-- FB3 and MOBI are not read; Calibre converts them to EPUB.
+- MOBI is not read; Calibre converts it to EPUB.
+
+FictionBook 3 books (`.fb3`) open the same way. An FB3 is a package of the
+book's description, its text and its pictures; its text is set as an FB2's
+is, and lists, boxed passages, preformatted text, underlining, letter spacing
+and small capitals are shown too. A note reference with no number of its own
+is numbered. Each chapter is known by the identifier the book gives its
+section, so a new edition that adds a chapter, or corrects a title, still
+finds every note. How the book asks to float a box or size a picture is left
+to the reader's layout, and a section the book marks as part of a sample or
+not is shown either way.
 
 ## Videos and recordings
 
@@ -1059,11 +1069,14 @@ and the PDF export is read back with two independent PDF readers. See
   Obsidian 1.15.0, and the share route on the Android emulator. The recipes
   for Windows and Linux have not been run on those systems (the Linux
   script was run on macOS), and nothing of it has been tried on a phone.
-- Annotator 0.2 does not open FictionBook (FB2) files; their annotation notes
-  are kept by it but not shown with the book.
-- A FictionBook whose sections are added to or taken out in a later version
+- Annotator 0.2 does not open FictionBook (FB2 or FB3) files; their annotation
+  notes are kept by it but not shown with the book.
+- An FB2 whose sections are added to or taken out in a later version
   finds its highlights by their words; a note on a whole chapter is then kept
   and said to need checking rather than moved to another chapter.
+- FB3 is read as its published schemas and its authors' example books
+  describe it, and has been tried on books made to them, not yet on books
+  from a shop or inside Obsidian itself.
 - iOS and iPadOS: the reader's own code has been run in iOS WebKit in the
   Simulator (selection, highlights, notes, drawing, books), not yet inside
   Obsidian for iOS on a device. YouTube may refuse to play there (its Error 153). The

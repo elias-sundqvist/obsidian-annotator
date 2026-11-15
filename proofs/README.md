@@ -446,7 +446,8 @@ stretch first, reads what reading it whole reads, which is how `chapters.mjs`
 hands it over (1,000 pieces at a time, the Bend value carried between them).
 Stating the first law found a defect in the converter as it was first
 written: words after a heading-only section were put in the chapter before
-that heading. `src/fb2-book.ts` calls `gatherChapters`.
+that heading. `src/fb2-book.ts` calls `gatherChapters`, for an FB2 and for an
+FB3, whose body `src/fb3-book.ts` first translates to FB2's markup.
 
 What stays in TypeScript: deciding what each section is (a walk of the
 parsed file) and writing a chapter's HTML. Those are tested, with generated

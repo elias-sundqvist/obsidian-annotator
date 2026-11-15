@@ -22,7 +22,7 @@ export function originalName(url: string): string {
                 .filter(part => part)
                 .pop() || '';
         return decodeURIComponent(last)
-            .replace(/\.(pdf|epub|fb2\.zip|fb2|fbz)$/i, '')
+            .replace(/\.(pdf|epub|fb2\.zip|fb2|fbz|fb3)$/i, '')
             .replace(/\s+/g, ' ')
             .trim();
     } catch {

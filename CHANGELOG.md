@@ -3,6 +3,16 @@
 What changed for someone using Annotator. How to use each thing is in
 [README.md](README.md).
 
+## Unreleased
+
+- FictionBook 3 books (`.fb3`) open in the book reader, with everything an
+  FB2 has: contents, find, highlights, notes, picture notes, the reading
+  position and the reading controls, and annotations in the same notes. Lists,
+  boxed passages, preformatted text, underlining and small capitals are shown
+  as the book sets them, and a chapter keeps its notes when a new edition adds
+  a chapter before it or corrects its title. **Open a FictionBook (FB2 or
+  FB3) from this vault…** lists them too.
+
 ## 0.3.2 (2026-11-15)
 
 - A note's source can be a DEVONthink item link (`x-devonthink-item://…`).
