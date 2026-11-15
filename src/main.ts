@@ -1106,6 +1106,14 @@ export default class AnnotatorPlugin extends Plugin {
                 this.refresh();
             })
         );
+        // A source that was deleted and is there again under its old name (put back, replaced by a new copy, written
+        // afresh) is a source again: what was said of it when it went is read anew, not kept against it.
+        this.registerEvent(
+            this.app.vault.on('create', file => {
+                for (const [key, state] of this.notes)
+                    if (state.error && !state.note && collectionSource(key) === file.path) void this.loadNote(key);
+            })
+        );
         this.registerEvent(
             this.app.vault.on('rename', (file, oldPath) => {
                 this.associations = Object.fromEntries(
@@ -1800,7 +1808,19 @@ export default class AnnotatorPlugin extends Plugin {
                 : ''
         }. Check the name, or set "Default target folders" in the settings to where your sources are kept.`;
     }
+    /**
+     * The notes this session has made, and for which source. The host indexes a new note a moment after it is
+     * written; until it has, the note's own properties cannot be asked what it is about, and what was written
+     * into it is what is known.
+     */
+    private madeNotes = new WeakMap<TFile, string>();
     private noteMatchesSource(note: TFile, key: string) {
+        const made = this.madeNotes.get(note);
+        if (made !== undefined) {
+            // Not indexed yet: it is about what it was made for. Indexed: it speaks for itself from now on.
+            if (!this.app.metadataCache.getFileCache(note)) return made === key;
+            this.madeNotes.delete(note);
+        }
         const context = collectionContext(key);
         if (context && context.note !== note.path) return false;
         key = collectionSource(key);
@@ -1984,6 +2004,7 @@ export default class AnnotatorPlugin extends Plugin {
             text = newNoteText({ target, title, date, heading: this.display.noteHeading });
         }
         const note = await this.app.vault.create(path, text);
+        this.madeNotes.set(note, pdf);
         this.associations[pdf] = note.path;
         await this.persist();
         this.notes.set(pdf, { note, records: [] });
