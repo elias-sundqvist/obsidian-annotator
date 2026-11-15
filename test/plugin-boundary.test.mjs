@@ -1165,7 +1165,9 @@ function openHost(){
  h.app.fileManager={getNewFileParent:()=>newNotes,trashFile:async file=>{trashed.push(file.path);h.files.delete(file.path);h.contents.delete(file.path);h.metadata.delete(file.path);}};
  h.app.loadLocalStorage=key=>store.has(key)?structuredClone(store.get(key)):null;h.app.saveLocalStorage=(key,value)=>{store.set(key,structuredClone(value));};
  // A note is made as the vault makes it, and its properties are read as the cache would read them.
- h.app.vault.create=async(path,text)=>{if(h.files.has(path))throw new Error('File already exists.');made.push(path);const target=/^annotation-target: (".*")$/m.exec(text);return h.add(path,text,target?{'annotation-target':JSON.parse(target[1])}:{});};
+ h.app.vault.create=async(path,text)=>{if(h.files.has(path))throw new Error('File already exists.');made.push(path);const target=/^annotation-target: (".*")$/m.exec(text),file=h.add(path,text,{});
+  // As in Obsidian, the properties of a note just written are read a moment later, not at once.
+  h.metadata.delete(path);setTimeout(()=>h.metadata.set(path,{frontmatter:target?{'annotation-target':JSON.parse(target[1])}:{}}),60);return file;};
  h.app.vault.getFiles=()=>[...h.files.values()].filter(file=>file instanceof TFile);
  const fire=async params=>{h.plugin.protocolHandlers.get('annotator-open')({action:'annotator-open',...params});await h.plugin.openQueue.idle();};
  return Object.assign(h,{store,made,trashed,newNotes,fire});

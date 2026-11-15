@@ -5875,7 +5875,11 @@ export default class AnnotatorPlugin extends Plugin {
             if (count > 500) throw new Error('Could not find a free name for the note of this file.');
             name = `${title} ${count}`;
         }
-        return this.app.vault.create(at(name), await this.newNoteContent(path, title));
+        const note = await this.app.vault.create(at(name), await this.newNoteContent(path, title));
+        // Right after a note is written Obsidian has not read its properties yet. Until it has, the note names nothing.
+        for (let waited = 0; waited < 5000 && !this.stopped && !this.targetKey(note); waited += 40)
+            await new Promise(resolve => window.setTimeout(resolve, 40));
+        return note;
     }
     /** The copy is what is shown. If the file outside has plainly changed since, that is said, with what takes the change in. */
     private async sayIfChanged(path: string, copy: TFile) {
