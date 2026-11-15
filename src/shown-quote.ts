@@ -1,5 +1,5 @@
 // @ts-expect-error A small untyped helper shared with the proofs' bridge.
-import { displayText, readDisplayText } from '../proofs/display-text.mjs';
+import { displayText, readDisplayText, squashed } from '../proofs/display-text.mjs';
 
 /**
  * The quote a reader has put in place of a passage's words.
@@ -56,9 +56,16 @@ const plain = (text: string) =>
         .replace(/\u200B/g, '')
         .replace(/\s+/g, ' ')
         .trim();
-/** Whether words of a line are the stored passage: as the line is written now (made inert), or as the original plugin wrote it (as it stood). */
+/**
+ * Whether words of a line are the stored passage: as the line is written now (made inert), or as the original plugin
+ * wrote it (as it stood); and in either, with white space put in or taken out, as the line is written from the passage
+ * as the reader shows it (a PDF's words with the spaces at its line ends put back, which its stored text has not).
+ */
 const same = (words: string, stored: string) =>
-    plain(String(readDisplayText(words))) === stored || plain(words) === stored;
+    plain(String(readDisplayText(words))) === stored ||
+    plain(words) === stored ||
+    squashed(readDisplayText(words)) === squashed(stored) ||
+    squashed(words) === squashed(stored);
 
 /** The words a visible line shows as the passage; null when the line has no place for them. */
 export function visibleQuote(display: string): string | null {

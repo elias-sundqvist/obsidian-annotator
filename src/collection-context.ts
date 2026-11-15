@@ -69,6 +69,7 @@ export function collectionHost(host: SourceHost, key: string, owner: string): So
         ...(host.progress ? { progress: (row: Annotation) => host.progress!(row) } : {}),
         ...(host.position ? { position: () => host.position!() } : {}),
         ...(host.display ? { display: (row: Annotation) => host.display!(row) } : {}),
+        ...(host.shownPassage ? { shownPassage: (row: Annotation) => host.shownPassage!(row) } : {}),
         ...(host.divisions ? { divisions: () => host.divisions!() } : {}),
         ...(host.setHighlightsVisible
             ? { setHighlightsVisible: (visible: boolean) => host.setHighlightsVisible!(visible) }

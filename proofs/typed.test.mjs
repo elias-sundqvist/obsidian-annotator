@@ -122,6 +122,28 @@ test('typed writes match the real storage/default/selector merge for every displ
     }
 });
 
+test('a visible line written from the passage as the reader shows it stores and reads exactly what the line from the stored passage does', () => {
+    // The pinned client's passage, with white space put in or taken out (a PDF's line ends spaced): the visible line
+    // shows those words, and nothing else of the note differs, for every display setting; the real legacy reader reads
+    // the same annotation from it. Words that are not the passage's characters are not taken.
+    const input = payload(), exact = input.target[0].selector.find(selector => selector.type === 'TextQuoteSelector').exact;
+    const spaced = [...exact].map((char, at) => (at % 5 === 4 ? `${char} ` : char)).join(''), squeezed = exact.replace(/\s+/g, '');
+    for (const includePrefix of [false, true]) for (const includePostfix of [false, true]) for (const highlightHighlightedText of [false, true]) {
+        const options = { includePrefix, includePostfix, highlightHighlightedText };
+        const plainly = createTypedAnnotation('prose', input, 'unused-fresh', options);
+        for (const shown of [spaced, squeezed]) {
+            const written = createTypedAnnotation('prose', input, 'unused-fresh', options, shown);
+            assert.deepEqual(readTypedAnnotation(written.source, written.id), readTypedAnnotation(plainly.source, plainly.id));
+            assert.deepEqual(written.response, plainly.response); assert.deepEqual(written.stored, plainly.stored);
+            assert.deepEqual(legacy.loadAnnotationsAtUriFromFileText(null, written.source).rows, legacy.loadAnnotationsAtUriFromFileText(null, plainly.source).rows);
+            const line = written.source.split('\n').find(text => text.includes('%%HIGHLIGHT%%'));
+            assert.ok(line.includes(shown.replace(/\s+/g, ' ').trim().replace(/`/g, '\\`')), line);
+            assert.equal(written.source.split('\n').filter(text => text !== line).join('\n'), plainly.source.split('\n').filter(text => !text.includes('%%HIGHLIGHT%%')).join('\n'));
+        }
+        assert.equal(createTypedAnnotation('prose', input, 'unused-fresh', options, `${exact} more`).source, plainly.source);
+    }
+});
+
 test('body ID and generated fallback match local adapter upsert behavior; PATCH path is not substituted', () => {
     const input = payload();
     const first = createTypedAnnotation('', input, 'unused');

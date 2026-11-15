@@ -133,3 +133,18 @@ test('full legacy selector edits preserve untouched nested numeric lexemes', () 
     assert.ok(source.includes('"large":9007199254740993,"negativeZero":-0'));
     assert.equal(readAll(source)[0].target[0].selector[0].exact, 'updated quote');
 });
+test('a visible line written from the passage as the reader shows it (spaces at PDF line ends) reads in every older reader as the same annotation', () => {
+    const exact = 'alarge number of high-evolvabilitygenomes, insteadrelying on', shown = 'a large number of high-evolvability genomes, instead relying on';
+    // (An id the pre-integration reader takes: letters and digits.)
+    const payload = { ...base, id: 'alphanumeric123', target: [{ ...base.target[0], selector: [{ type: 'TextQuoteSelector', exact, prefix: 'Before', suffix: 'After' }, { type: 'TextPositionSelector', start: 6, end: 6 + exact.length }] }] };
+    for (const display of [true, false].flatMap(includePrefix => [true, false].flatMap(includePostfix => [true, false].map(highlightHighlightedText => ({ includePrefix, includePostfix, highlightHighlightedText }))))) {
+        const source = create(prefix, payload, display, shown), plainly = create(prefix, payload, display);
+        if (display.highlightHighlightedText) assert.ok(source.includes(`==${shown}==`)); else assert.ok(source.includes(`%%HIGHLIGHT%%${shown}`));
+        // The pre-integration reader, the updated legacy route and this one: the stored passage, as without it.
+        assert.deepEqual(stock.loadAnnotationsAtUriFromFileText(null, source).rows, readAll(source));
+        same(source); assert.deepEqual(readAll(source), readAll(plainly)); assert.equal(oldRead(source)[0].target[0].selector[0].exact, exact);
+        // An older version writing the annotation again (a comment edit) leaves it the same annotation.
+        const row = { ...oldRead(source)[0], text: 'Edited in the old reader' }, again = oldWrite(source, row);
+        same(again); assert.equal(readAll(again)[0].target[0].selector[0].exact, exact); assert.equal(readAll(again)[0].text, 'Edited in the old reader');
+    }
+});

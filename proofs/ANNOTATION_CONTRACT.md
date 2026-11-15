@@ -82,8 +82,12 @@ group, which is always `__world__`.
 Visible comments and tags override stored values. Visible quote prefix/suffix
 overlay every quote selector in the first target only; JSON exact remains
 authoritative. The writer uses the last quote selector of the first target for
-display and trims displayed context/exact. Tests compare all eight display
-setting combinations with the actual old codec.
+display and trims displayed context/exact. The displayed exact may instead be the
+passage as the reader shows it (a PDF's words with the spaces at its line ends
+put back), and only when it is the stored exact with white space alone added or
+removed; the stored JSON is the same either way, and a reader does not take such
+a line for the reader's own quote. Tests compare all eight display setting
+combinations with the actual old codec, with and without it.
 
 The codec distinguishes absent visible sections from present
 empty sections: absence falls back to JSON/default, while empty clears the

@@ -12,6 +12,17 @@ const ZWSP = '\u200B';
 export function displayText(text) {
     return String(text ?? '').replace(/\s+/g, ' ').replace(/`/g, '\\`').replace(/<(?=[A-Za-z/!%?])/g, `<${ZWSP}`).replace(/%(?=%)/g, `%${ZWSP}`);
 }
+// A passage's characters, as they are compared for being the same passage: without any white space (or zero-width
+// space), so that the words of a PDF's text, which has no space where a line ended, are the words as the page shows them.
+export function squashed(text) {
+    return String(text ?? '').replace(/[\s​]+/g, '');
+}
+// The passage the visible line is written from: the passage as the reader shows it (`shown`, a PDF's words with the
+// spaces at its line ends put back) when that is the stored passage's own characters with white space alone added or
+// taken away; otherwise the stored passage. The stored JSON keeps `exact` as it is either way.
+export function shownPassage(exact, shown) {
+    return typeof shown === 'string' && shown.trim() && squashed(shown) === squashed(exact) ? shown : String(exact ?? '');
+}
 export function readDisplayText(text) {
     return String(text ?? '').replace(/\\`/g, '`').replace(new RegExp(`<${ZWSP}(?=[A-Za-z/!%?])`, 'g'), '<').replace(new RegExp(`%${ZWSP}(?=%)`, 'g'), '%');
 }

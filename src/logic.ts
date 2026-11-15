@@ -49,7 +49,8 @@ const checked = cite as unknown as Checked & {
 /** Several annotations added to one note, each with its ink where it has one, as one step. */
 function createMany(
     source: string,
-    rows: { annotation: Annotation; ink?: string }[],
+    /** Each with its ink where it has one, and its passage as the reader shows it where it is known (codec.ts, create). */
+    rows: { annotation: Annotation; ink?: string; shown?: string }[],
     settings?: Record<string, boolean>,
     /** The heading new annotations are written under; empty for the end of the note. */
     under = '',
@@ -57,8 +58,8 @@ function createMany(
     headings: HeadingOptions | null = null
 ): string {
     let text = source;
-    for (const { annotation, ink } of rows) {
-        text = createUnder(text, annotation, settings, under, headings);
+    for (const { annotation, ink, shown } of rows) {
+        text = createUnder(text, annotation, settings, under, headings, shown ?? null);
         if (ink) text = recolor(text, annotation.id, ink);
     }
     return text;

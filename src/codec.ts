@@ -12,7 +12,7 @@ import { array, list, parseJson, stringifyJson, projectJson, visibleTags, loadAn
 // @ts-expect-error The proofs' JavaScript wrappers carry no type declarations.
 import { createTypedAnnotation, deleteTypedAnnotation } from '../proofs/typed-crud.mjs';
 // @ts-expect-error A small untyped helper shared with the proofs' bridge.
-import { displayText, readDisplayText } from '../proofs/display-text.mjs';
+import { displayText, readDisplayText, shownPassage } from '../proofs/display-text.mjs';
 // @ts-expect-error The proofs' JavaScript wrappers carry no type declarations.
 import { recolorJson, pageTextJson, pageTextKey, storedPageText } from '../proofs/reader.mjs';
 import { editedQuote, quoteText, withQuote } from './shown-quote';
@@ -162,10 +162,20 @@ export function readSome(source: string): {
         return withQuotes({ records, problems: problems.sort((a, b) => a.line - b.line) }, parsed.blocks);
     }
 }
-export function create(source: string, annotation: Annotation, settings?: Record<string, boolean>): string {
+/**
+ * Add an annotation at the end of a note. `shown` is its passage as the reader shows it (a PDF's words with the
+ * spaces at its line ends put back): the visible line is written from it when it is the stored passage with white
+ * space alone put back, and from the stored passage otherwise. The stored data is the same either way.
+ */
+export function create(
+    source: string,
+    annotation: Annotation,
+    settings?: Record<string, boolean>,
+    shown?: string | null
+): string {
     if (readAll(source).some(row => row.id === annotation.id))
         throw new Error(`Duplicate annotation ID ${annotation.id}`);
-    return createTypedAnnotation(source, annotation, annotation.id, settings).source;
+    return createTypedAnnotation(source, annotation, annotation.id, settings, shown ?? null).source;
 }
 /**
  * Add an annotation under the heading the reader named for them (note-place.ts):
@@ -182,11 +192,13 @@ export function createUnder(
     settings?: Record<string, boolean>,
     under = '',
     /** When annotations have headings of their own (note-headings.ts): their level, and so on. */
-    headings: HeadingOptions | null = null
+    headings: HeadingOptions | null = null,
+    /** The passage as the reader shows it (see `create`). */
+    shown: string | null = null
 ): string {
-    if (headings) return createHeaded(source, annotation, settings, under, headings);
+    if (headings) return createHeaded(source, annotation, settings, under, headings, shown);
     const named = namedHeading(under);
-    if (!named) return create(source, annotation, settings);
+    if (!named) return create(source, annotation, settings, shown);
     const before = readAll(source);
     if (before.some(row => row.id === annotation.id)) throw new Error(`Duplicate annotation ID ${annotation.id}`);
     const place = placeUnder(source, named);
@@ -195,12 +207,12 @@ export function createUnder(
         const ending = source.match(/\r?\n/)?.[0] ?? '\n',
             blank = /\n[ \t]*\r?\n\s*$/.test(source),
             gap = !source.trim() || blank ? '' : source.endsWith('\n') ? ending : ending + ending;
-        return create(`${source}${gap}${headingLine(named, under)}${ending}`, annotation, settings);
+        return create(`${source}${gap}${headingLine(named, under)}${ending}`, annotation, settings, shown);
     }
-    if (place.at >= source.length) return create(source, annotation, settings);
+    if (place.at >= source.length) return create(source, annotation, settings, shown);
     const head = source.slice(0, place.at),
         tail = source.slice(place.at),
-        made = create(head, annotation, settings),
+        made = create(head, annotation, settings, shown),
         // The section's last annotation is followed by a blank line before the next heading, as at the end of a note.
         result = /\n\s*\n$/.test(made) ? made + tail : `${made}\n${tail}`;
     const after = readAll(result),
@@ -350,7 +362,8 @@ function createHeaded(
     annotation: Annotation,
     settings: Record<string, boolean> | undefined,
     under: string,
-    options: HeadingOptions
+    options: HeadingOptions,
+    shown?: string | null
 ): string {
     const before = readAll(source);
     if (before.some(row => row.id === annotation.id)) throw new Error(`Duplicate annotation ID ${annotation.id}`);
@@ -382,10 +395,13 @@ function createHeaded(
         words =
             given && !sections.includes(given.toLowerCase().replace(/\s+/g, ' '))
                 ? given
-                : uniqueHeading(defaultWords(annotation), taken),
+                : uniqueHeading(
+                      defaultWords(annotation, shown ? shownPassage(storedQuote(annotation), shown) : null),
+                      taken
+                  ),
         gap = !head.trim() || /\n[ \t]*\r?\n[ \t]*$/.test(head) ? '' : head.endsWith('\n') ? ending : ending + ending,
         lead = `${head}${gap}${annotationHeadingLine(options.level, words)}${ending}`,
-        made = create(lead, annotation, settings),
+        made = create(lead, annotation, settings, shown),
         result = !tail ? made : /\n\s*\n$/.test(made) ? made + tail : `${made}\n${tail}`;
     const after = readAll(result),
         index = after.findIndex(row => row.id === annotation.id),
@@ -708,9 +724,15 @@ export function keepAreaWords(source: string, id: string, words: string): string
 // Shared local-backend write entry. Keep untouched typed JSON subtrees rather
 // than serializing the loaded JS object: unknown numeric lexemes survive edits.
 // Full client payloads may edit selectors/metadata; omitted keys are retained.
-export function write(source: string, annotation: Annotation, settings?: Record<string, boolean>): string {
+export function write(
+    source: string,
+    annotation: Annotation,
+    settings?: Record<string, boolean>,
+    /** The passage as the reader shows it (see `create`). */
+    shown?: string | null
+): string {
     const current = readAll(source).find(row => row.id === annotation.id);
-    if (!current) return createTypedAnnotation(source, annotation, annotation.id, settings).source;
+    if (!current) return createTypedAnnotation(source, annotation, annotation.id, settings, shown ?? null).source;
     const block = parseDocument(source).blocks.find((row: { id: string }) => row.id === annotation.id);
     const original = parseJson(block.fields.json);
     const members = array(original.members);
@@ -741,7 +763,8 @@ export function write(source: string, annotation: Annotation, settings?: Record<
             // A reader's own quote outlives a passage that is anchored anew: it is theirs, not the source's.
             const was = storedQuote(current),
                 edited = was ? editedQuote(visibleLine(block), was) : null,
-                words = edited !== null ? quoteText(edited) : displayText((quote?.exact || '').trim());
+                words =
+                    edited !== null ? quoteText(edited) : displayText(shownPassage(quote?.exact || '', shown).trim());
             patch.display = `*${prefix}%%HIGHLIGHT%%${mark ? ' ==' : ''}${words}${mark ? '== ' : ''}${suffix}*`;
         }
     }

@@ -568,6 +568,12 @@ test('a passage that runs over line ends is shown with the spaces the page left 
   assert.equal(across.target[0].selector[0].exact,'brownfox jumps over');assert.equal(h.adapter.status('a'),'Page 1');
   // An annotation that is not placed has nothing to show in its place.
   assert.equal(h.adapter.display({id:'zz',text:'',target:[{selector:[{type:'TextQuoteSelector',exact:'not on the page'}]}]}),null);
+  // Before it is saved, an annotation's passage reads the same from where its position selector puts it: what its note's
+  // visible line is written from. Not where the PDF's text there is not its quote.
+  assert.equal(h.adapter.shownPassage(across),'brown fox jumps over');assert.equal(h.adapter.shownPassage(three),'brown fox jumps over the inter-national date line and stops.');
+  assert.equal(h.adapter.shownPassage(quote('e','The quick')),'The quick');
+  const moved=quote('f','brownfox jumps');moved.target[0].selector[1]={type:'TextPositionSelector',start:0,end:14};assert.equal(h.adapter.shownPassage(moved),null);
+  assert.equal(h.adapter.shownPassage({id:'g',text:'',target:[{source:'urn:x-pdf:one'}]}),null);
  }finally{h.close();}
 });
 test('a long PDF shows the highlights of its first pages while the rest is still being read; what is not settled yet waits, and nothing changes when the reading ends',async()=>{

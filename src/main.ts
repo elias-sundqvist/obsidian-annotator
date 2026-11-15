@@ -499,18 +499,26 @@ export default class AnnotatorPlugin extends Plugin {
         readAll: (source: string) => this.logic.call('readAll', source),
         // New annotations go under the heading named in the settings, when there is one.
         // With headings on, each new annotation gets its heading; `heading` is the words of one brought back by Undo.
-        create: (source: string, annotation: Annotation, settings?: Record<string, boolean>, heading?: string | null) =>
+        // `shown` is the passage as the reader shows it, which the note's visible line is written from (codec.ts, create).
+        create: (
+            source: string,
+            annotation: Annotation,
+            settings?: Record<string, boolean>,
+            heading?: string | null,
+            shown?: string | null
+        ) =>
             this.logic.call(
                 'createUnder',
                 source,
                 annotation,
                 settings,
                 this.display.writeUnder,
-                this.headingOptions(heading)
+                this.headingOptions(heading),
+                shown ?? null
             ),
         createMany: (
             source: string,
-            rows: { annotation: Annotation; ink?: string }[],
+            rows: { annotation: Annotation; ink?: string; shown?: string }[],
             settings?: Record<string, boolean>
         ) => this.logic.call('createMany', source, rows, settings, this.display.writeUnder, this.headingOptions()),
         update: (source: string, annotation: Annotation) => this.logic.call('update', source, annotation),
@@ -4221,7 +4229,9 @@ export default class AnnotatorPlugin extends Plugin {
             const holding = parts && held ? this.noteHolding(file, held) : null;
             if (parts && held && !holding)
                 throw new Error('The annotation answered is no longer in a note; your draft is retained.');
-            const note = holding || (await this.ensureNote(file, storedPage(annotation) ?? draft?.page));
+            const note = holding || (await this.ensureNote(file, storedPage(annotation) ?? draft?.page)),
+                // A new passage's words as the reader shows them, for the note's visible line.
+                shown = selected ? this.hostFor(file, selected)?.shownPassage?.(annotation) || null : null;
             await this.rewrite(note, async source => {
                 if (this.stopped || (selected && !this.hostFor(file, selected || undefined)?.isCurrent(selected)))
                     throw new Error('Source context changed before saving.');
@@ -4246,7 +4256,7 @@ export default class AnnotatorPlugin extends Plugin {
                     const updated = await this.codec.update(source, annotation);
                     return recolored ? await this.codec.recolor(updated, annotation.id, ink) : updated;
                 }
-                const created = await this.codec.create(source, annotation, { ...this.markdown });
+                const created = await this.codec.create(source, annotation, { ...this.markdown }, null, shown);
                 return recolored ? await this.codec.recolor(created, annotation.id, ink) : created;
             });
             await this.loadNote(file);
@@ -5703,9 +5713,16 @@ export default class AnnotatorPlugin extends Plugin {
             }
             const tags = [...new Set(request.tags)],
                 ink = isInk(request.ink) ? request.ink : DEFAULT_INK,
-                rows = plan.rows.map(row =>
-                    ink !== DEFAULT_INK ? { annotation: { ...row, tags }, ink } : { annotation: { ...row, tags } }
-                );
+                reader = this.hostFor(key),
+                rows = plan.rows.map(row => {
+                    // Each passage's words as the reader shows them, for the note's visible line.
+                    const shown = reader?.shownPassage?.(row) || null;
+                    return {
+                        annotation: { ...row, tags },
+                        ...(ink !== DEFAULT_INK ? { ink } : {}),
+                        ...(shown ? { shown } : {})
+                    };
+                });
             // Each match into the note of its page (a PDF has one, unless its notes hold page ranges); one on a page no note holds is left out.
             const { groups, outside } = await this.notesForNew(key, rows, row => storedPage(row.annotation));
             if (!groups.length) {

@@ -1341,6 +1341,31 @@ export class NativePdf {
             .filter(Boolean);
         return parts.length ? parts.join(' ') : null;
     }
+    /**
+     * The passage of an annotation about to be saved, as it reads on the page, from where its position selector puts it
+     * in the PDF's text. Null unless the text there is its quote exactly (the PDF changed, or the place is not known).
+     */
+    shownPassage(annotation: Annotation): string | null {
+        const selectors = annotation.target?.[0]?.selector || [],
+            quote = selectors.find(selector => selector.type === 'TextQuoteSelector') as
+                { exact?: unknown } | undefined,
+            place = selectors.find(selector => selector.type === 'TextPositionSelector') as
+                { start?: unknown; end?: unknown } | undefined;
+        const start = place?.start,
+            end = place?.end;
+        if (typeof quote?.exact !== 'string' || typeof start !== 'number' || typeof end !== 'number' || end <= start)
+            return null;
+        const parts: string[] = [];
+        let read = '';
+        for (const page of this.pages) {
+            const from = Math.max(start, page.offset),
+                to = Math.min(end, page.offset + page.text.length);
+            if (from >= to) continue;
+            read += page.text.slice(from - page.offset, to - page.offset);
+            parts.push(this.asRead(page.number, page.text, from - page.offset, to - page.offset));
+        }
+        return parts.length && read === quote.exact ? parts.join(' ') : null;
+    }
     /** How many equal divisions the overview strip can show (pages). */
     divisions(): number | null {
         return this.pages.length || null;

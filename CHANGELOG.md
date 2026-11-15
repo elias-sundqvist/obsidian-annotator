@@ -190,6 +190,10 @@ What changed for someone using Annotator. How to use each thing is in
   above it, and scrolling, the header and the status line name the chapter
   that fills the view rather than the one whose last lines are still at the
   top.
+- The quote written into the note for a PDF passage that runs over line ends
+  now has its words apart ("a large", not "alarge"), as the card shows it.
+  The passage kept in the note's data is the PDF's text as before, so the
+  highlight is found as it was, and older versions read the note as before.
 
 ## 0.3.1 (2026-11-13)
 

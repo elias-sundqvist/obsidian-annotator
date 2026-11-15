@@ -1700,6 +1700,18 @@ test('a note page after a PDF page: the command begins a note about the page bei
   h.app.workspace.getLeavesOfType=()=>[];h.plugin.currentFile=null;assert.equal(command.checkCallback(true),false);
  }finally{h.dispose();}
 });
+test('a highlight over PDF line ends is written in the note as the page reads, words apart, while its stored passage is the PDF\'s text',async()=>{
+ const h=host();try{
+  const {leaf}=matchPdf(h,[[{str:'Evolution favours a',hasEOL:true},{str:'large number of high-evolvability',hasEOL:true},{str:'genomes, instead',hasEOL:true},{str:'relying on drift.'}]]);
+  await h.plugin.onload();h.plugin.bindSources();await settleMatches();const binding=h.plugin.bindings.get(leaf.view),pdf=binding.host,key='Papers/Paper.pdf';await pdf.loading;
+  const text='Evolution favours alarge number of high-evolvabilitygenomes, insteadrelying on drift.',exact='alarge number of high-evolvabilitygenomes, insteadrelying',start=text.indexOf(exact);
+  await h.plugin.beginCapture({file:key,exact,prefix:text.slice(0,start),suffix:text.slice(start+exact.length),page:1,start,end:start+exact.length,revision:`${key}:1:0:${pdf.generation}`,nativeOwner:binding.owner},'highlight');await settleMatches();
+  const note=h.plugin.notes.get(key).note,written=h.contents.get(note.path),row=storeRead(written)[0];
+  assert.match(written,/==a large number of high-evolvability genomes, instead relying== /,'the visible line reads as the page');
+  assert.equal(quoteOfRow(row),exact,'the stored passage is the PDF\'s text, which finds it again');
+  assert.equal(h.plugin.notes.get(key).quotes,undefined,'and the line is not taken for the reader\'s own quote');
+ }finally{h.dispose();}
+});
 test('any area can show its note on the page and stop again; a text box\'s size is chosen from its menu, and only one member of its note changes',async()=>{
  const h=host();try{
   const {leaf}=matchPdf(h,[['Neural machine translation is studied here.']]);

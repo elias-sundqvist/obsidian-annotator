@@ -1,11 +1,14 @@
-import { displayText } from './display-text.mjs';
+import { displayText, shownPassage } from './display-text.mjs';
 import { parseDocument, createAnnotation, updateAnnotation, deleteAnnotation } from './bridge.mjs';
 import { array, createRequest, updateRequest, prepareWrite, responseObject, storedText, loadAnnotation, visibleTags } from './typed-annotations.mjs';
 
 // Full annotation writes, matching the pinned client's PATCH payload. The body
 // ID determines upsert identity exactly as in the local adapter; pathId is not
 // silently promoted into that role. The fresh-ID effect is supplied by caller.
-function applyPlan(source, plan, settings = {}) {
+// `shown` is the passage as the reader shows it (display-text.mjs, shownPassage): the visible line is written from it
+// when it is the stored passage with white space alone put back, so that words a PDF's text joins at a line end are
+// apart in the note. The stored JSON is the same with or without it.
+function applyPlan(source, plan, settings = {}, shown = null) {
     const response = responseObject(plan.response);
     const choices = { includePrefix: true, includePostfix: true, highlightHighlightedText: true, ...settings };
     let quote = { prefix: '', exact: '', suffix: '' };
@@ -13,7 +16,7 @@ function applyPlan(source, plan, settings = {}) {
         if (selector.type === 'TextQuoteSelector') quote = { prefix: selector.prefix || '', exact: selector.exact, suffix: selector.suffix || '' };
     }
     // The passage's words are written inert (display-text.mjs): they come from the source, and this line is Markdown in the user's note.
-    const display = `*${choices.includePrefix ? `%%PREFIX%%${displayText(quote.prefix.trim())}` : ''}%%HIGHLIGHT%%${choices.highlightHighlightedText ? ' ==' : ''}${displayText(quote.exact.trim())}${choices.highlightHighlightedText ? '== ' : ''}${choices.includePostfix ? `%%POSTFIX%%${displayText(quote.suffix.trim())}` : ''}*`;
+    const display = `*${choices.includePrefix ? `%%PREFIX%%${displayText(quote.prefix.trim())}` : ''}%%HIGHLIGHT%%${choices.highlightHighlightedText ? ' ==' : ''}${displayText(shownPassage(quote.exact, shown).trim())}${choices.highlightHighlightedText ? '== ' : ''}${choices.includePostfix ? `%%POSTFIX%%${displayText(quote.suffix.trim())}` : ''}*`;
     const fields = {
         json: storedText(plan.stored), display,
         link: `%%LINK%%[[#^${plan.id}|show annotation]]`,
@@ -23,8 +26,8 @@ function applyPlan(source, plan, settings = {}) {
     const next = exists ? updateAnnotation(source, plan.id, fields) : createAnnotation(source, plan.id, fields);
     return { source: next, response: plan.response, stored: plan.stored, id: plan.id };
 }
-export function createTypedAnnotation(source, payload, freshId, settings) {
-    return applyPlan(source, prepareWrite(createRequest(payload), freshId), settings);
+export function createTypedAnnotation(source, payload, freshId, settings, shown = null) {
+    return applyPlan(source, prepareWrite(createRequest(payload), freshId), settings, shown);
 }
 export function updateTypedAnnotation(source, pathId, payload, freshId, settings) {
     return applyPlan(source, prepareWrite(updateRequest(pathId, payload), freshId), settings);

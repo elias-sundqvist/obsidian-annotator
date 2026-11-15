@@ -35,6 +35,8 @@ export interface SourceHost {
     position?(): number | null;
     /** The passage as it should be read (the stored quote may lack spaces at line ends). */
     display?(annotation: Annotation): string | null;
+    /** The same for an annotation not saved yet, by where it says its passage is: what its note's visible line shows. */
+    shownPassage?(annotation: Annotation): string | null;
     /** Natural divisions of the source (pages, chapters) for the overview strip. */
     divisions?(): number | null;
     setHighlightsVisible?(visible: boolean): void;

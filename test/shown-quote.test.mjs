@@ -96,3 +96,44 @@ test('through the codec: the annotation reads back exactly as it did, and its qu
     const damaged = byHand.replace('"text":"about the page"', '"text":"about the page');
     assert.deepEqual(readSome(damaged).quotes, [['q1', 'the passage, corrected']]); assert.ok(readSome(damaged).problems.length);
 });
+
+// A PDF's text has no space where a line ends ("a" + "large" reads "alarge"); the reader shows the passage with those
+// spaces put back, and the note's visible line is written from that. It is the stored passage with white space added,
+// so it is nobody's edit; and the stored data is the same as without it.
+test('a passage written as the reader shows it (line ends spaced) is the stored passage, never a reader\'s quote, with every setting', () => {
+    let seed = 7;
+    const next = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    // Where a line ended, the reader may put a space back; a run of blanks may be shown as one, or one at an end dropped.
+    const spaced = exact => {
+        let out = '';
+        for (const char of exact) { out += char; if (next() < 0.2) out += next() < 0.8 ? ' ' : '\n'; }
+        return next() < 0.3 ? out.replace(/\s+/g, ' ').trim() : out;
+    };
+    const exacts = ['alarge number of high-evolvabilitygenomes', 'insteadrelying on the', 'the passage', '100%% sure<b>x</b>', 'a `code` span', 'x == y', '==marked==', 'ﬁne', ...texts(60).filter(text => text.trim())];
+    for (const exact of exacts) {
+        const shownOnes = [spaced(exact), spaced(exact), [...exact].join(' ')];
+        for (const settings of SETTINGS) for (const shown of shownOnes) {
+            const plainly = create('', quoted('q1', exact), settings), source = create('', quoted('q1', exact), settings, shown), line = lineOf(source, 'q1');
+            const label = JSON.stringify([exact, shown, settings]);
+            // Read back exactly as the note written without it: the stored passage, its places and everything else.
+            assert.deepEqual(readAll(source), readAll(plainly), label);
+            assert.equal(readAll(source)[0].target[0].selector[0].exact, exact);
+            assert.deepEqual(source.split('\n').filter(text => text.startsWith('>{')), plainly.split('\n').filter(text => text.startsWith('>{')), 'the stored JSON is the same bytes');
+            // Not the reader's quote, by the line or as the codec says.
+            assert.equal(editedQuote(line, exact), null, label); assert.equal(readSome(source).quotes, undefined, label);
+        }
+    }
+    // Words that are not the passage's own characters are not taken: the line is written from the stored passage.
+    for (const settings of SETTINGS) {
+        assert.equal(create('', quoted('q1', 'alarge'), settings, 'a larger'), create('', quoted('q1', 'alarge'), settings));
+        assert.equal(create('', quoted('q1', 'alarge'), settings, '   '), create('', quoted('q1', 'alarge'), settings));
+    }
+    assert.match(create('', quoted('q1', 'alarge number of high-evolvabilitygenomes'), undefined, 'a large number of high-evolvability genomes'), /==a large number of high-evolvability genomes==/);
+    // Changed words beyond white space are still the reader's quote.
+    assert.equal(editedQuote('*%%HIGHLIGHT%% ==a larger number== *', 'alarge number'), 'a larger number');
+    // A note that carries the spaced line keeps it through a comment edit and a recolouring, and anchored anew with it.
+    const source = create('', quoted('q1', 'alarge number', { text: 'mine' }), undefined, 'a large number'), row = readAll(source)[0];
+    assert.match(update(source, { ...row, text: 'edited' }), /==a large number==/); assert.match(recolor(source, 'q1', 'blue'), /==a large number==/);
+    const moved = write(source, { ...row, target: [{ ...row.target[0], selector: [{ type: 'TextQuoteSelector', exact: 'alarge number', prefix: 'p', suffix: 's' }, { type: 'TextPositionSelector', start: 4, end: 17 }] }] }, undefined, 'a large number');
+    assert.match(moved, /==a large number==/); assert.equal(readSome(moved).quotes, undefined);
+});
