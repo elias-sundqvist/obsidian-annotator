@@ -1686,6 +1686,16 @@ test('a note page after a PDF page: the command begins a note about the page bei
   const marker=leaf.contentEl.querySelector(`.page[data-page-number="2"] > .annotator-page-notes .annotator-page-note-mark[data-annotation-id="${stored.id}"]`);assert.ok(marker);
   assert.equal(marker.getAttribute('aria-label'),'My own page a list of thoughts');assert.equal(leaf.contentEl.querySelector('.page[data-page-number="1"] .annotator-page-notes'),null);
   marker.click();assert.equal(h.plugin.editing.annotation.id,stored.id);assert.equal(h.plugin.editMode,false);
+  // The sidebar goes to its card on the Page Notes tab each time the marker is pressed, also when the note is the one already selected and the Annotations tab was chosen since.
+  {const w=h.dom.window,content=w.document.createElement('div');w.document.body.append(content);const view=new AnnotationView({contentEl:content,app:h.app},h.plugin);h.plugin.currentFile=key;
+   const scrolled=[];w.HTMLElement.prototype.scrollIntoView=function(){scrolled.push(this.dataset.annotationId);};
+   const tab=()=>content.querySelector('[role=tab][aria-selected="true"]').textContent,card=()=>content.querySelector(`.annotator-card-list [data-annotation-id="${stored.id}"]`);
+   view.show();assert.match(tab(),/^Page Notes/);assert.ok(card().classList.contains('is-selected'));
+   content.querySelectorAll('[role=tab]')[0].click();assert.match(tab(),/^Annotations/);assert.equal(card(),null);
+   scrolled.length=0;marker.click();view.show();
+   assert.match(tab(),/^Page Notes/,'back on the tab its card is on');assert.ok(card().classList.contains('is-selected'));assert.deepEqual(scrolled,[stored.id],'and scrolled to it');
+   view.show();assert.deepEqual(scrolled,[stored.id],'drawn again without being opened again: left where it is');
+   content.querySelectorAll('[role=tab]')[0].click();view.show();assert.match(tab(),/^Annotations/,'a tab chosen after is kept');}
   // Without a PDF the command is not offered.
   h.app.workspace.getLeavesOfType=()=>[];h.plugin.currentFile=null;assert.equal(command.checkCallback(true),false);
  }finally{h.dispose();}

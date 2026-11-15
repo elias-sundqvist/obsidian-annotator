@@ -56,6 +56,8 @@ export class AnnotationView extends ItemView {
     private notedOnly = false;
     private readonly collapsedThreads = new Set<string>();
     private context = '';
+    /** The plugin's count of annotations opened, as of the last time the sidebar went to one. */
+    private opened = 0;
     private editorContext = '';
     private file: string | null = null;
     private composing = '';
@@ -378,7 +380,12 @@ export class AnnotationView extends ItemView {
                 : selected
                   ? `selection:${selected.revision}:${selected.exact}`
                   : editing?.annotation.id || (draft ? `draft:${draft.parent?.id || 'note'}` : '');
-        const focusChanged = !!focus && focus !== this.context;
+        // An annotation opened again (its marker pressed twice, say) is gone to again. One opened in another note of
+        // the PDF than the one shown is gone to once the reader is at its page and the sidebar shows its note.
+        const elsewhere =
+            !!editing && !plugin.editMode && !selected && !records.some(row => row.id === editing.annotation.id);
+        const focusChanged = !elsewhere && !!focus && (focus !== this.context || plugin.opened !== this.opened);
+        if (!elsewhere) this.opened = plugin.opened;
         if (focusChanged) {
             const focused = editing?.annotation || draft?.parent;
             for (let node = focused ? threads.nodes.get(focused.id) : undefined; node; node = node.parent)
@@ -396,7 +403,7 @@ export class AnnotationView extends ItemView {
                 this.notedOnly = false;
             }
         }
-        this.context = focus;
+        if (!elsewhere) this.context = focus;
         const usedInks = INKS.filter(ink =>
             threads.roots.some(node => inTab(node, 'annotations') && inkOf(annotationOf(node)) === ink)
         );

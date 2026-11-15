@@ -475,6 +475,11 @@ export default class AnnotatorPlugin extends Plugin {
     private selectionActions: SelectionActions | null = null;
     selection: Capture | null = null;
     editing: Editing | null = null;
+    /**
+     * Counts the times an annotation was opened (from its mark, its marker, a link or its card), so that the sidebar
+     * goes to its card each time, also when it is the one already selected.
+     */
+    opened = 0;
     comment = '';
     tags: string[] = [];
     tagInput = '';
@@ -2531,16 +2536,17 @@ export default class AnnotatorPlugin extends Plugin {
     /**
      * The part of a PDF whose notes hold page ranges that the sidebar is about: the one that holds what is being
      * worked on (the annotation edited or answered, the passage selected, the page a note was begun on), or else the
-     * one that holds the page being read. Null, with the page, when that page is in no note.
+     * one that holds the page being read. Null, with the page, when that page is in no note. An annotation that is
+     * only selected (the one just saved, or opened from its mark) is not being worked on: the sidebar follows the page.
      */
     private shownPart(file: string, state: NoteState): { part: NotePart | null; page: number | null } {
         const parts = state.parts || [],
             holding = (id: string) => parts.find(part => part.records.some(row => row.id === id)) || null;
-        if (this.editing?.file === file) {
+        if (this.editMode && this.editing?.file === file) {
             const part = holding(this.editing.annotation.id);
             if (part) return { part, page: null };
         }
-        if (this.draft?.file === file) {
+        if (this.editMode && this.draft?.file === file) {
             if (this.draft.parent) {
                 const part = holding(this.draft.parent.id);
                 if (part) return { part, page: null };
@@ -3704,6 +3710,7 @@ export default class AnnotatorPlugin extends Plugin {
         this.currentFile = file;
         this.selection = null;
         this.editing = { file, annotation };
+        this.opened++;
         this.comment = annotation.text;
         this.tags = [...annotation.tags];
         this.tagInput = annotation.tags.join(', ');

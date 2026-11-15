@@ -174,6 +174,61 @@ test('a new highlight goes into the note of its page, an edit and a deletion int
     } finally { h.dispose(); }
 });
 
+test('after a highlight is saved the sidebar follows the page being read again, into either note; only an open composer keeps it on its note', async () => {
+    const h = host({ notes: chapters() });
+    try {
+        const binding = await h.start(), first = 'Books/Chapter 1.md', second = 'Books/Chapter 2.md';
+        h.plugin.currentFile = h.pdf.path;
+        let shows = 0;
+        h.app.workspace.getLeavesOfType = type => type === 'pdf' ? h.leaves : type === 'annotator-sidebar' ? [{ view: Object.assign(Object.create(AnnotationView.prototype), { show() { shows++; } }) }] : [];
+        const read = page => { h.viewer.currentPageNumber = page; binding.host.pageListener(); };
+        // Highlighted on page 4, in the second note; then back to page 2: the first note, drawn again for it.
+        await h.highlight(binding, 4, 'Made on page four');
+        const made = h.plugin.notes.get(h.pdf.path).records.find(each => each.text === 'Made on page four');
+        assert.equal(h.plugin.editing.annotation.id, made.id, 'what was saved is selected'); assert.equal(h.plugin.editMode, false);
+        shows = 0; read(2);
+        assert.equal(h.plugin.shownNote(h.pdf.path).path, first, 'the page read, not the highlight just saved');
+        assert.equal(shows, 1, 'the sidebar is drawn again for the other note');
+        // And the reverse: highlighted on page 1, then on to page 3.
+        await h.highlight(binding, 1, 'Made on page one');
+        read(3);
+        assert.equal(h.plugin.shownNote(h.pdf.path).path, second);
+        // An annotation opened from the second note while page 1 is read: the sidebar goes to its note once the reader is there.
+        read(1); h.plugin.openAnnotation(h.pdf.path, made);
+        read(4); assert.equal(h.plugin.shownNote(h.pdf.path).path, second);
+        // While a composer is open for an annotation (or a draft), the sidebar stays on its note whatever page is read.
+        h.plugin.editAnnotation(h.pdf.path, made); read(1);
+        assert.equal(h.plugin.shownNote(h.pdf.path).path, second, 'edited: its note');
+        h.plugin.cancelEdit(); assert.equal(h.plugin.shownNote(h.pdf.path).path, first, 'given up: the page read');
+        read(3); h.plugin.newNote(h.pdf.path); read(1);
+        assert.equal(h.plugin.shownNote(h.pdf.path).path, second, 'a page note begun on page 3: its note');
+        h.plugin.cancelEdit(); assert.equal(h.plugin.shownNote(h.pdf.path).path, first);
+    } finally { h.dispose(); }
+});
+
+test('an annotation opened in another note than the one shown is gone to in the sidebar once that note is shown', async () => {
+    const h = host({ notes: chapters() });
+    try {
+        const binding = await h.start();
+        h.plugin.currentFile = h.pdf.path; h.viewer.currentPageNumber = 1;
+        const content = h.dom.window.document.createElement('div'); h.dom.window.document.body.append(content);
+        const sidebar = new AnnotationView({ contentEl: content, app: h.app }, h.plugin);
+        sidebar.show();
+        const tab = () => content.querySelector('[role=tab][aria-selected="true"]').textContent;
+        // On the Page Notes tab of the first note's pages.
+        [...content.querySelectorAll('[role=tab]')][1].click(); assert.match(tab(), /^Page Notes/);
+        const two = h.plugin.notes.get(h.pdf.path).records.find(each => each.id === 'two');
+        // Opened from a link while page 1 is read: the first note is shown, as it was, until the reader is at page 3.
+        // (The reader is held at page 1, as a PDF still laying out its pages is.)
+        h.plugin.openAnnotation(h.pdf.path, two); h.viewer.currentPageNumber = 1; sidebar.show();
+        assert.equal(content.querySelector('.annotator-head-name').textContent, 'Chapter 1'); assert.match(tab(), /^Page Notes/);
+        h.viewer.currentPageNumber = 3; binding.host.pageListener(); sidebar.show();
+        assert.equal(content.querySelector('.annotator-head-name').textContent, 'Chapter 2');
+        assert.ok(content.querySelector('.annotator-card-list [data-annotation-id="two"]').classList.contains('is-selected'), 'its card is the selected one');
+        assert.match(tab(), /^Annotations/, 'on the tab its card is on');
+    } finally { h.dispose(); }
+});
+
 test('drawings, and annotations made many at a time, go into the notes of their pages; a page in no note is left out and counted, or refuses a drawing', async () => {
     const h = host({ notes: chapters() });
     try {
