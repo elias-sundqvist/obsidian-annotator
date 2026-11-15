@@ -113,7 +113,7 @@ export class PdfAppearance {
         }
         const turned = whole && core.pageInvert !== true && !this.error;
         const dark = turned || ((prefs.theme === 'dark' || prefs.theme === 'system') && core.pageInvert === true);
-        this.mark(dark ? 'dark' : 'light');
+        this.mark(dark ? 'dark' : 'light', !dark && theme === 'sepia' && !this.error);
         if (turned) this.root.dataset.annotatorFigures = 'turned';
         else delete this.root.dataset.annotatorFigures;
         const tuned =
@@ -123,13 +123,20 @@ export class PdfAppearance {
         // Turned as a whole: white paper comes out as the app's dark surface (not black), ink as light as the paper was dark, and colours keep their hue.
         this.adjust(turned ? `invert(0.89) hue-rotate(180deg)${tuned ? ` ${tuned}` : ''}` : dark ? tuned : '');
     }
-    /** What the page is now, for anything drawn over it: ink darkens a light page and glows on a dark one. */
-    private mark(page: 'dark' | 'light' | null) {
+    /**
+     * What the page is now, for anything drawn over it: ink darkens a light page and glows on a dark one. A sepia page
+     * is a light one on paper of its own colour, which what is written on the page (a text box) takes as its ground.
+     */
+    private mark(page: 'dark' | 'light' | null, sepia = false) {
         if (page) {
             if (this.root.dataset.annotatorPage !== page) this.root.dataset.annotatorPage = page;
+            if (sepia) {
+                if (this.root.dataset.annotatorPaper !== 'sepia') this.root.dataset.annotatorPaper = 'sepia';
+            } else delete this.root.dataset.annotatorPaper;
         } else {
             delete this.root.dataset.annotatorPage;
             delete this.root.dataset.annotatorFigures;
+            delete this.root.dataset.annotatorPaper;
         }
     }
     private adjust(value: string) {

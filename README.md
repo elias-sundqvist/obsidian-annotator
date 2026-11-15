@@ -275,7 +275,7 @@ picture of a table is found by what it says.
   corner) or resize it (`Shift`+arrow keys, or the grip at its bottom-right).
   Its picture is taken again.
 - A PDF that is pictures of pages (a scan) has no text to select. The sidebar
-  says so and offers areas and drawing, which work on any page, and
+  says so and offers areas, drawing and text boxes, which work on any page, and
   [recognising the text](#scanned-pdfs-recognising-the-text).
 
 **Draw on the page** is freehand: underline, circle, point, write in the
@@ -293,6 +293,31 @@ Cancel.
   it, the arrow keys move it, and the pencil (or `Enter`, or a double-click)
   opens it again to erase strokes, add to it, or give it another ink. Its
   note and tags are untouched.
+
+**Add text box** puts words on the page that stay there: a label on a
+figure, a correction in the margin, a form filled in. Click where the words
+go (or drag to set the width of the box), or press `Enter` to place one and
+move it with the arrow keys; then type. The words are written beside the box,
+where notes are written, and the box shows them as you type. Three sizes sit
+in the strip at the top; the last one used is remembered.
+
+- The words are the box's note: search finds them, tags and replies go with
+  them, and the card says **Text box**. Links and emphasis show as plain words
+  on the page; the card shows the note as written.
+- The words are in the page's own ink on the page's paper (light, sepia or
+  dark), whichever ink the box has: the ink is the rule along its edge. A box
+  is as tall as you made it, grows to fit its words, and stops at the foot of
+  the page; what does not fit there is cut off, and an ellipsis in the ink says
+  so.
+- Select a saved box to move it (arrow keys, or its grip) or resize it
+  (`Shift`+arrow keys, or its other grip); `Escape` puts back a move not yet
+  saved. `Enter`, a double-click, or pressing a selected box again opens its
+  words to change them.
+- Any area can show its note on the page: **Show note on the page** in its
+  menu (on the page or on its card), and the box's sizes are there too.
+- A box given up before it has words leaves nothing behind.
+- On a phone the command **Add text box (PDF)** starts it, a tap places it,
+  and the words are typed in the sheet above the keyboard.
 
 ### Scanned PDFs: recognising the text
 
@@ -359,7 +384,10 @@ accepted if their checksums match.
 **Export PDF with annotations** (command palette, or the sidebar's menu) saves
 `<name> (annotated).pdf` beside the PDF. Any PDF reader shows it with the
 highlights in their colours and their notes as comments, areas as boxes,
-drawings as ink and page notes as sticky notes.
+drawings as ink, text boxes as text boxes (their words on the page, in
+Helvetica) and page notes as sticky notes. A text box whose words the
+standard PDF fonts cannot write (Chinese, Arabic, Cyrillic, emoji) goes out as
+a box with its words as the comment, and the export says so.
 
 ![The exported PDF opened in another PDF reader](docs/exported-pdf.jpg)
 
@@ -449,7 +477,8 @@ PDF holds such annotations the sidebar says so and offers to **take them in**
 | --- | --- |
 | Highlight | A highlight of the words under it, in the nearest ink, with its comment as the note |
 | Underline, strike-out, squiggly | The same kind of mark: a passage tagged `underline`, `strike-out` or `squiggly` |
-| Rectangle, oval, text box | An area, with its text as the note |
+| Text box | A text box: its words on the page at the size nearest theirs, as its note |
+| Rectangle, oval, an empty text box | An area, with its text as the note |
 | Sticky note | A small area at its spot, with its text as the note |
 | Ink | A drawing |
 | An answer to any of these | A reply |
@@ -786,8 +815,8 @@ corner brings them back, and they come back by themselves when you go to
 something that is not a source.
 
 Long-press to select; the bar with the inks and Note sits above the
-navigation. A note is written in a sheet above the keyboard. Marking an area
-and drawing work by touch. Page colours and a book's contents open as sheets
+navigation. A note is written in a sheet above the keyboard. Marking an area,
+drawing and text boxes work by touch. Page colours and a book's contents open as sheets
 from the bottom. Opening a source shows the source: the annotations are in
 the right drawer when you want them.
 
@@ -807,6 +836,8 @@ each with its own annotations.
 | Writing a note | `Ctrl/Cmd+Enter` save, `Escape` cancel |
 | Marking an area | `Enter` place or keep, arrows move, `Shift`+arrows resize, `Escape` leave |
 | A saved area, focused | arrows move, `Shift`+arrows resize, `Alt` for fine steps |
+| Placing a text box | `Enter` place or keep, arrows move, `Shift`+arrows resize, `Escape` leave |
+| A saved text box, focused | `Enter` type in it, arrows move, `Shift`+arrows resize, `Alt` for fine steps, `Escape` undo a move not yet saved |
 | Drawing | `Enter` keep, `Ctrl/Cmd+Z` undo, `Escape` leave (asks once) |
 | A saved drawing, focused | arrows move, `Alt` for fine steps, `Enter` open for changes |
 | Book | `Ctrl/Cmd+F` find |
@@ -900,6 +931,12 @@ and the PDF export is read back with two independent PDF readers. See
   reference is reading, not knowing: raised numbers need the PDF's links,
   and a reference list set in an unusual way is refused rather than guessed.
   It has been tried on desktop, not yet on a phone.
+- Text boxes are for PDFs. On the page they show plain words in the theme's
+  text font; an exported PDF has them in Helvetica, so its lines break
+  differently, and Markdown, tags and replies stay in your notes. A box can
+  cover print under it: it is opaque so its words can be read, and **Hide
+  highlights** hides it. Annotator 0.3.1 and earlier, and 0.2, show a text box
+  as an area with a note (and keep it as one when they edit it).
 - Drawing is for PDFs; books have highlights (and underlines, strike-outs and
   squiggly lines), notes and picture notes, videos have notes and frame notes.
 - On a live web page in the Web viewer every passage is drawn as a highlight;

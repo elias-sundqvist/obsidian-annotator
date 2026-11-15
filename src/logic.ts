@@ -10,6 +10,7 @@ import {
     update,
     remove,
     recolor,
+    setPageText,
     requote,
     replaceFragment,
     replaceStoredString,
@@ -81,6 +82,8 @@ export const logic = {
     update,
     remove,
     recolor,
+    /** Show an area's note on its page, at a size, or no longer: a text box. */
+    setPageText,
     requote,
     replaceFragment,
     replaceStoredString,

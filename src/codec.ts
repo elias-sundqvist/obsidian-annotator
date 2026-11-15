@@ -14,7 +14,7 @@ import { createTypedAnnotation, deleteTypedAnnotation } from '../proofs/typed-cr
 // @ts-expect-error A small untyped helper shared with the proofs' bridge.
 import { displayText, readDisplayText } from '../proofs/display-text.mjs';
 // @ts-expect-error The proofs' JavaScript wrappers carry no type declarations.
-import { recolorJson } from '../proofs/reader.mjs';
+import { recolorJson, pageTextJson, pageTextKey, storedPageText } from '../proofs/reader.mjs';
 import { editedQuote, quoteText, withQuote } from './shown-quote';
 import { headingLine, namedHeading, placeUnder } from './note-place';
 export interface Annotation {
@@ -224,6 +224,30 @@ export function recolor(source: string, id: string, ink: string): string {
     const block = parseDocument(source).blocks.find((row: { id: string }) => row.id === id);
     if (!block) throw new Error('Annotation was removed externally; reload before recolouring.');
     const result = updateAnnotation(source, id, { json: recolorJson(block.fields.json, ink) });
+    readAll(result);
+    return result;
+}
+/**
+ * Show an annotation's note on its page at a size (`"small"`, `"medium"`, `"large"`), or (`null`) no longer: a
+ * text box. The checked Bend `PageText.set` and `PageText.clear` rewrite the one `pageText` member (laws
+ * pagetext_read_after_write, pagetext_write_preserves_others, pagetext_read_after_clear,
+ * pagetext_clear_preserves_others); every other JSON lexeme, the visible quote, comment and tags are retained.
+ * Only a marked area (not a passage, not a drawing) can be a text box.
+ */
+export function setPageText(source: string, id: string, size: string | null): string {
+    const block = parseDocument(source).blocks.find((row: { id: string }) => row.id === id);
+    if (!block) throw new Error('Annotation was removed externally; reload before changing its text box.');
+    const current = readAll(source).find(row => row.id === id);
+    const selectors = current?.target?.[0]?.selector || [];
+    if (
+        !selectors.some(selector => selector.type === 'FragmentSelector') ||
+        selectors.some(selector => selector.type === 'TextQuoteSelector' || selector.type === 'SvgSelector')
+    )
+        throw new Error('Only a marked area can show its note on the page.');
+    const result = updateAnnotation(source, id, { json: pageTextJson(block.fields.json, size) });
+    const after = parseDocument(result).blocks.find((row: { id: string }) => row.id === id);
+    if (!after || storedPageText(after.fields.json) !== (size === null ? '' : pageTextKey(size)))
+        throw new Error("This annotation's text box could not be written.");
     readAll(result);
     return result;
 }

@@ -4,6 +4,7 @@ import { inkOf } from './ink';
 import { quoteOf } from './source';
 import { areaWords, leadingImage, regionNote } from './area';
 import { drawingOf } from './drawing';
+import { textBoxOf } from './text-box';
 // @ts-expect-error The proofs' JavaScript wrappers carry no type declarations.
 import { arrange, exportBlock, exportTitle } from '../proofs/reader.mjs';
 
@@ -52,9 +53,17 @@ const reference = (context: SummaryContext, row: Annotation, label: string) =>
         ? `[[${context.note}#^${row.id}|${label.replace(/[[\]|]/g, ' ')}]]`
         : label;
 
-/** What an annotation is about: a passage, a marked area (a picture of a region), a drawing, or nothing on the page. */
-export function annotationKind(row: Annotation): 'passage' | 'area' | 'drawing' | 'note' {
-    return quoteOf(row) ? 'passage' : drawingOf(row) ? 'drawing' : regionNote(row) ? 'area' : 'note';
+/** What an annotation is about: a passage, a marked area (a picture of a region), a drawing, a text box (words on the page), or nothing on the page. */
+export function annotationKind(row: Annotation): 'passage' | 'area' | 'drawing' | 'text' | 'note' {
+    return quoteOf(row)
+        ? 'passage'
+        : drawingOf(row)
+          ? 'drawing'
+          : textBoxOf(row)
+            ? 'text'
+            : regionNote(row)
+              ? 'area'
+              : 'note';
 }
 /** The embed an area note leads with, as written, and the note without it. */
 export function pictureOf(row: Annotation): { image: string; rest: string } {
@@ -67,7 +76,7 @@ export function pictureOf(row: Annotation): { image: string; rest: string } {
         ? { image: found[0].trim(), rest: text.slice(found[0].length).trim() }
         : { image: '', rest: text.trim() };
 }
-const KIND_LABEL = { passage: 'Highlight', area: 'Area', drawing: 'Drawing', note: 'Note' } as const;
+const KIND_LABEL = { passage: 'Highlight', area: 'Area', drawing: 'Drawing', text: 'Text box', note: 'Note' } as const;
 function commentOf(thread: AnnotationThread, depth = 0): string {
     const parts: string[] = [];
     const row = thread.annotation;

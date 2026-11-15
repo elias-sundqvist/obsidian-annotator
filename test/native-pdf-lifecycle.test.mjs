@@ -485,7 +485,10 @@ test('the annotations a PDF holds from another program become annotations of the
   for(const row of plan.rows)assert.equal(row.annotation.created,found[0].modified.toISOString());
   const drawing=plan.rows.find(row=>row.from.kind==='drawing'),areas=plan.rows.filter(row=>row.from.kind==='area');
   assert.deepEqual(drawing.annotation.target[0].selector.map(selector=>selector.type),['FragmentSelector','SvgSelector']);assert.equal(drawing.ink,'purple');assert.equal(drawing.annotation.nativePdf.page,1);
-  assert.deepEqual(areas.map(row=>[row.annotation.text,row.annotation.target[0].selector[0].value,row.from.spot]),[['Check the units in this section','page=1&xywh=percent:85.1,8.85,3,3',true],['The heart of it','page=1&xywh=percent:10.78,18.18,68.63,6.57',false],['A typed remark in the margin','page=2&xywh=percent:11.76,24.24,35.95,5.05',false]]);
+  assert.deepEqual(areas.map(row=>[row.annotation.text,row.annotation.target[0].selector[0].value,row.from.spot]),[['Check the units in this section','page=1&xywh=percent:85.1,8.85,3,3',true],['The heart of it','page=1&xywh=percent:10.78,18.18,68.63,6.57',false]]);
+  // A text box stays one: its words shown on the page at the size nearest theirs, with no picture and no words read under it.
+  const boxes=plan.rows.filter(row=>row.from.kind==='textbox');
+  assert.deepEqual(boxes.map(row=>[row.annotation.text,row.annotation.target[0].selector[0].value,row.annotation.pageText,row.annotation.nativePdf.words]),[['A typed remark in the margin','page=2&xywh=percent:11.76,24.24,35.95,5.05','medium',undefined]]);
   // Shown by the reader, every one of them is found where it was put.
   h.adapter.setAnnotations(plan.rows.map(row=>row.annotation));await h.flush();for(const row of plan.rows)assert.match(h.adapter.status(row.annotation.id),/^Page [12]/,h.adapter.status(row.annotation.id));
   // Next time, what is already in the notes is not offered again.
@@ -687,4 +690,149 @@ test('citations cost nothing until asked for: an opened PDF is asked for each pa
  assert.notEqual(next,reader);
  assert.equal(await reader.page(2),null);
  h.close();
+});
+// ── Text boxes ──────────────────────────────────────────────────────────────
+const typedBox=(extra={})=>({id:'t',text:'<img src=x onerror="alert(1)"> **Bold** words\nsecond line',tags:[],pageText:'large',color:'pink',document:{documentFingerprint:'one'},target:[{source:'urn:x-pdf:one',selector:[{type:'FragmentSelector',conformsTo:'http://www.w3.org/TR/media-frags/',value:'page=1&xywh=percent:62,8.5,30,4'}]}],...extra});
+test('a text box is painted as its words in its region, never from stored markup: at its size, a line of the page high at least, cut off with a mark where the page ends',async()=>{
+ const h=host(document());try{h.page();const win=h.dom.window,proto=win.HTMLElement.prototype;
+  h.adapter.setAnnotations([typedBox()]);await h.flush();
+  const box=()=>h.root.querySelector('.annotator-native-areas .annotator-text-box'),words=()=>box().querySelector('.annotator-text-box-words');
+  assert.ok(box().classList.contains('annotator-area-mark'));assert.equal(box().dataset.annotationId,'t');assert.equal(box().dataset.annotatorSize,'large');assert.equal(box().dataset.annotatorInk,'pink');
+  assert.equal(box().style.getPropertyValue('--annotator-box-points'),'18');
+  // Its corner and width are the region's; its height is the least it takes, and it grows no further than the foot of the page.
+  assert.deepEqual([box().style.left,box().style.top,box().style.width,box().style.height,box().style.minHeight,box().style.maxHeight],['62%','8.5%','30%','','4%','91.5%']);
+  // The words are text: markup in the note is shown as typed, nothing of it is made an element, emphasis marks go, lines stay.
+  assert.equal(words().textContent,'<img src=x onerror="alert(1)"> Bold words\nsecond line');assert.equal(words().children.length,0);assert.equal(h.root.querySelector('img'),null);assert.equal(words().getAttribute('dir'),'auto');
+  // Read out by its words, told how to type in it; no tooltip over words that are already on the page, and no system title.
+  assert.equal(box().getAttribute('aria-label'),'<img src=x onerror="alert(1)"> Bold words second line');assert.match(box().getAttribute('aria-description'),/Text box on page 1: press Enter to type in it/);
+  assert.equal(box().hasAttribute('data-tooltip-position'),false);assert.equal(box().hasAttribute('title'),false);assert.equal(box().classList.contains('has-note'),false);
+  assert.equal(box().classList.contains('is-clipped'),false);
+  // More words than the page has room for: the box says so. What is read to know it is the words' height, once, after every box is placed.
+  let reads=0;Object.defineProperty(proto,'scrollHeight',{configurable:true,get(){reads++;return this.classList.contains('annotator-text-box-words')?240:0;}});Object.defineProperty(proto,'clientHeight',{configurable:true,get(){return this.classList.contains('annotator-text-box-words')?120:0;}});
+  h.adapter.schedule();await h.flush();assert.ok(box().classList.contains('is-clipped'));assert.equal(reads,1);
+  delete proto.scrollHeight;delete proto.clientHeight;h.adapter.schedule();await h.flush();assert.equal(box().classList.contains('is-clipped'),false);
+  // An empty note is an empty box, said to be one.
+  h.adapter.setAnnotations([typedBox({text:'![[Picture.png]]'})]);await h.flush();assert.equal(words().textContent,'');assert.ok(box().classList.contains('is-empty'));assert.equal(box().getAttribute('aria-label'),'Empty text box');
+  // What a version that does not know the member shows: the same annotation as an ordinary area with a note.
+  for(const pageText of [undefined,7]){h.adapter.setAnnotations([typedBox({pageText})]);await h.flush();assert.equal(h.root.querySelector('.annotator-text-box'),null);const area=h.root.querySelector('.annotator-area-mark[data-annotation-id="t"]');assert.ok(area);assert.equal(area.style.height,'4%');assert.equal(area.textContent,'');}
+  // Fifty boxes on a page are placed in percentages: the page is measured as often as for one, and no box's position is read.
+  let measured=0;const measure=proto.getBoundingClientRect;proto.getBoundingClientRect=function(){measured++;return measure.call(this);};
+  h.adapter.setAnnotations([typedBox()]);await h.flush();const one=measured;measured=0;
+  h.adapter.setAnnotations(Array.from({length:50},(_,i)=>typedBox({id:`t${i}`})));await h.flush();assert.equal(h.root.querySelectorAll('.annotator-text-box').length,50);assert.equal(measured,one);proto.getBoundingClientRect=measure;
+  // Hidden with the highlights, as areas are.
+  assert.ok(box().closest('.annotator-native-areas'));
+ }finally{h.close();}
+});
+test('a PDF with no text box pays nothing for them: no layer, no style read, no height read',async()=>{
+ const h=host(document());try{h.page();const win=h.dom.window,proto=win.HTMLElement.prototype;let styles=0,reads=0;const style=win.getComputedStyle;win.getComputedStyle=(...args)=>{styles++;return style(...args);};
+  Object.defineProperty(proto,'scrollHeight',{configurable:true,get(){reads++;return 0;}});
+  const region={id:'r',text:'A figure',document:{documentFingerprint:'one'},target:[{source:'urn:x-pdf:one',selector:[{type:'FragmentSelector',conformsTo:'http://www.w3.org/TR/media-frags/',value:'page=1&xywh=percent:30,2,40,20'}]}]};
+  h.adapter.setAnnotations([annotation,region]);await h.flush();h.adapter.schedule();await h.flush();
+  assert.equal(h.root.querySelector('.annotator-text-box, .annotator-text-draft'),null);assert.equal(styles,0);assert.equal(reads,0);
+  delete proto.scrollHeight;win.getComputedStyle=style;
+ }finally{h.close();}
+});
+test('a text box is placed by a click where its words begin, a drag that gives its width, or Enter without a pointer; one at a time, and not with an area or a drawing',async()=>{
+ const h=host(document());try{h.page();await h.flush();
+  const win=h.dom.window,page=h.root.querySelector('.page'),made=[],sizes=[];h.adapter.onTextBox=(area,size)=>made.push([area,size]);h.adapter.onTextSize=size=>sizes.push(size);
+  const pointer=(type,target,x,y)=>target.dispatchEvent(new win.MouseEvent(type,{bubbles:true,cancelable:true,button:0,clientX:x,clientY:y}));
+  const press=(key,shiftKey=false)=>win.document.dispatchEvent(new win.KeyboardEvent('keydown',{key,shiftKey,bubbles:true,cancelable:true}));
+  const hint=()=>h.root.querySelector('.annotator-area-hint.annotator-text-hint');
+  h.adapter.startTextBox();assert.equal(h.adapter.placingText,true);assert.equal(h.adapter.markingArea,false);assert.ok(h.root.classList.contains('annotator-text-mode'));
+  assert.equal(hint().getAttribute('role'),'status');assert.match(hint().querySelector('span').textContent,/Click where the words go, drag to set the width of the box, or press Enter/);
+  const buttons=[...hint().querySelectorAll('.annotator-text-size')];assert.deepEqual(buttons.map(button=>[button.getAttribute('aria-label'),button.getAttribute('aria-pressed')]),[['Small text','false'],['Medium text','true'],['Large text','false']]);
+  assert.equal(hint().querySelector('[title]'),null);
+  // A click: a box a line high (two of the size's points at the page's scale, here on a page 100 pixels high) and 30% wide, where the click was.
+  pointer('pointerdown',page,20,30);pointer('pointerup',win.document,20,30);
+  assert.deepEqual(made,[[{page:1,x:2000,y:3000,w:3000,h:3200},'medium']]);assert.equal(h.adapter.placingText,false);assert.equal(hint(),null);assert.equal(h.root.classList.contains('annotator-text-mode'),false);
+  // The size chosen is used and remembered; near the page's edges the box turns back to stay on the page.
+  h.adapter.startTextBox();hint().querySelectorAll('.annotator-text-size')[0].click();assert.deepEqual(sizes,['small']);assert.equal(hint().querySelectorAll('.annotator-text-size')[0].getAttribute('aria-pressed'),'true');
+  pointer('pointerdown',page,90,95);pointer('pointerup',win.document,90.2,95);assert.deepEqual(made.at(-1),[{page:1,x:7000,y:7600,w:3000,h:2400},'small']);
+  h.adapter.textSizeForBox=()=>'large';h.adapter.startTextBox();assert.equal(hint().querySelector('[aria-pressed="true"]').dataset.size,'large');
+  // A drag gives the width; a drag taller than a line gives the height too.
+  pointer('pointerdown',page,10,10);pointer('pointermove',win.document,60,12);pointer('pointerup',win.document,60,12);assert.deepEqual(made.at(-1),[{page:1,x:1000,y:1000,w:5000,h:4800},'large']);
+  h.adapter.startTextBox('medium');pointer('pointerdown',page,60,90);pointer('pointerup',win.document,10,20);assert.deepEqual(made.at(-1),[{page:1,x:1000,y:2000,w:5000,h:7000},'medium']);
+  // Without a pointer: Enter places a box on the page being read, arrows move it, Enter keeps it.
+  h.adapter.startTextBox('medium');press('Enter');assert.ok(page.querySelector('.annotator-area-band.is-keyboard'));assert.match(hint().querySelector('span').textContent,/Arrow keys move the box/);press('ArrowRight');press('Enter');
+  assert.deepEqual(made.at(-1),[{page:1,x:3700,y:4500,w:3000,h:3200},'medium']);
+  // Escape takes away the box being placed, then leaves; outside the mode a click places nothing.
+  const count=made.length;h.adapter.startTextBox();press('Enter');press('Escape');assert.equal(page.querySelector('.annotator-area-band'),null);assert.equal(h.adapter.placingText,true);press('Escape');assert.equal(h.adapter.placingText,false);
+  pointer('pointerdown',page,20,20);pointer('pointerup',win.document,20,20);assert.equal(made.length,count);
+  // One mode at a time: an area or a drawing ends it, and it ends them.
+  h.adapter.startTextBox();h.adapter.startArea();assert.equal(h.adapter.placingText,false);assert.equal(h.adapter.markingArea,true);
+  h.adapter.startTextBox();assert.equal(h.adapter.markingArea,false);assert.equal(h.adapter.placingText,true);
+  h.adapter.startDrawing();assert.equal(h.adapter.placingText,false);h.adapter.startTextBox();assert.equal(h.adapter.drawingMode,false);
+  h.adapter.leaveArea();assert.equal(h.adapter.placingText,false);
+ }finally{h.close();}
+});
+test('the words being typed show on the page as they are typed, in a layer of their own that outlives the page being drawn again; a saved box shows the words of its open note',async()=>{
+ const h=host(document());try{h.page();await h.flush();
+  const draft=()=>h.root.querySelector('.annotator-text-draft .annotator-text-box'),area={page:1,x:1000,y:1000,w:3000,h:400};
+  h.adapter.setTypedBox({id:null,area,size:'medium',ink:'blue',text:'Hel'});
+  assert.equal(draft().querySelector('.annotator-text-box-words').textContent,'Hel');assert.equal(draft().getAttribute('aria-hidden'),'true');assert.equal(draft().dataset.annotatorInk,'blue');
+  assert.deepEqual([draft().style.left,draft().style.top,draft().style.width,draft().style.minHeight],['10%','10%','30%','4%']);
+  // Typing changes the words in place: the same element, nothing else drawn again.
+  const first=draft();h.adapter.setTypedBox({id:null,area,size:'medium',ink:'blue',text:'Hello **you**'});assert.equal(draft(),first);assert.equal(first.textContent,'Hello you');
+  // The viewer draws the page again (a zoom): the box comes back with what was typed.
+  h.page();assert.equal(draft(),null);await h.flush();assert.equal(draft().textContent,'Hello you');
+  // Another ink or size draws it again; given up, it is gone.
+  h.adapter.setTypedBox({id:null,area,size:'large',ink:'green',text:'Hello'});assert.equal(draft().dataset.annotatorSize,'large');assert.equal(draft().dataset.annotatorInk,'green');
+  h.adapter.setTypedBox(null);assert.equal(h.root.querySelector('.annotator-text-draft'),null);
+  // A saved box whose note is open shows the words being typed, and its own again when the note closes.
+  h.adapter.setAnnotations([typedBox()]);await h.flush();const saved=()=>h.root.querySelector('.annotator-native-areas .annotator-text-box');
+  h.adapter.setTypedBox({id:'t',area:{page:1,x:6200,y:850,w:3000,h:400},size:'large',ink:'pink',text:'New *words*'});await h.flush();assert.equal(saved().textContent,'New words');assert.equal(h.root.querySelector('.annotator-text-draft'),null);
+  h.adapter.setTypedBox({id:'t',area:{page:1,x:6200,y:850,w:3000,h:400},size:'large',ink:'pink',text:'New words, more'});assert.equal(saved().textContent,'New words, more');assert.equal(saved().getAttribute('aria-label'),'New words, more');
+  h.adapter.schedule();await h.flush();assert.equal(saved().textContent,'New words, more','a repaint keeps the words being typed');
+  h.adapter.setTypedBox(null);await h.flush();assert.match(saved().textContent,/^<img/);
+  h.adapter.setTypedBox({id:null,area,size:'small',ink:'yellow',text:'x'});h.adapter.dispose();assert.equal(h.root.querySelector('.annotator-text-draft'),null);
+ }finally{h.close();}
+});
+test('a saved text box moves and resizes like an area; Enter, a double click or a second press types in it; Escape puts back a move not yet saved',async()=>{
+ const h=host(sized());try{h.page();
+  const win=h.dom.window,changed=[],opened=[],box=()=>h.root.querySelector('.annotator-text-box[data-annotation-id="t"]'),place=()=>[box().style.left,box().style.top,box().style.width,box().style.minHeight];
+  const key=(name,options={})=>box().dispatchEvent(new win.KeyboardEvent('keydown',{key:name,bubbles:true,cancelable:true,...options})),rest=()=>new Promise(resolve=>setTimeout(resolve,700));
+  h.adapter.onAreaChange=(annotation,area)=>changed.push([annotation.id,area]);h.adapter.onTextBoxOpen=annotation=>opened.push(annotation.id);
+  h.adapter.setAnnotations([typedBox()]);await h.flush();
+  assert.match(box().getAttribute('aria-roledescription'),/^text box; Enter types in it, arrow keys move it, Shift with arrow keys resize it/);assert.match(box().getAttribute('aria-keyshortcuts'),/^Enter Escape ArrowLeft/);
+  // Enter types in it, and is not also a press of the box.
+  let pressed=0;box().addEventListener('click',()=>pressed++);key('Enter');assert.deepEqual(opened,['t']);assert.equal(pressed,0);
+  // Arrows move it, Shift with arrows sizes it; Escape before the keys rest puts it back and saves nothing.
+  key('ArrowRight');key('ArrowDown',{shiftKey:true});assert.deepEqual(place(),['62.5%','8.5%','30%','4.5%']);key('Escape');assert.deepEqual(place(),['62%','8.5%','30%','4%']);await rest();assert.deepEqual(changed,[]);
+  key('ArrowLeft');key('ArrowLeft');key('ArrowDown',{shiftKey:true});await rest();assert.deepEqual(changed,[['t',{page:1,x:6100,y:850,w:3000,h:450}]]);
+  // A move not yet saved is saved before typing begins.
+  changed.length=0;key('ArrowUp');key('Enter');assert.equal(changed.length,1);assert.deepEqual(opened,['t','t']);
+  // A double click types in it; a first press selects it, a second types in it.
+  h.adapter.setAnnotations([typedBox()]);await h.flush();box().dispatchEvent(new win.MouseEvent('dblclick',{bubbles:true,cancelable:true}));assert.deepEqual(opened,['t','t','t']);
+  box().click();assert.equal(opened.length,3);await h.flush();box().click();assert.equal(opened.length,4);
+  // In hand it has the area's grips; Escape while one is dragged puts the box back and saves nothing.
+  changed.length=0;const grip=box().querySelector('.annotator-area-grip.is-size');assert.ok(grip);
+  const pointer=(type,target,x,y)=>target.dispatchEvent(new win.MouseEvent(type,{bubbles:true,cancelable:true,button:0,clientX:x,clientY:y}));
+  pointer('pointerdown',grip,92,12.5);pointer('pointermove',win.document,96,30);assert.deepEqual(place(),['62%','8.5%','34%','21.5%']);assert.ok(box().classList.contains('is-moving'));
+  win.document.dispatchEvent(new win.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));assert.deepEqual(place(),['62%','8.5%','30%','4%']);assert.equal(box().classList.contains('is-moving'),false);
+  pointer('pointerup',win.document,96,30);assert.deepEqual(changed,[]);
+  // Dragged and let go, it is saved as an area is.
+  pointer('pointerdown',grip,92,12.5);pointer('pointermove',win.document,96,30);pointer('pointerup',win.document,96,30);assert.deepEqual(changed,[['t',{page:1,x:6200,y:850,w:3400,h:2150}]]);
+ }finally{h.close();}
+});
+test('the tab\'s header has a button for text boxes beside marking an area and drawing, pressed while placing one; a phone has none, its command starts it',async()=>{
+ for(const phone of [false,true]){
+  const dom=new JSDOM('<div id="root"></div>',{pretendToBeVisual:true}),win=dom.window,root=win.document.querySelector('#root'),actions=[];
+  if(phone)win.document.body.classList.add('is-mobile','is-phone');
+  win.requestAnimationFrame=()=>0;win.cancelAnimationFrame=()=>{};win.ResizeObserver=class{observe(){}unobserve(){}disconnect(){}};
+  win.HTMLElement.prototype.createDiv=function(options){return this.createEl('div',options);};
+  win.HTMLElement.prototype.createEl=function(tag,{cls,attr={}}={}){const node=win.document.createElement(tag);if(cls)node.className=cls;for(const [key,value]of Object.entries(attr))node.setAttribute(key,value);this.append(node);return node;};
+  const view={contentEl:root,file:{path:'test.pdf',stat:{mtime:1,size:20}},viewer:{child:{pdfViewer:{pdfViewer:{pdfDocument:document(),currentPageNumber:1}}}},addAction(icon,title,run){const button=win.document.createElement('button');button.setAttribute('aria-label',title);button.onclick=run;win.document.body.append(button);actions.push([icon,title,button]);return button;}};
+  const adapter=new NativePdf(view,()=>{},()=>{},()=>{},undefined,()=>({}),()=>{});
+  try{
+   const titles=actions.map(([icon,title])=>[icon,title]);
+   if(phone){assert.equal(titles.some(([,title])=>title==='Add text box'),false);adapter.startTextBox();assert.equal(adapter.placingText,true);continue;}
+   assert.deepEqual(titles.slice(0,4),[['sun-moon','Page appearance'],['scan','Mark an area'],['pencil','Draw on the page'],['type','Add text box']]);
+   const button=actions[3][2],area=actions[1][2];assert.ok(button.classList.contains('annotator-text-action'));assert.equal(button.getAttribute('aria-pressed'),'false');assert.equal(button.hasAttribute('title'),false);
+   button.click();assert.equal(adapter.placingText,true);assert.equal(button.getAttribute('aria-pressed'),'true');assert.ok(button.classList.contains('is-active'));
+   // The area's button starts marking an area, not ends placing a box; pressed again, each ends its own mode.
+   area.click();assert.equal(adapter.markingArea,true);assert.equal(button.getAttribute('aria-pressed'),'false');assert.equal(area.getAttribute('aria-pressed'),'true');
+   button.click();assert.equal(adapter.placingText,true);assert.equal(area.getAttribute('aria-pressed'),'false');button.click();assert.equal(adapter.placingText,false);
+   adapter.dispose();assert.equal(button.isConnected,false);
+  }finally{adapter.dispose();dom.window.close();}
+ }
 });

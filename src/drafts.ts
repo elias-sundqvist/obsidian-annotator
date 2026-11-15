@@ -2,6 +2,8 @@ import { clone } from './portable';
 import type { Annotation } from './codec';
 import type { SourceCapture, SourceIdentity } from './source';
 import { styleOfTag } from './mark-style';
+import { textBoxDraft, type TextSize } from './text-box';
+import type { PageArea } from './area';
 export interface DraftSession {
     id: string;
     file: string;
@@ -12,7 +14,16 @@ export interface DraftSession {
     updated: string;
     editing?: { file: string; annotation: Annotation };
     selection?: SourceCapture;
-    draft?: { file: string; parent?: Annotation; identity: SourceIdentity };
+    draft?: {
+        file: string;
+        parent?: Annotation;
+        identity: SourceIdentity;
+        page?: number;
+        /** A text box being typed: where it goes on its page and the size of its words. */ box?: {
+            area: PageArea;
+            size: TextSize;
+        };
+    };
 }
 // A saved draft read back from the settings file: its fields are checked one by one below.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -76,7 +87,8 @@ export function parseDrafts(value: unknown): { sessions: DraftSession[]; rejecte
                 (!object(entry.draft) ||
                     !object(entry.draft.identity) ||
                     typeof entry.draft.identity.uri !== 'string' ||
-                    (entry.draft.parent && !annotation(entry.draft.parent))))
+                    (entry.draft.parent && !annotation(entry.draft.parent)) ||
+                    (entry.draft.box !== undefined && (!!entry.draft.parent || !textBoxDraft(entry.draft.box)))))
         ) {
             rejected = true;
             continue;

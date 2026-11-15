@@ -5,7 +5,8 @@ import { drawingOf } from './drawing';
 import { annotationQuote } from './pdf-annotation';
 import { inkOf, type Ink } from './ink';
 import { styleOf, styleOfTag } from './mark-style';
-import type { PdfNote, Rgb } from './pdf-write';
+import { winAnsi, type PdfNote, type Rgb } from './pdf-write';
+import { TEXT_POINTS, pageWords, textBoxOf } from './text-box';
 
 /**
  * From the reader's annotations to places on PDF pages: which rectangles a
@@ -165,6 +166,65 @@ export function rangeQuads(
 }
 
 /**
+ * How wide each character of Helvetica is, in thousandths of the font size, by its WinAnsiEncoding code: Adobe's
+ * published metrics for the standard fonts every PDF program has. A text box is written in it without embedding a
+ * font, so its lines are broken by these widths.
+ */
+const HELVETICA: readonly number[] = [
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 278, 278, 355, 556,
+    556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278,
+    278, 584, 584, 584, 556, 1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778, 667, 778,
+    722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556, 333, 556, 556, 500, 556, 556, 278, 556, 556,
+    222, 222, 500, 222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584, 0,
+    556, 0, 222, 556, 333, 1000, 556, 556, 333, 1000, 667, 333, 1000, 0, 611, 0, 0, 222, 222, 333, 333, 350, 556, 1000,
+    333, 1000, 500, 333, 944, 0, 500, 667, 278, 333, 556, 556, 556, 556, 260, 556, 333, 737, 370, 556, 584, 333, 737,
+    333, 400, 584, 333, 333, 333, 556, 537, 278, 333, 333, 365, 556, 834, 834, 834, 611, 667, 667, 667, 667, 667, 667,
+    1000, 722, 667, 667, 667, 667, 278, 278, 278, 278, 722, 722, 778, 778, 778, 778, 778, 584, 778, 722, 722, 722, 722,
+    667, 667, 611, 556, 556, 556, 556, 556, 556, 889, 500, 556, 556, 556, 556, 278, 278, 278, 278, 556, 556, 556, 556,
+    556, 556, 556, 584, 611, 556, 556, 556, 556, 500, 556, 500
+];
+/** How wide a line of WinAnsi codes is in Helvetica at `size` points. */
+export function helveticaWidth(codes: readonly number[], size: number): number {
+    let total = 0;
+    for (const code of codes) total += HELVETICA[code] || 556;
+    return (total * size) / 1000;
+}
+/**
+ * The words broken into lines no wider than `room` points in Helvetica at `size`: at spaces where it can be, inside a
+ * word longer than a line where it must be. A line break typed in the words stays one, and an empty line stays empty.
+ * Every word is kept, in order. Null where a character cannot be written in the standard font.
+ */
+export function fillLines(words: string, room: number, size: number): string[] | null {
+    const width = (text: string) => helveticaWidth(winAnsi(text) || [], size);
+    if (winAnsi(words.replace(/\n/g, ' ')) === null) return null;
+    const lines: string[] = [];
+    for (const paragraph of words.split('\n')) {
+        let line = '';
+        for (const word of paragraph.split(/[ \t]+/).filter(Boolean)) {
+            const joined = line ? `${line} ${word}` : word;
+            if (width(joined) <= room) {
+                line = joined;
+                continue;
+            }
+            if (line) lines.push(line);
+            line = '';
+            // A word longer than the line is broken where it must be.
+            let piece = '';
+            for (const char of word) {
+                if (piece && width(piece + char) > room) {
+                    lines.push(piece);
+                    piece = '';
+                }
+                piece += char;
+            }
+            line = piece;
+        }
+        lines.push(line);
+    }
+    return lines;
+}
+
+/**
  * How a passage is marked in the PDF: with a line where one of its tags says so (the first that does), else as a
  * highlight. Which tags say so is decided in mark-style.ts, the same place the page asks; here the style is only
  * given the name the PDF format has for it.
@@ -201,6 +261,7 @@ export function noteContents(annotation: Annotation, replies: readonly Annotatio
 export interface ExportPlan {
     notes: PdfNote[];
     /** Annotations that have no place in this PDF, with the reason. */ skipped: { id: string; reason: string }[];
+    /** Text boxes whose words the standard font cannot write: each is written as a box with its words as a comment. */ boxed?: number;
 }
 /**
  * Every annotation of a PDF as something to write into it. `matches` is what
@@ -227,6 +288,7 @@ export function planExport(
         }
     }
     const looseOn = new Map<number, number>();
+    let boxed = 0;
     for (const row of records) {
         if (row.references?.length && ids.has(row.references[0])) continue;
         const ink = inkOf(row),
@@ -302,6 +364,40 @@ export function planExport(
                 });
                 continue;
             }
+            // A text box: its words, as they are seen on the page, as words any PDF program shows.
+            const box = textBoxOf(row);
+            if (box) {
+                const words = pageWords(row.text),
+                    size = TEXT_POINTS[box.size],
+                    turned = Math.round(page.rotate / 90) % 2 !== 0,
+                    shown = {
+                        width: turned ? page.view[3] - page.view[1] : page.view[2] - page.view[0],
+                        height: turned ? page.view[2] - page.view[0] : page.view[3] - page.view[1]
+                    };
+                const room = (area.w / 10000) * shown.width - (size * 0.7 + 4),
+                    lines = words ? fillLines(words, Math.max(size, room), size) : [];
+                if (lines) {
+                    // As tall as its region, or as its lines need, down to the foot of the page.
+                    const top = area.y / 10000,
+                        needed = (lines.length * size * 1.3 + size * 0.45) / Math.max(1, shown.height),
+                        bottom = Math.min(1, top + Math.max(area.h / 10000, needed));
+                    const [ax, ay] = pagePoint(page.view, page.rotate, area.x / 10000, top),
+                        [bx, by] = pagePoint(page.view, page.rotate, (area.x + area.w) / 10000, bottom);
+                    notes.push({
+                        kind: 'freetext',
+                        page: area.page - 1,
+                        rect: [Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by)],
+                        rotate: page.rotate,
+                        lines,
+                        size,
+                        color: LINE_RGB[ink],
+                        ...base,
+                        contents: words
+                    });
+                    continue;
+                }
+                boxed++;
+            }
             const [ax, ay] = pagePoint(page.view, page.rotate, area.x / 10000, area.y / 10000),
                 [bx, by] = pagePoint(page.view, page.rotate, (area.x + area.w) / 10000, (area.y + area.h) / 10000);
             notes.push({ kind: 'square', page: area.page - 1, rect: [ax, ay, bx, by], color: LINE_RGB[ink], ...base });
@@ -336,5 +432,5 @@ export function planExport(
             });
         }
     }
-    return { notes, skipped };
+    return { notes, skipped, ...(boxed ? { boxed } : {}) };
 }

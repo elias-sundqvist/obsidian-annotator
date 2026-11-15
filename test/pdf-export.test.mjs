@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { pagePoint, rangeQuads, noteContents, planExport, HIGHLIGHT_RGB, LINE_RGB } from './.generated/readers/pdf-export.js';
+import { pagePoint, rangeQuads, noteContents, planExport, fillLines, helveticaWidth, HIGHLIGHT_RGB, LINE_RGB } from './.generated/readers/pdf-export.js';
+import { winAnsi } from './.generated/readers/pdf-write.js';
 
 const round = values => values.map(value => Math.round(value * 100) / 100);
 // A page of 612 x 792 whose visible box starts away from the origin, as cropped pages do.
@@ -98,4 +99,48 @@ test('a note about the document goes on the page it was written on; without one,
     // Notes on one page sit one under the other, each page counting its own.
     const y = id => plan.notes.find(each => each.contents === `Note ${id}`).at[1];
     assert.ok(y('b') > y('c')); assert.equal(y('a'), y('b')); assert.ok(y('a') > y('d')); assert.ok(y('d') > y('e'));
+});
+test('a text box\'s words are broken into lines by Helvetica\'s widths: at spaces where they can be, inside a word where they must; every word kept, in order; a typed line break kept', () => {
+    assert.equal(helveticaWidth(winAnsi('Hello'), 10), 22.78); assert.equal(helveticaWidth(winAnsi('naïve —'), 10), 37.24);
+    assert.deepEqual(fillLines('a b c', 500, 12), ['a b c']);
+    // "aaaa" is 22.24 points at 10: two of them do not share a line 25 points wide.
+    assert.deepEqual(fillLines('aaaa bbbb', 25, 10), ['aaaa', 'bbbb']); assert.deepEqual(fillLines('aaaa bbbb', 50, 10), ['aaaa bbbb']);
+    assert.deepEqual(fillLines('abcdefgh', 12, 10), ['ab', 'cd', 'ef', 'gh'], 'a word longer than the line is broken inside it');
+    assert.deepEqual(fillLines('one\n\ntwo  three', 100, 10), ['one', '', 'two three'], 'typed lines stay, an empty one too');
+    assert.equal(fillLines('日本語', 100, 10), null); assert.equal(fillLines('emoji 😀', 100, 10), null);
+    // For many words and widths: the lines joined are the words, and each line fits or is one character.
+    const words = 'The quick brown fox jumps over the lazy dog; Æsop’s “fables” — with supercalifragilistic words, Ünïcödé € and (brackets).'.split(' ');
+    for (let n = 1; n <= words.length; n++)
+        for (const room of [8, 30, 75, 160, 400]) {
+            const said = words.slice(0, n).join(' '), lines = fillLines(said, room, 11);
+            assert.equal(lines.join('').replace(/\s/g, ''), said.replace(/\s/g, ''), `${room}: ${said}`);
+            for (const line of lines) assert.ok(helveticaWidth(winAnsi(line), 11) <= room || [...line].length === 1, `${room}: ${line}`);
+            assert.ok(lines.every(line => line === line.trim() && line), 'no line starts or ends with a space, and none is empty but a typed one');
+        }
+});
+test('a text box is exported as words on its page: its lines, its box grown down to hold them and never past the page, its words as the comment; words the standard font lacks go as a frame with a comment', () => {
+    const box = (id, value, text, extra = {}) => areaNote(id, value, { text, tags: ['todo'], pageText: 'medium', color: 'pink', ...extra });
+    const records = [
+        box('b1', 'page=1&xywh=percent:10,10,50,2', '![[old picture.png]]\n\nCheck this **again**\nsecond line'),
+        box('b2', 'page=1&xywh=percent:10,99,50,1', 'At the very foot of the page, with more words than fit on one line there'),
+        box('b3', 'page=1&xywh=percent:10,40,50,20', '日本語の注記'),
+        box('b4', 'page=2&xywh=percent:10,20,30,5', 'Turned', { pageText: 'large' }),
+        box('b5', 'page=1&xywh=percent:60,60,20,20', '', { pageText: 'small' }),
+    ];
+    const plan = planExport(records, new Map(), number => number === 1 ? PAGE : number === 2 ? { view: [0, 0, 600, 800], rotate: 90, items: [] } : undefined, {});
+    const byId = Object.fromEntries(plan.notes.map(note => [note.id, note]));
+    // Its words alone (no picture, no tags: those stay in the notes), in lines that fit 50% of 612 points less the inset.
+    assert.deepEqual({ kind: byId.b1.kind, page: byId.b1.page, size: byId.b1.size, rotate: byId.b1.rotate, color: byId.b1.color, contents: byId.b1.contents, lines: byId.b1.lines },
+        { kind: 'freetext', page: 0, size: 12, rotate: 0, color: LINE_RGB.pink, contents: 'Check this again\nsecond line', lines: ['Check this again', 'second line'] });
+    // The region is 2% of 792 points high; two lines need 36.6, so the box grows down to that, from the same top.
+    assert.deepEqual(round(byId.b1.rect), round([71.2, 812 - 79.2 - 36.6, 377.2, 812 - 79.2]));
+    // At the foot of the page it grows no further than the page.
+    assert.ok(byId.b2.lines.length > 1); assert.equal(round(byId.b2.rect)[1], 20);
+    // Words outside the standard font: a frame with the words and tags as its comment, and the export says how many.
+    assert.deepEqual({ kind: byId.b3.kind, contents: byId.b3.contents }, { kind: 'square', contents: '日本語の注記\n#todo' }); assert.equal(plan.boxed, 1);
+    // On a page shown turned, the box is where the region is on the paper, and is written with the page's turn.
+    assert.equal(byId.b4.kind, 'freetext'); assert.equal(byId.b4.rotate, 90); assert.equal(byId.b4.size, 18); assert.deepEqual(byId.b4.lines, ['Turned']);
+    // An empty box is still a box, with no lines.
+    assert.deepEqual([byId.b5.kind, byId.b5.lines, byId.b5.contents], ['freetext', [], '']);
+    assert.equal(planExport([records[0]], new Map(), () => PAGE).boxed, undefined, 'nothing to say when every box has its words');
 });

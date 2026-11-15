@@ -28,6 +28,43 @@ export interface PdfFound {
     modified: Date | null;
     /** The object the annotation is, or 0 where it is written inside the page's list. */ object: number;
     /** The object of the annotation this one answers, or 0. */ replyTo: number;
+    /** For a text box: the size of its words in points and their colour, as its default appearance (`/DA`) says; null where it says nothing. */ fontSize?:
+        number | null;
+    textColor?: Rgb | null;
+}
+/**
+ * What a default appearance string (`/DA`, such as `/Helv 12 Tf 0 0 1 rg`) says about the words: the font size of
+ * its last `Tf` and the colour of its last `g`, `rg` or `k`. Anything else in it is passed over.
+ */
+export function defaultAppearance(value: string): { fontSize: number | null; textColor: Rgb | null } {
+    const tokens = value.slice(0, 2000).split(/[\s]+/).filter(Boolean),
+        numbers = (at: number, count: number) => {
+            const found = tokens.slice(at - count, at).map(Number);
+            return found.length === count && found.every(each => Number.isFinite(each) && each >= 0 && each <= 1)
+                ? found
+                : null;
+        };
+    let fontSize: number | null = null,
+        textColor: Rgb | null = null;
+    tokens.forEach((token, at) => {
+        if (token === 'Tf') {
+            const size = Number(tokens[at - 1]);
+            if (Number.isFinite(size) && size > 0 && size <= 1000) fontSize = size;
+        } else if (token === 'g') {
+            const grey = numbers(at, 1);
+            if (grey) textColor = [grey[0], grey[0], grey[0]];
+        } else if (token === 'rg') {
+            const rgb = numbers(at, 3);
+            if (rgb) textColor = [rgb[0], rgb[1], rgb[2]];
+        } else if (token === 'k') {
+            const cmyk = numbers(at, 4);
+            if (cmyk) {
+                const [c, m, y, k] = cmyk;
+                textColor = [(1 - c) * (1 - k), (1 - m) * (1 - k), (1 - y) * (1 - k)];
+            }
+        }
+    });
+    return { fontSize, textColor };
 }
 const KINDS: Record<string, PdfFoundKind> = {
     Highlight: 'highlight',
@@ -162,7 +199,8 @@ export function describeAnnotation(file: PdfFile, dict: Dict, page: number, obje
         author: text(file, dict.get('T')),
         modified: pdfDate(text(file, dict.get('M'))),
         object,
-        replyTo: answered instanceof Ref ? answered.num : 0
+        replyTo: answered instanceof Ref ? answered.num : 0,
+        ...(kind === 'freetext' ? defaultAppearance(text(file, dict.get('DA'))) : {})
     };
 }
 /** Every annotation of the kinds above that the file holds, page by page in the order the pages list them. Throws `PdfExportError` for a file that cannot be read (encrypted, damaged). */

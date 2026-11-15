@@ -52,11 +52,15 @@ test('Auto follows the app: a dark theme darkens the page in that theme, a light
   h.root.style.setProperty('--background-primary','#1c1c1c');h.appearance.refresh();assert.deepEqual(h.calls.at(-1),['#1c1c1c',true]);h.root.style.removeProperty('--background-primary');
   // An explicit choice holds whatever the app does.
   h.preferences.theme='sepia';h.appearance.refresh();assert.deepEqual(h.calls.at(-1),['#f4ecd8',false]);assert.equal(h.root.dataset.annotatorPage,'light');
+  // A sepia page is a light page on paper of its own: what is written on the page (a text box) takes that paper as its ground.
+  assert.equal(h.root.dataset.annotatorPaper,'sepia');
   // The paper is a styling variable: set to parchment, the PDF page takes it; nonsense is not passed to the renderer.
   h.root.style.setProperty('--annotator-paper','#e8dcc0');h.appearance.refresh();assert.deepEqual(h.calls.at(-1),['#e8dcc0',false]);
   h.root.style.setProperty('--annotator-paper','url(x)');h.appearance.refresh();assert.deepEqual(h.calls.at(-1),['#f4ecd8',false]);h.root.style.removeProperty('--annotator-paper');h.appearance.refresh();
-  h.preferences.theme='system';body.classList.remove('theme-dark');h.appearance.refresh();assert.deepEqual(h.calls.at(-1),[null,false]);assert.equal(h.container.classList.contains('mod-themed'),false);assert.equal(h.root.dataset.annotatorPage,'light');
-  h.appearance.dispose();assert.equal(h.root.hasAttribute('data-annotator-page'),false);
+  h.preferences.theme='dark';h.appearance.refresh();assert.equal(h.root.dataset.annotatorPage,'dark');assert.equal(h.root.dataset.annotatorPaper,undefined,'a dark page is no sepia paper');
+  h.preferences.theme='sepia';h.appearance.refresh();assert.equal(h.root.dataset.annotatorPaper,'sepia');
+  h.preferences.theme='system';body.classList.remove('theme-dark');h.appearance.refresh();assert.deepEqual(h.calls.at(-1),[null,false]);assert.equal(h.container.classList.contains('mod-themed'),false);assert.equal(h.root.dataset.annotatorPage,'light');assert.equal(h.root.dataset.annotatorPaper,undefined);
+  h.preferences.theme='sepia';h.appearance.refresh();h.appearance.dispose();assert.equal(h.root.hasAttribute('data-annotator-page'),false);assert.equal(h.root.hasAttribute('data-annotator-paper'),false);
  }finally{h.close();}
 });
 

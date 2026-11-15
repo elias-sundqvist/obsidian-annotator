@@ -61,7 +61,7 @@ export function annotationNotes(
             link = picture.image ? leadingImage(picture.image) : null;
         const properties: string[] = [
             `annotation-id: ${yaml(row.id)}`,
-            `kind: ${quote ? (row.text?.trim() ? 'annotation' : 'highlight') : kind === 'passage' ? 'note' : kind}`,
+            `kind: ${quote ? (row.text?.trim() ? 'annotation' : 'highlight') : kind === 'passage' ? 'note' : kind === 'text' ? 'text-box' : kind}`,
             ...(context.source ? [`source: ${yaml(context.source)}`] : []),
             ...(context.note && !/[\r\n[\]#|]/.test(row.id)
                 ? [`annotation: ${yaml(`[[${context.note}#^${row.id}]]`)}`]
@@ -69,7 +69,7 @@ export function annotationNotes(
             ...(section ? [`section: ${yaml(section)}`] : []),
             ...(page ? [`page: ${Number(page)}`] : []),
             `order: ${index + 1}`,
-            ...(quote || kind === 'area' || kind === 'drawing'
+            ...(quote || kind === 'area' || kind === 'drawing' || kind === 'text'
                 ? [`color: ${ink}`, `color-name: ${yaml(inkLabel(ink, labels))}`]
                 : []),
             // For an area the passage is the words that lay inside it, so a Base can be searched by them.
@@ -87,7 +87,8 @@ export function annotationNotes(
         if (quote) body.push((exportBlock(`quote|${ink}`, section, quote, '') as string[]).join('\n'), '');
         if (row.text?.trim()) body.push(row.text.trim(), '');
         for (const reply of replies) body.push((exportBlock('note', 'Reply', '', reply) as string[]).join('\n'), '');
-        const fallback = kind === 'area' ? 'Area' : kind === 'drawing' ? 'Drawing' : 'Note',
+        const fallback =
+                kind === 'area' ? 'Area' : kind === 'drawing' ? 'Drawing' : kind === 'text' ? 'Text box' : 'Note',
             label = clean(oneLine(quote || picture.rest || fallback, 60)) || fallback;
         let name = `${String(index + 1).padStart(width, '0')} ${section ? `${clean(section)} – ` : ''}${label}`
             .slice(0, 96)

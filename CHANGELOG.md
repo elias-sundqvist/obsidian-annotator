@@ -13,6 +13,17 @@ What changed for someone using Annotator. How to use each thing is in
 - **Take in links to this PDF's passages** also takes in PDF++ links to a
   rectangle of a page (`#page=3&rect=…`): each becomes a marked area with
   its picture.
+- **Text boxes on PDF pages.** **Add text box** (a button in the PDF's
+  header, or the command) puts words on the page that stay there: click
+  where they go, or drag to set the width, then type beside the box while it
+  shows what you type. The words follow the page, dark on a light or sepia
+  page and light on a dark one, in three sizes; a box moves and resizes like
+  an area, and `Enter` opens its words again. They are the box's note, so
+  search, tags, links, replies and summaries treat them as one. Any area can
+  show its note on the page from its menu. The export writes a text box as a
+  PDF text box that other programs show, and one taken in from a PDF becomes
+  one. It is stored as an area with one more value, so an older version
+  shows an area with a note.
 - Highlight and copy its link in one step: `Shift+H`, `Shift+1`–`6` or a
   Shift-click on a colour in the selection bar, or the command **Highlight
   selection and copy its link**. The link is ready to paste into a note.

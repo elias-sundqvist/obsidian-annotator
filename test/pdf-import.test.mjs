@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { readPdfAnnotations, replacing, pdfDate, annotatePdf, PdfFile, PdfExportError } from './.generated/readers/pdf-read.js';
+import { readPdfAnnotations, replacing, pdfDate, defaultAppearance, annotatePdf, PdfFile, PdfExportError } from './.generated/readers/pdf-read.js';
 import { planImport, quadsRange, pageFraction, shownSize, nearestInk } from './.generated/readers/pdf-import.js';
 import { pagePoint, rangeQuads, planExport, HIGHLIGHT_RGB, LINE_RGB } from './.generated/readers/pdf-export.js';
 import { drawingOf } from './.generated/readers/drawing.js';
@@ -98,7 +98,7 @@ test('the text under a mark is found from its shapes: exactly the passage an exp
     assert.equal(quadsRange(page, [[300, 300, 400, 300, 300, 280, 400, 280]]), null); assert.equal(quadsRange(page, []), null); assert.equal(quadsRange({ ...page, items: [] }, [[100, 710, 155, 710, 100, 698, 155, 698]]), null);
 });
 
-test('a PDF annotated in another program comes in whole: marks as highlights of the words under them, shapes and sticky notes as areas, ink as a drawing', () => {
+test('a PDF annotated in another program comes in whole: marks as highlights of the words under them, shapes and sticky notes as areas, a text box as a text box, ink as a drawing', () => {
     const { found } = readPdfAnnotations(FIXTURE), plan = planImport(found, number => GEOMETRY[number], { measure });
     assert.deepEqual(plan.skipped, []); assert.equal(plan.ours, 0); assert.equal(plan.known, 0);
     const passages = plan.notes.filter(note => note.kind === 'passage').map(note => [pageText(note.page).slice(note.start, note.end), note.ink, note.text, note.tags]);
@@ -110,7 +110,10 @@ test('a PDF annotated in another program comes in whole: marks as highlights of 
     ]);
     // The sticky note that says something keeps its place as the smallest area; the empty one is nothing.
     const areas = plan.notes.filter(note => note.kind === 'area');
-    assert.deepEqual(areas.map(note => [note.text, note.spot, note.area.page, note.ink]), [['Check the units in this section', true, 1, 'orange'], ['The heart of it', false, 1, 'orange'], ['A typed remark in the margin', false, 2, 'yellow']]);
+    assert.deepEqual(areas.map(note => [note.text, note.spot, note.area.page, note.ink]), [['Check the units in this section', true, 1, 'orange'], ['The heart of it', false, 1, 'orange']]);
+    // The typed remark is words on the page, at the size nearest its own, in the default ink: its words are black.
+    const boxes = plan.notes.filter(note => note.kind === 'textbox');
+    assert.deepEqual(boxes.map(note => [note.text, note.area, note.size, note.ink]), [['A typed remark in the margin', { page: 2, x: 1176, y: 2424, w: 3595, h: 505 }, 'medium', 'yellow']]);
     assert.deepEqual(areas[0].area, { page: 1, x: 8510, y: 885, w: 300, h: 300 });
     // The rectangle is where it was drawn: 66..486 of 612 across, 596..648 of 792 up.
     assert.deepEqual(areas[1].area, { page: 1, x: 1078, y: 1818, w: 6863, h: 657 });
@@ -214,4 +217,45 @@ test('a style chosen in the reader is the PDF mark the export writes: the tag th
     // The style tag is said by the mark; the user's own tag stays in the comment.
     assert.deepEqual(plan.notes.map(note => note.contents), ['#idea', '#idea', '#idea', '#idea']);
     assert.deepEqual(readPdfAnnotations(annotatePdf(pdf([]), plan.notes)).found.map(each => each.kind), ['highlight', 'underline', 'strikeout', 'squiggly']);
+});
+test('a text box from another program comes in as one: at the size nearest its words, in the ink of their colour, never thinner than a region may be; one without words is an area as before', () => {
+    assert.deepEqual(defaultAppearance('/Helv 12 Tf 0 0 1 rg'), { fontSize: 12, textColor: [0, 0, 1] });
+    assert.deepEqual(defaultAppearance('0 0 0 1 k /F1 7.5 Tf'), { fontSize: 7.5, textColor: [0, 0, 0] });
+    assert.deepEqual(defaultAppearance('/F1 0 Tf 2 g junk 1 2 rg'), { fontSize: null, textColor: null }, 'a size of 0 (fit the box), a grey past 1 and a short colour say nothing');
+    const free = (rect, extra = '') => `<< /Type /Annot /Subtype /FreeText /Rect [${rect}] /Contents (Typed words) ${extra} >>`;
+    const file = pdf([
+        free('100 700 300 712', '/DA (/Helv 9 Tf 0 g)'),
+        free('100 500 300 560', '/DA (/Arial,Bold 19.5 Tf 0 0 1 rg) /C [1 1 0]'),
+        free('100 300 300 360', '/DA (0.5 g /F1 11 Tf)'),
+        free('100 200 300 260'),
+        free('606 2 640 6', '/DA (/Helv 12 Tf 0.9 0.1 0.1 rg)'),
+        '<< /Type /Annot /Subtype /FreeText /Rect [100 100 300 160] /Contents () /C [0 0 1] >>',
+    ]);
+    const { found } = readPdfAnnotations(file);
+    assert.deepEqual(found.map(each => [each.kind, each.fontSize, each.textColor]), [['freetext', 9, [0, 0, 0]], ['freetext', 19.5, [0, 0, 1]], ['freetext', 11, [0.5, 0.5, 0.5]], ['freetext', null, null], ['freetext', 12, [0.9, 0.1, 0.1]], ['freetext', null, null]]);
+    const plan = planImport(found, () => ({ view: [0, 0, 612, 792], rotate: 0, items: [] }));
+    assert.deepEqual(plan.skipped, []);
+    // The words are the note; the size is the nearest of the three; black or grey words take the default ink, coloured ones the nearest ink (red: orange), and the fill (/C) says nothing.
+    assert.deepEqual(plan.notes.map(note => [note.kind, note.text, note.size, note.ink]), [
+        ['textbox', 'Typed words', 'small', 'yellow'], ['textbox', 'Typed words', 'large', 'blue'], ['textbox', 'Typed words', 'medium', 'yellow'],
+        ['textbox', 'Typed words', 'medium', 'yellow'], ['textbox', 'Typed words', 'medium', 'orange'], ['area', '', undefined, 'blue'],
+    ]);
+    // One line of 9 points is 12 points high, thinner than the least region: it is made that tall, from where it starts.
+    assert.deepEqual(plan.notes[0].area, { page: 1, x: 1634, y: 1010, w: 3268, h: 160 });
+    assert.deepEqual(plan.notes[1].area, { page: 1, x: 1634, y: 2929, w: 3268, h: 758 });
+    // One that runs off the page's corner is held on the page, as large as a region must be.
+    assert.deepEqual(plan.notes[4].area, { page: 1, x: 9840, y: 9840, w: 160, h: 160 });
+    // Written by this reader's own export, it is known as its own and not taken in again.
+    const ours = annotatePdf(pdf([]), [{ kind: 'freetext', page: 0, id: 'mine', color: [0, 0, 0], contents: 'Mine', rect: [10, 10, 100, 30], rotate: 0, lines: ['Mine'], size: 9 }]);
+    const again = planImport(readPdfAnnotations(ours).found, () => ({ view: [0, 0, 612, 792], rotate: 0, items: [] }));
+    assert.equal(again.ours, 1); assert.deepEqual(again.notes, []);
+});
+test('a text box exported and read back by another program keeps its words, its place and its size', () => {
+    const page = { view: [0, 0, 612, 792], rotate: 0, items: [] };
+    const row = { id: 'b', text: 'Words that go\nout and back', tags: [], pageText: 'large', color: 'green', target: [{ source: 'urn:x', selector: [{ type: 'FragmentSelector', conformsTo: 'http://www.w3.org/TR/media-frags/', value: 'page=1&xywh=percent:20,30,40,10' }] }] };
+    const out = annotatePdf(pdf([]), planExport([row], new Map(), () => page).notes);
+    // Another program sees a FreeText that is not ours (its name is its own): it comes in as the same box.
+    const [found] = readPdfAnnotations(out).found.map(each => ({ ...each, ours: false, key: 'elsewhere' }));
+    const [back] = planImport([found], () => page).notes;
+    assert.deepEqual([back.kind, back.text, back.size, back.ink, back.area], ['textbox', 'Words that go\nout and back', 'large', 'yellow', { page: 1, x: 2000, y: 3000, w: 4000, h: 1000 }]);
 });

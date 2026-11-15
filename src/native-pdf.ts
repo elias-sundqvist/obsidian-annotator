@@ -3,7 +3,16 @@ import type { FileView } from 'obsidian';
 import type { ReaderPreferences } from './preferences';
 import { PdfAppearance, type PdfAppearanceCore } from './pdf-appearance';
 import { openPageAppearance } from './appearance';
-import { areaOf, areaSelector, fitArea, moveArea, resizeArea, type AreaWay, type PageArea } from './area';
+import { AREA_MINIMUM, areaOf, areaSelector, fitArea, moveArea, resizeArea, type AreaWay, type PageArea } from './area';
+import {
+    DEFAULT_TEXT_SIZE,
+    TEXT_POINTS,
+    TEXT_SIZES,
+    TEXT_SIZE_NAMES,
+    pageWords,
+    textBoxOf,
+    type TextSize
+} from './text-box';
 import { planImport, type Imported } from './pdf-import';
 import type { PdfFound } from './pdf-read';
 import { pdfDetails, type PdfDetails } from './pdf-details';
@@ -129,10 +138,19 @@ function pageBox(page: HTMLElement) {
         top = rect.top + page.clientTop;
     return { left, top, width: page.clientWidth || rect.width, height: page.clientHeight || rect.height };
 }
+/** Where a text box sits: its region's corner and width, its height a least height, and never past the foot of its page. */
+function textBoxPlace(mark: HTMLElement, area: PageArea) {
+    mark.style.left = `${area.x / 100}%`;
+    mark.style.top = `${area.y / 100}%`;
+    mark.style.width = `${area.w / 100}%`;
+    mark.style.height = '';
+    mark.style.minHeight = `${area.h / 100}%`;
+    mark.style.maxHeight = `${(10000 - area.y) / 100}%`;
+}
 function ownMutation(record: MutationRecord): boolean {
     if (
         (record.target as Element).closest?.(
-            '.annotator-native-marks, .annotator-area-band, .annotator-area-hint, .annotator-drawing-live, .annotator-citation-flash'
+            '.annotator-native-marks, .annotator-area-band, .annotator-area-hint, .annotator-drawing-live, .annotator-citation-flash, .annotator-text-draft'
         )
     )
         return true;
@@ -141,7 +159,7 @@ function ownMutation(record: MutationRecord): boolean {
         changed.length > 0 &&
         changed.every(node =>
             (node as Element).matches?.(
-                '.annotator-native-marks, .annotator-area-band, .annotator-area-hint, .annotator-drawing-live, .annotator-citation-flash'
+                '.annotator-native-marks, .annotator-area-band, .annotator-area-hint, .annotator-drawing-live, .annotator-citation-flash, .annotator-text-draft'
             )
         )
     );
@@ -187,7 +205,10 @@ export class NativePdf {
     error = 'Waiting for native PDF text.';
     private appearanceAction: HTMLElement | null = null;
     private areaAction: HTMLElement | null = null;
+    /** The frame mode on now, if one is: marking an area, or placing a text box. Both use `stopArea` to end. */
+    private frameKind: 'area' | 'text' | null = null;
     private stopArea: (() => void) | null = null;
+    private textAction: HTMLElement | null = null;
     private drawAction: HTMLElement | null = null;
     private stopDrawing: (() => void) | null = null;
     private closeAppearance: (() => void) | null = null;
@@ -229,7 +250,7 @@ export class NativePdf {
                 this.appearanceAction = action;
                 // Mark a region of the page: a figure, a table, an equation.
                 this.areaAction = addAction.call(view, 'scan', 'Mark an area', () => {
-                    if (this.stopArea) this.stopArea();
+                    if (this.markingArea) this.stopArea?.();
                     else this.startArea();
                 });
                 this.areaAction.classList.add('annotator-area-action');
@@ -241,6 +262,16 @@ export class NativePdf {
                 });
                 this.drawAction.classList.add('annotator-draw-action');
                 this.drawAction.setAttribute('aria-pressed', 'false');
+                // Type on the page: words that stay where they are put. A phone has less room in the header and types in a
+                // sheet; there the command starts it.
+                if (!view.contentEl.ownerDocument.body.classList.contains('is-phone')) {
+                    this.textAction = addAction.call(view, 'type', 'Add text box', () => {
+                        if (this.placingText) this.stopArea?.();
+                        else this.startTextBox();
+                    });
+                    this.textAction.classList.add('annotator-text-action');
+                    this.textAction.setAttribute('aria-pressed', 'false');
+                }
             }
         }
         const win = view.contentEl.ownerDocument.defaultView!;
@@ -591,6 +622,18 @@ export class NativePdf {
                     ...identity,
                     target: [{ source: identity.uri, selector: drawingSelectors(note.drawing) }],
                     nativePdf: { ...own, page: note.drawing.page }
+                };
+            else if (note.kind === 'textbox')
+                annotation = {
+                    id,
+                    text: note.text,
+                    tags: note.tags,
+                    created: when,
+                    updated: when,
+                    ...identity,
+                    target: [{ source: identity.uri, selector: [areaSelector(note.area)] }],
+                    nativePdf: { ...own, page: note.area.page },
+                    pageText: note.size
                 };
             else {
                 const words = note.spot ? '' : this.areaWords(note.area) || '';
@@ -1500,6 +1543,8 @@ export class NativePdf {
             this.settleDrawing?.();
         }
         this.checkDocument();
+        // A new text box being typed stays on its page however often the page is drawn again.
+        if (this.typed && !this.typed.id) this.paintTyped();
         for (const page of this.observedPages)
             if (!this.view.contentEl.contains(page)) {
                 this.resize.unobserve(page);
@@ -1767,6 +1812,7 @@ export class NativePdf {
                 }
             }
         }
+        if (this.boxesPainted.length) this.markClipped();
         if (again && this.retry === null && !this.disposed)
             this.retry = setTimeout(() => {
                 this.retry = null;
@@ -1804,11 +1850,20 @@ export class NativePdf {
         mark.style.top = `${area.y / 100}%`;
         mark.style.width = `${area.w / 100}%`;
         mark.style.height = `${area.h / 100}%`;
+        const box = textBoxOf(annotation);
         mark.onclick = event => {
             event.preventDefault();
             event.stopPropagation();
-            if (!this.disposed && mark.isConnected) this.activate(annotation, false);
+            if (this.disposed || !mark.isConnected) return;
+            // A text box in hand is typed in with a second press: a finger has no double click.
+            if (box && this.activeId === annotation.id && this.onTextBoxOpen) this.onTextBoxOpen(annotation);
+            else this.activate(annotation, false);
         };
+        if (box) {
+            this.paintTextBox(mark, annotation, area, box.size);
+            this.areaHandles(pageEl, mark, annotation, area);
+            return;
+        }
         const drawing = drawingOf(annotation);
         if (!drawing) {
             this.areaHandles(pageEl, mark, annotation, area);
@@ -1850,6 +1905,113 @@ export class NativePdf {
             this.editDrawing(annotation);
         });
         this.drawingHandles(pageEl, layer, mark, svg, annotation, area, drawing);
+    }
+    /**
+     * A text box: the words of its note on the page, in the page's own ink on an opaque ground of the page's paper, at
+     * its size in points (so they follow the zoom). The box is at least as tall as its region and grows down to the foot
+     * of the page; what does not fit there is clipped and the box says so. The words are set as text, never as markup.
+     */
+    private paintTextBox(mark: HTMLElement, annotation: Annotation, area: PageArea, size: TextSize) {
+        const typed = this.typed?.id === annotation.id ? this.typed : null,
+            words = pageWords(typed ? typed.text : annotation.text);
+        mark.classList.add('annotator-text-box');
+        mark.classList.remove('has-note');
+        // While its note is open, the box shows the ink being chosen for it.
+        if (typed) mark.dataset.annotatorInk = typed.ink;
+        mark.dataset.annotatorSize = size;
+        mark.style.setProperty('--annotator-box-points', String(TEXT_POINTS[size]));
+        textBoxPlace(mark, area);
+        mark.removeAttribute('data-tooltip-position');
+        mark.removeAttribute('data-tooltip-delay');
+        mark.setAttribute('aria-label', words ? noteGist(words) : 'Empty text box');
+        mark.setAttribute('aria-description', `Text box on page ${area.page}: press Enter to type in it`);
+        const shown = mark.createEl('span', { cls: 'annotator-text-box-words', attr: { dir: 'auto' } });
+        shown.textContent = words;
+        mark.classList.toggle('is-empty', !words);
+        mark.addEventListener('dblclick', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (!this.disposed && mark.isConnected) this.onTextBoxOpen?.(annotation);
+        });
+        this.boxesPainted.push(mark);
+    }
+    /** Called to type in a saved text box: its note is opened where notes are written. */
+    onTextBoxOpen: ((annotation: Annotation) => void) | null = null;
+    /** Text boxes painted since the last check of which of them are too long for their page. */
+    private boxesPainted: HTMLElement[] = [];
+    /** Which of the text boxes just painted hold more than their page has room for: those say so. Read once, after every box is in place. */
+    private markClipped(marks: HTMLElement[] = this.boxesPainted.splice(0)) {
+        const shown = marks.filter(mark => mark.isConnected),
+            clipped = shown.map(mark => {
+                const words = mark.querySelector<HTMLElement>('.annotator-text-box-words');
+                return !!words && words.scrollHeight > words.clientHeight + 1;
+            });
+        shown.forEach((mark, index) => mark.classList.toggle('is-clipped', clipped[index]));
+    }
+    /**
+     * The words being typed for a text box, on the page as they are typed: a new box (no id) in a layer of its own, or a
+     * saved box being changed, whose words are shown in place of its note's. Nothing of it is stored until it is saved.
+     */
+    private typed: { id: string | null; area: PageArea; size: TextSize; ink: Ink; text: string } | null = null;
+    setTypedBox(box: { id: string | null; area: PageArea; size: TextSize; ink: Ink; text: string } | null) {
+        const before = this.typed;
+        // Nothing typed before or now: nothing to do, and nothing is looked for on the page.
+        if (!before && !box) return;
+        this.typed = box ? { ...box, area: { ...box.area } } : null;
+        if (this.disposed) return;
+        const same =
+            !!before &&
+            !!box &&
+            before.id === box.id &&
+            before.size === box.size &&
+            before.ink === box.ink &&
+            JSON.stringify(before.area) === JSON.stringify(box.area);
+        if (same) {
+            if (before!.text !== box!.text) this.showTypedWords();
+            return;
+        }
+        if (before?.id || box?.id) this.schedule();
+        this.paintTyped();
+    }
+    /** The words of the box being typed, put in place where it shows; nothing else is drawn again. */
+    private showTypedWords() {
+        const typed = this.typed;
+        if (!typed) return;
+        const mark = typed.id
+            ? Array.from(
+                  this.view.contentEl.querySelectorAll<HTMLElement>('.annotator-native-areas .annotator-text-box')
+              ).find(each => each.dataset.annotationId === typed.id)
+            : this.view.contentEl.querySelector<HTMLElement>('.annotator-text-draft .annotator-text-box');
+        const shown = mark?.querySelector<HTMLElement>('.annotator-text-box-words');
+        if (!mark || !shown) return;
+        const words = pageWords(typed.text);
+        shown.textContent = words;
+        mark.classList.toggle('is-empty', !words);
+        if (typed.id) mark.setAttribute('aria-label', words ? noteGist(words) : 'Empty text box');
+        this.markClipped([mark]);
+    }
+    /** A new text box's stand-in: on its page, over the marks, until it is saved or given up. */
+    private paintTyped() {
+        const root = this.view.contentEl,
+            typed = this.typed && !this.typed.id && !this.disposed ? this.typed : null,
+            page = typed ? root.querySelector<HTMLElement>(`.page[data-page-number="${typed.area.page}"]`) : null;
+        for (const layer of Array.from(root.querySelectorAll<HTMLElement>('.annotator-text-draft')))
+            if (!page || layer.parentElement !== page) layer.remove();
+        if (!typed || !page) return;
+        const layer =
+            page.querySelector<HTMLElement>(':scope > .annotator-text-draft') ||
+            page.createDiv({ cls: 'annotator-text-draft' });
+        layer.replaceChildren();
+        const mark = layer.createDiv({
+            cls: 'annotator-native-mark annotator-area-mark annotator-text-box is-draft',
+            attr: { 'aria-hidden': 'true' }
+        });
+        mark.dataset.annotatorInk = typed.ink;
+        mark.dataset.annotatorSize = typed.size;
+        mark.style.setProperty('--annotator-box-points', String(TEXT_POINTS[typed.size]));
+        textBoxPlace(mark, typed.area);
+        mark.createEl('span', { cls: 'annotator-text-box-words', attr: { dir: 'auto' } });
+        this.showTypedWords();
     }
     /** Called when the reader changed a saved drawing: moved it, erased from it, added to it, gave it another ink. Nothing left of it means it is to be deleted. */
     onDrawingChange: ((annotation: Annotation, drawing: Drawing | null, ink: Ink) => void) | null = null;
@@ -2035,7 +2197,14 @@ export class NativePdf {
      */
     private areaHandles(pageEl: HTMLElement, mark: HTMLElement, annotation: Annotation, area: PageArea) {
         let now = area;
+        // A text box is an area too, moved and resized the same way; its height is the least it takes, and Enter types in it.
+        const text = mark.classList.contains('annotator-text-box');
         const show = () => {
+            if (text) {
+                textBoxPlace(mark, now);
+                this.markClipped([mark]);
+                return;
+            }
             mark.style.left = `${now.x / 100}%`;
             mark.style.top = `${now.y / 100}%`;
             mark.style.width = `${now.w / 100}%`;
@@ -2053,8 +2222,33 @@ export class NativePdf {
             'aria-keyshortcuts',
             'ArrowLeft ArrowRight ArrowUp ArrowDown Shift+ArrowLeft Shift+ArrowRight Shift+ArrowUp Shift+ArrowDown'
         );
-        mark.setAttribute('aria-roledescription', 'area; arrow keys move it, Shift with arrow keys resize it');
+        mark.setAttribute(
+            'aria-roledescription',
+            text
+                ? 'text box; Enter types in it, arrow keys move it, Shift with arrow keys resize it'
+                : 'area; arrow keys move it, Shift with arrow keys resize it'
+        );
+        if (text) mark.setAttribute('aria-keyshortcuts', `Enter Escape ${mark.getAttribute('aria-keyshortcuts')}`);
         mark.addEventListener('keydown', event => {
+            if (text && !event.ctrlKey && !event.metaKey && !event.altKey && !event.isComposing) {
+                // Enter types in the box (a move not yet saved is saved first); Escape puts back a move not yet saved.
+                if (event.key === 'Enter' && !event.shiftKey && this.onTextBoxOpen) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    if (this.areaTimer) commit();
+                    this.onTextBoxOpen(annotation);
+                    return;
+                }
+                if (event.key === 'Escape' && this.areaTimer) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    clearTimeout(this.areaTimer);
+                    this.areaTimer = null;
+                    now = area;
+                    show();
+                    return;
+                }
+            }
             const way = (
                 { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' } as Record<
                     string,
@@ -2117,13 +2311,20 @@ export class NativePdf {
                     now = down(across(start));
                     show();
                 };
-                const end = (to: PointerEvent) => {
-                    if ((to.pointerId ?? 0) !== id) return;
+                const end = (to: PointerEvent | KeyboardEvent) => {
+                    const key = 'key' in to;
+                    if (key ? to.key !== 'Escape' : (to.pointerId ?? 0) !== id) return;
+                    if (key) {
+                        to.preventDefault();
+                        to.stopPropagation();
+                    }
                     document.removeEventListener('pointermove', move, true);
                     document.removeEventListener('pointerup', end, true);
                     document.removeEventListener('pointercancel', end, true);
+                    document.removeEventListener('keydown', end, true);
                     mark.classList.remove('is-moving');
-                    if (to.type === 'pointercancel') {
+                    // Escape while dragging, or the pointer taken away, puts the region back where it was.
+                    if (to.type !== 'pointerup') {
                         now = start;
                         show();
                     } else commit();
@@ -2131,6 +2332,7 @@ export class NativePdf {
                 document.addEventListener('pointermove', move, true);
                 document.addEventListener('pointerup', end, true);
                 document.addEventListener('pointercancel', end, true);
+                document.addEventListener('keydown', end, true);
             });
         }
     }
@@ -2876,9 +3078,12 @@ export class NativePdf {
         this.runStrip = null;
     }
     get markingArea() {
-        return !!this.stopArea;
+        return !!this.stopArea && this.frameKind === 'area';
     }
-    /** Leave area marking: when the reader goes to another tab there is nothing here left to drag over. A drawing in progress is kept. */
+    get placingText() {
+        return !!this.stopArea && this.frameKind === 'text';
+    }
+    /** Leave area marking (or placing a text box): when the reader goes to another tab there is nothing here left to drag over. A drawing in progress is kept. */
     leaveArea() {
         this.stopArea?.();
     }
@@ -2888,10 +3093,30 @@ export class NativePdf {
      * as it is made.
      */
     startArea() {
+        this.startFrame('area');
+    }
+    /** The size a new text box's words start at: the one used last. */
+    textSizeForBox: (() => TextSize) | null = null;
+    /** Called when the reader picks a size for new text boxes, so it is remembered. */
+    onTextSize: ((size: TextSize) => void) | null = null;
+    /** Called with where a new text box goes and the size of its words; its words are typed after. */
+    onTextBox: ((area: PageArea, size: TextSize) => void) | null = null;
+    /**
+     * Let the reader put a text box on a page: a click (a tap) places one a line high where the words begin, a drag
+     * gives its width (and height), and without a pointer Enter places one on the page being read, to move with the
+     * arrows. One box per use; its words are typed next, where notes are written. Escape leaves.
+     */
+    startTextBox(size: TextSize = this.textSizeForBox?.() ?? DEFAULT_TEXT_SIZE) {
+        this.startFrame('text', size);
+    }
+    private startFrame(kind: 'area' | 'text', size: TextSize = DEFAULT_TEXT_SIZE) {
         this.stopArea?.();
         this.stopDrawing?.();
         const root = this.view.contentEl,
-            document = root.ownerDocument;
+            document = root.ownerDocument,
+            text = kind === 'text',
+            action = text ? this.textAction : this.areaAction;
+        this.frameKind = kind;
         // One frame at a time: dragged with a pointer (`pointer` is its id) or placed and moved with the keyboard.
         let frame: {
             page: HTMLElement;
@@ -2925,21 +3150,87 @@ export class NativePdf {
             frame = null;
         };
         // The mode says what it is and how to leave it, in words a screen reader hears and a phone can tap.
-        const hint = root.createDiv({ cls: 'annotator-area-hint', attr: { role: 'status' } });
+        const hint = root.createDiv({
+            cls: `annotator-area-hint${text ? ' annotator-text-hint' : ''}`,
+            attr: { role: 'status' }
+        });
         // A phone has no Enter key to offer.
         const touchOnly = document.body.classList.contains('is-mobile');
         const words = hint.createEl('span');
-        words.textContent = touchOnly
-            ? 'Drag over the part of the page to keep.'
-            : 'Drag over the part of the page to keep, or press Enter to place a frame.';
+        const opening = text
+            ? touchOnly
+                ? 'Tap where the words go, or drag to set the width of the box.'
+                : 'Click where the words go, drag to set the width of the box, or press Enter to place one.'
+            : touchOnly
+              ? 'Drag over the part of the page to keep.'
+              : 'Drag over the part of the page to keep, or press Enter to place a frame.';
+        words.textContent = opening;
+        // A text box's three sizes, as the drawing strip has three pens: the one chosen is remembered.
+        const sizes: HTMLButtonElement[] = [];
+        if (text) {
+            const group = hint.createDiv({
+                cls: 'annotator-text-sizes',
+                attr: { role: 'group', 'aria-label': 'Text size' }
+            });
+            for (const each of TEXT_SIZES) {
+                const button = group.createEl('button', {
+                    cls: 'annotator-text-size',
+                    attr: {
+                        type: 'button',
+                        'aria-label': `${TEXT_SIZE_NAMES[each]} text`,
+                        'aria-pressed': String(each === size),
+                        'data-size': each
+                    }
+                }) as HTMLButtonElement;
+                button.createEl('span', { attr: { 'aria-hidden': 'true' } }).textContent = 'A';
+                button.onclick = () => {
+                    size = each;
+                    for (const other of sizes) other.setAttribute('aria-pressed', String(other.dataset.size === each));
+                    this.onTextSize?.(each);
+                };
+                sizes.push(button);
+            }
+        }
         const cancel = hint.createEl('button', { attr: { type: 'button' } });
         cancel.textContent = 'Cancel';
         cancel.onclick = () => stop();
         placeHint(root, hint);
+        /** One line of words at the chosen size, with the box's inset, as a fraction of the page's height. */
+        const line = (page: HTMLElement) => {
+            const height = pageBox(page).height;
+            let scale = NaN;
+            try {
+                scale = Number.parseFloat(
+                    document.defaultView?.getComputedStyle(page).getPropertyValue('--scale-factor') || ''
+                );
+            } catch {
+                scale = NaN;
+            }
+            const pixels = TEXT_POINTS[size] * (scale > 0 ? scale : 96 / 72) * 2;
+            return Math.max((AREA_MINIMUM + 10) / 10000, Math.min(0.5, height > 0 ? pixels / height : 0.03));
+        };
+        /** A text box from where the pointer went down and came up: a click is a box a line high where the words begin, 30% of the page wide; a drag gives its width, and its height if it is more than a line. */
+        const boxFrom = (done: NonNullable<typeof frame>) => {
+            const least = AREA_MINIMUM / 10000,
+                tall = line(done.page),
+                wide = Math.abs(done.x2 - done.x) >= least,
+                width = wide ? Math.abs(done.x2 - done.x) : 0.3,
+                height = Math.max(tall, Math.abs(done.y2 - done.y)),
+                left = Math.max(0, Math.min(1 - width, wide ? Math.min(done.x, done.x2) : clamp(done.x))),
+                top = Math.max(
+                    0,
+                    Math.min(1 - height, Math.abs(done.y2 - done.y) >= tall ? Math.min(done.y, done.y2) : clamp(done.y))
+                );
+            return fitArea(done.number, left, top, left + width, top + height);
+        };
         const keep = () => {
             if (!frame) return;
             const done = frame,
-                area = done.page.isConnected ? fitArea(done.number, done.x, done.y, done.x2, done.y2) : null;
+                area = !done.page.isConnected
+                    ? null
+                    : text
+                      ? boxFrom(done)
+                      : fitArea(done.number, done.x, done.y, done.x2, done.y2);
             // A slip of the hand is not a region: say so and stay, rather than leaving the mode without a word.
             if (!area) {
                 drop();
@@ -2950,6 +3241,10 @@ export class NativePdf {
             }
             drop();
             stop();
+            if (text) {
+                if (!this.disposed) this.onTextBox?.(area, size);
+                return;
+            }
             const inside = this.wordsIn(done.page, area);
             if (!this.disposed)
                 void this.pictureOf(done.page, area).then(image => {
@@ -3010,13 +3305,13 @@ export class NativePdf {
             const inside =
                 root.contains(document.activeElement) ||
                 document.activeElement === document.body ||
-                !!this.areaAction?.contains(document.activeElement);
+                !!action?.contains(document.activeElement);
             if (event.key === 'Escape') {
                 event.preventDefault();
                 event.stopImmediatePropagation();
                 if (frame) {
                     drop();
-                    words.textContent = 'Drag over the part of the page to keep, or press Enter to place a frame.';
+                    words.textContent = opening;
                 } else stop();
                 return;
             }
@@ -3050,17 +3345,18 @@ export class NativePdf {
                 frame = {
                     page,
                     number: Number(page.dataset.pageNumber),
-                    x: 0.3,
-                    y: 0.35,
-                    x2: 0.7,
-                    y2: 0.65,
+                    x: text ? 0.35 : 0.3,
+                    y: text ? 0.45 : 0.35,
+                    x2: text ? 0.65 : 0.7,
+                    y2: text ? 0.45 + line(page) : 0.65,
                     band: page.createDiv({ cls: 'annotator-area-band is-keyboard' }),
                     pointer: null
                 };
                 place();
                 frame.band.scrollIntoView?.({ block: 'nearest' });
-                words.textContent =
-                    'Arrow keys move the frame, Shift with arrows resizes it, Enter keeps it, Escape removes it.';
+                words.textContent = text
+                    ? 'Arrow keys move the box, Shift with arrows resizes it, Enter places it, Escape removes it.'
+                    : 'Arrow keys move the frame, Shift with arrows resizes it, Enter keeps it, Escape removes it.';
             } else if (delta && frame && frame.pointer === null) {
                 event.preventDefault();
                 event.stopPropagation();
@@ -3094,18 +3390,23 @@ export class NativePdf {
             hint.remove();
             for (const type of touches) root.removeEventListener(type, touch);
             root.classList.remove('annotator-area-mode');
-            this.areaAction?.classList.remove('is-active');
-            this.areaAction?.setAttribute('aria-pressed', 'false');
+            root.classList.remove('annotator-text-mode');
+            action?.classList.remove('is-active');
+            action?.setAttribute('aria-pressed', 'false');
             root.removeEventListener('pointerdown', down, true);
             document.removeEventListener('pointermove', move, true);
             document.removeEventListener('pointerup', up, true);
             document.removeEventListener('pointercancel', lost, true);
             document.removeEventListener('keydown', key, true);
-            if (this.stopArea === stop) this.stopArea = null;
+            if (this.stopArea === stop) {
+                this.stopArea = null;
+                this.frameKind = null;
+            }
         };
         root.classList.add('annotator-area-mode');
-        this.areaAction?.classList.add('is-active');
-        this.areaAction?.setAttribute('aria-pressed', 'true');
+        if (text) root.classList.add('annotator-text-mode');
+        action?.classList.add('is-active');
+        action?.setAttribute('aria-pressed', 'true');
         for (const type of touches) root.addEventListener(type, touch, { passive: true });
         root.addEventListener('pointerdown', down, true);
         document.addEventListener('pointermove', move, true);
@@ -3258,6 +3559,11 @@ export class NativePdf {
         this.stopArea?.();
         this.areaAction?.remove();
         this.areaAction = null;
+        this.textAction?.remove();
+        this.textAction = null;
+        this.typed = null;
+        this.boxesPainted = [];
+        this.view.contentEl.querySelectorAll('.annotator-text-draft').forEach(node => node.remove());
         this.stopDrawing?.();
         this.settleDrawing?.();
         this.drawAction?.remove();

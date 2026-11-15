@@ -79,6 +79,8 @@ export interface ComposerModel {
     /** "New note", "Edit". */
     kind: string;
     quote: string;
+    /** What the empty editor says; "Write a note…" unless something else is being written. */
+    placeholder?: string;
     labels: InkLabels;
     /** Paint the passage while composing (a new selection has no mark of its own yet). */
     paintsPassage: boolean;
@@ -117,7 +119,7 @@ export class FloatingComposer {
         const state = model.state();
         const editor = createCommentEditor(model.app, model.document, {
             value: state.comment,
-            placeholder: 'Write a note…',
+            placeholder: model.placeholder || 'Write a note…',
             label: 'Annotation comment (Markdown)',
             file: model.note,
             handlers: { change: value => model.setComment(value) }

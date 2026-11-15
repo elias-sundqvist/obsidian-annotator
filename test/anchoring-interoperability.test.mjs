@@ -78,7 +78,7 @@ test('real Hypothesis PDF describe/anchor and native payload/resolve locate the 
     } finally { hypothesis.purgeCache(); for (const [key, value] of Object.entries(saved)) { if (value === undefined) delete globalThis[key]; else globalThis[key] = value; } dom.window.close(); }
 });
 
-test('the original Annotator still reads a note that holds the kinds only this reader makes: areas, drawings, book pictures, annotations taken in from a PDF', async () => {
+test('the original Annotator still reads a note that holds the kinds only this reader makes: areas, drawings, text boxes, book pictures, annotations taken in from a PDF', async () => {
     const { create, readAll, update, remove } = await import('./.generated/codec.mjs'), legacy = await import('./.generated/legacy.mjs');
     const uri = 'urn:x-pdf:abc', base = (id, extra) => ({ id, uri, text: '', tags: [], created: '2026-11-12T00:00:00.000Z', updated: '2026-11-12T00:00:00.000Z', document: { documentFingerprint: 'abc', link: [{ href: uri }] }, ...extra });
     const fragment = value => ({ type: 'FragmentSelector', conformsTo: 'http://www.w3.org/TR/media-frags/', value });
@@ -90,6 +90,7 @@ test('the original Annotator still reads a note that holds the kinds only this r
         base('picture', { text: '![[Book picture.png]]', target: [{ source: uri, selector: [{ type: 'CssSelector', value: 'body > figure:nth-child(3) > img:nth-child(1)' }] }], nativeEpub: { version: 1, src: 'OPS/images/chart.png', words: 'Bar chart' } }),
         base('taken', { text: 'Too glib', tags: ['strike-out'], target: [{ source: uri, selector: [{ type: 'TextQuoteSelector', exact: 'the story told' }, { type: 'TextPositionSelector', start: 40, end: 54 }] }], nativePdf: { version: 1, page: 1, units: 'document-utf16', from: 'at:strikeout:0:300.5,550.8,454.6,564.8:189x9l7' } }),
         base('reply', { text: 'An answer', references: ['taken'], target: [{ source: uri }] }),
+        base('box', { text: 'Typed on the page\nsecond line', tags: ['todo'], target: [{ source: uri, selector: [fragment('page=3&xywh=percent:62,8.5,30,4')] }], nativePdf: { version: 1, page: 3 }, pageText: 'large', color: 'pink' }),
     ];
     const note = rows.reduce((source, row) => create(source, row), 'Prose that must survive.\n');
     const native = readAll(note), old = legacy.loadAnnotationsAtUriFromFileText(new URL(`https://local.invalid/search?uri=${uri}`), note);
@@ -97,9 +98,14 @@ test('the original Annotator still reads a note that holds the kinds only this r
     for (const row of old.rows) { const same = native.find(each => each.id === row.id); assert.equal(row.text, same.text, row.id); assert.deepEqual(row.tags || [], same.tags || [], row.id); assert.deepEqual(row.target, same.target, row.id); }
     // What only this reader understands is carried by the original untouched: it reads it, and what it reads still holds it.
     const read = id => old.rows.find(row => row.id === id);
-    assert.equal(read('area').nativePdf.words, 'Words inside the area'); assert.equal(read('drawing').target[0].selector[1].value, svg); assert.equal(read('picture').nativeEpub.src, 'OPS/images/chart.png'); assert.equal(read('taken').nativePdf.from, rows[4].nativePdf.from);
+    assert.equal(read('area').nativePdf.words, 'Words inside the area'); assert.equal(read('box').pageText, 'large'); assert.equal(read('box').text, 'Typed on the page\nsecond line');
+    // To the original a text box is an area with a note; when it edits that note, the member it does not know is kept.
+    const settings = { settings: { annotationMarkdownSettings: { includePrefix: true, includePostfix: true, highlightHighlightedText: true } } };
+    const byOld = legacy.writeAnnotationToAnnotationFileString({ ...read('box'), text: 'Edited by the original' }, note, settings).newAnnotationFileString;
+    const after = readAll(byOld).find(row => row.id === 'box');
+    assert.equal(after.text, 'Edited by the original'); assert.equal(after.pageText, 'large'); assert.equal(after.color, 'pink'); assert.deepEqual(after.target, rows[6].target); assert.equal(read('drawing').target[0].selector[1].value, svg); assert.equal(read('picture').nativeEpub.src, 'OPS/images/chart.png'); assert.equal(read('taken').nativePdf.from, rows[4].nativePdf.from);
     // And this reader still reads the note after an edit and a deletion of its own.
     const edited = remove(update(note, { ...native.find(row => row.id === 'passage'), text: 'Changed' }), 'reply');
-    assert.deepEqual(readAll(edited).map(row => row.id), ['passage', 'area', 'drawing', 'picture', 'taken']); assert.ok(edited.startsWith('Prose that must survive.\n'));
-    assert.equal(legacy.loadAnnotationsAtUriFromFileText(null, edited).total, 5);
+    assert.deepEqual(readAll(edited).map(row => row.id), ['passage', 'area', 'drawing', 'picture', 'taken', 'box']); assert.ok(edited.startsWith('Prose that must survive.\n'));
+    assert.equal(legacy.loadAnnotationsAtUriFromFileText(null, edited).total, 6);
 });

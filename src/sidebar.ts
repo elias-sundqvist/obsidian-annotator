@@ -1,5 +1,6 @@
 import { areaWords, areaOf, figureOf, regionNote } from './area';
 import { drawingOf, drawingPaths } from './drawing';
+import { textBoxOf } from './text-box';
 import { annotationThreads, type AnnotationThread } from './annotation-threads';
 import { bindMarkdownLinks } from './markdown-links';
 import {
@@ -383,6 +384,7 @@ export class AnnotationView extends ItemView {
                 this.collapsedThreads.delete(node.id);
             this.tab =
                 selected ||
+                draft?.box ||
                 (focused &&
                     (quoteOf(rootOf(focused)) || regionNote(rootOf(focused)) || rootOf(focused).references?.length))
                     ? 'annotations'
@@ -884,9 +886,17 @@ export class AnnotationView extends ItemView {
             const top = card.createDiv({ cls: 'annotator-editor-head' });
             top.createEl('span', {
                 cls: 'annotator-editor-kind',
-                text: editing ? 'Edit' : draft?.parent ? 'Reply' : draft ? 'Page note' : 'New note'
+                text: editing
+                    ? 'Edit'
+                    : draft?.parent
+                      ? 'Reply'
+                      : draft?.box
+                        ? `Text box · page ${draft.box.area.page}`
+                        : draft
+                          ? 'Page note'
+                          : 'New note'
             });
-            if (quote) {
+            if (quote || draft?.box) {
                 const inks = top.createDiv({
                     cls: 'annotator-editor-inks',
                     attr: { role: 'group', 'aria-label': 'Highlight colour' }
@@ -904,10 +914,14 @@ export class AnnotationView extends ItemView {
                         if (current(dot)) plugin.setInk(ink);
                     };
                 }
-                if (placement !== 'card')
+                if (placement !== 'card' && quote)
                     card.createEl('blockquote', { text: quote, cls: 'annotator-card-quote is-static' });
             }
-            const placeholder = quote ? 'Add a note… (optional)' : 'Write a note…';
+            const placeholder = quote
+                ? 'Add a note… (optional)'
+                : draft?.box || (editing && textBoxOf(editing.annotation))
+                  ? 'Type the words for the page…'
+                  : 'Write a note…';
             const composing = () => {
                 if (!current(card)) return;
                 this.composing = sessionKey;
@@ -1314,7 +1328,7 @@ export class AnnotationView extends ItemView {
                                 void plugin.copyText(quote, 'Quote copied.');
                             })
                     );
-                plugin.addPictureItems(menu, file!, annotation);
+                if (!textBoxOf(annotation)) plugin.addPictureItems(menu, file!, annotation);
                 menu.addItem(item =>
                     item
                         .setTitle('Copy as Markdown')
@@ -1353,6 +1367,7 @@ export class AnnotationView extends ItemView {
                     !quoteOf(annotation) &&
                     areaOf(annotation) &&
                     !drawingOf(annotation) &&
+                    !textBoxOf(annotation) &&
                     plugin.canReadArea(file)
                 )
                     menu.addItem(item =>
@@ -1370,6 +1385,7 @@ export class AnnotationView extends ItemView {
                     menu.addSeparator();
                     plugin.addStyleItems(menu, file!, annotation);
                 }
+                plugin.addTextBoxItems(menu, file!, annotation);
                 menu.addSeparator();
                 // Deleting asks first, the same way from the menu as from the card.
                 menu.addItem(item =>
@@ -1435,19 +1451,18 @@ export class AnnotationView extends ItemView {
                     });
             }
             if (region) {
-                const drawing = drawingOf(annotation);
+                const drawing = drawingOf(annotation),
+                    typed = !drawing && !!textBoxOf(annotation),
+                    what = drawing ? 'Drawing' : typed ? 'Text box' : 'Area';
                 const chip = card.createEl('button', {
-                    cls: 'annotator-card-area',
-                    attr: {
-                        type: 'button',
-                        'aria-label': `${drawing ? 'Drawing' : 'Area'} on page ${region.page}: go to it`
-                    }
+                    cls: `annotator-card-area${typed ? ' is-text-box' : ''}`,
+                    attr: { type: 'button', 'aria-label': `${what} on page ${region.page}: go to it` }
                 });
                 setIcon(
                     chip.createEl('span', { cls: 'annotator-card-area-icon', attr: { 'aria-hidden': 'true' } }),
-                    drawing ? 'pencil' : 'scan'
+                    drawing ? 'pencil' : typed ? 'type' : 'scan'
                 );
-                chip.createEl('span', { text: drawing ? 'Drawing' : 'Area' });
+                chip.createEl('span', { text: what });
                 chip.onclick = () => {
                     if (current(chip)) plugin.openAnnotation(file!, annotation);
                 };
@@ -2058,13 +2073,15 @@ export class AnnotationView extends ItemView {
             empty.createDiv({ cls: 'annotator-empty-title', text: 'No selectable text here' });
             empty.createDiv({
                 cls: 'annotator-empty-hint',
-                text: 'This PDF is pictures of pages (a scan), so there are no words to highlight. Mark an area to keep a picture of part of a page with a note, or draw on the page.'
+                text: 'This PDF is pictures of pages (a scan), so there are no words to highlight. Mark an area to keep a picture of part of a page with a note, draw on the page, or type on it.'
             });
             const actions = empty.createDiv({ cls: 'annotator-empty-actions' });
             const mark = actions.createEl('button', { text: 'Mark an area', cls: 'mod-cta', attr: { type: 'button' } });
             mark.onclick = () => this.plugin.markAreaOn(file);
             const draw = actions.createEl('button', { text: 'Draw on the page', attr: { type: 'button' } });
             draw.onclick = () => this.plugin.drawOn(file);
+            const typed = actions.createEl('button', { text: 'Add text box', attr: { type: 'button' } });
+            typed.onclick = () => this.plugin.addTextBoxOn(file);
             // Or have the words read: a dialog asks first, and says what it needs.
             if (this.plugin.canRecogniseText(file)) {
                 const read = actions.createEl('button', { text: 'Recognise text…', attr: { type: 'button' } });

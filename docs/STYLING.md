@@ -21,14 +21,18 @@ Set these on `body` from a CSS snippet, or use the **Style Settings** plugin
 | `--annotator-paper-text` | `#433422` | The text of a book on that paper. A PDF keeps its own ink. |
 | `--annotator-note-underline` | `2px` | Line under highlights that carry a note (`0px` to disable). |
 | `--annotator-line-thickness` | `2px` | The least thickness of an underline, a strike-out or a squiggly line; large text gets a thicker one. |
+| `--annotator-box-font` | the theme's text font | The words of a text box on a PDF page. (An exported PDF uses Helvetica.) |
+| `--annotator-box-ground`, `--annotator-box-text` | the page's paper and ink | Behind and in a text box's words. Unset, they follow the page: white with dark words, the Sepia paper with its text colour, or the dark page with light words, whatever the app's theme. Set them on `body` to choose; `transparent` for the ground lets the page show through. |
 | `--annotator-quote-font`, `--annotator-quote-size`, `--annotator-quote-color` | text font, UI small, normal text | Quoted passages in the sidebar. |
 | `--annotator-quote-lines` | `4` | Lines of a long quote before "More". |
 | `--annotator-radius`, `--annotator-radius-small`, `--annotator-pill` | `--radius-m`, `--radius-s`, pill | Corner shapes; a square theme gives square cards and a square selection bar. |
 | `--annotator-surface`, `--annotator-raised`, `--annotator-hairline`, `--annotator-hover` | secondary / primary background, border, hover | Sidebar surfaces. |
 | `--annotator-gap` | `--size-4-3` | Sidebar gutter. |
 
-Body classes: `annotator-compact` (tighter cards, no dates) and
-`annotator-always-actions` (card actions always visible).
+Body classes: `annotator-compact` (tighter cards, no dates),
+`annotator-always-actions` (card actions always visible) and
+`annotator-box-clear` (text boxes without a ground: the words over the page,
+as in a handwriting app).
 
 ```css
 /* Example: softer highlights, serif quotes, a teal "green". */
@@ -108,6 +112,15 @@ value stays the ink key (`"color": "blue"`), so renaming never rewrites notes.
   inside `.annotator-native-areas`: a frame in `--annotator-ink`, never blended.
   While marking, the view has `.annotator-area-mode` and the drag is
   `.annotator-area-band`. In the sidebar: `.annotator-card-area`.
+- **Text boxes.** A saved box is an area mark that also has
+  `.annotator-text-box` (with `data-annotator-size` `small`, `medium` or
+  `large`, and `.is-clipped` when its page ends before its words, `.is-empty`
+  without words); its words are `.annotator-text-box-words`. The box being
+  typed is in `.annotator-text-draft`. While a box is placed the view also has
+  `.annotator-text-mode`; the header button is `.annotator-text-action`. The
+  page's paper and ink reach a box as `--annotator-page-ground` and
+  `--annotator-page-ink`, set from the page (`data-annotator-page`, and
+  `data-annotator-paper="sepia"` on a sepia page).
 
 ## Annotation notes
 

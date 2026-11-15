@@ -743,13 +743,13 @@ test('a source with no selectable text says so in the empty sidebar and offers w
     const h = await collection([]);
     try {
         let scan = false; const started = [];
-        h.plugin.sourceWithoutText = () => scan; h.plugin.markAreaOn = file => started.push(['area', file]); h.plugin.drawOn = file => started.push(['draw', file]);
+        h.plugin.sourceWithoutText = () => scan; h.plugin.markAreaOn = file => started.push(['area', file]); h.plugin.drawOn = file => started.push(['draw', file]); h.plugin.addTextBoxOn = file => started.push(['text', file]);
         let { content } = h.sidebar();
         assert.match(content.querySelector('.annotator-empty-title').textContent, /Select text to highlight it/); assert.equal(content.querySelector('.annotator-empty-actions'), null);
         scan = true; ({ content } = h.sidebar());
         assert.equal(content.querySelector('.annotator-empty-title').textContent, 'No selectable text here'); assert.match(content.querySelector('.annotator-empty-hint').textContent, /pictures of pages \(a scan\)/);
-        const buttons = [...content.querySelectorAll('.annotator-empty-actions button')]; assert.deepEqual(buttons.map(button => button.textContent), ['Mark an area', 'Draw on the page']);
-        buttons[0].click(); buttons[1].click(); assert.deepEqual(started, [['area', h.file.path], ['draw', h.file.path]]);
+        const buttons = [...content.querySelectorAll('.annotator-empty-actions button')]; assert.deepEqual(buttons.map(button => button.textContent), ['Mark an area', 'Draw on the page', 'Add text box']);
+        buttons[0].click(); buttons[1].click(); buttons[2].click(); assert.deepEqual(started, [['area', h.file.path], ['draw', h.file.path], ['text', h.file.path]]);
     } finally { h.dispose(); }
 });
 test('a changed drawing is rewritten in place: its strokes, its region and its ink, and nothing else of its note; with nothing left it is deleted and can be brought back', async () => {
@@ -1045,5 +1045,46 @@ test('new annotations go under the heading named in the settings, through the pl
         // Empty: the end of the note, as before.
         await h.plugin.setDisplay({ writeUnder: '' }); const end = await h.plugin.codec.create(note, quoted('h4dddd', 'four'), {});
         assert.ok(end.startsWith(note)); assert.ok(end.indexOf('^h4dddd') > end.indexOf('Mine.'));
+    } finally { h.dispose(); }
+});
+
+test('a text box\'s card says it is one and goes to it; its words are its note, and its menu offers its sizes and not what a picture has', async () => {
+    const { Menu } = await import('./.generated/plugin-boundary.mjs');
+    const fragment = value => ({ type: 'FragmentSelector', conformsTo: 'http://www.w3.org/TR/media-frags/', value });
+    const box = { id: 'box', uri: 'urn:x-pdf:draft', text: 'Typed on the page', tags: [], target: [{ source: 'urn:x-pdf:draft', selector: [fragment('page=3&xywh=percent:62,8.5,30,4')] }], nativePdf: { version: 1, page: 3 }, pageText: 'small' };
+    const area = { ...box, id: 'area', text: '![[p3.png]]\n\nA figure', pageText: undefined, nativePdf: { version: 1, page: 3, words: 'Figure 2' } };
+    const h = await collection([box, area]);
+    const shown = Menu.prototype.showAtMouseEvent; let menu = null; Menu.prototype.showAtMouseEvent = function () { menu = this; return this; };
+    try {
+        const opened = []; h.plugin.openAnnotation = (file, row) => opened.push(row.id);
+        const { content } = h.sidebar(), card = id => content.querySelector(`.annotator-native-card[data-annotation-id="${id}"]`) || content.querySelector(`[data-annotation-id="${id}"]`);
+        const chip = card('box').querySelector('.annotator-card-area');
+        assert.equal(chip.textContent, 'Text box'); assert.equal(chip.getAttribute('aria-label'), 'Text box on page 3: go to it'); assert.ok(chip.classList.contains('is-text-box')); assert.equal(chip.hasAttribute('title'), false);
+        assert.equal(card('box').querySelector('.annotator-card-words'), null, 'no words read under it: its words are its note');
+        chip.click(); assert.deepEqual(opened, ['box']);
+        // An area is still called one.
+        assert.equal(card('area').querySelector('.annotator-card-area').textContent, 'Area');
+        card('box').dispatchEvent(new h.dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+        const titles = menu.items.map(item => [item.title, item.checked]);
+        assert.deepEqual(titles.filter(([title]) => /text$|on the page/.test(title)), [['Show note on the page', true], ['Small text', true], ['Medium text', false], ['Large text', false]]);
+        assert.equal(titles.some(([title]) => /Recognise|picture/i.test(title)), false);
+        card('area').dispatchEvent(new h.dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+        assert.deepEqual(menu.items.map(item => [item.title, item.checked]).filter(([title]) => /text$|on the page/.test(title)), [['Show note on the page', false]]);
+    } finally { Menu.prototype.showAtMouseEvent = shown; h.dispose(); }
+});
+
+test('a text box is typed in the sidebar for someone who writes notes there: headed as a text box, with the inks and no passage, and saved as one', async () => {
+    const h = await collection([quoted('keep', 'Untouched')]);
+    try {
+        h.plugin.display.composer = 'sidebar'; h.plugin.openSidebar = async () => {};
+        const area = { page: 3, x: 6200, y: 850, w: 3000, h: 400 };
+        const pdf = { identity: () => ({ uri: 'urn:x-pdf:draft', document: { documentFingerprint: 'draft' } }), status: () => 'Page 3', view: { contentEl: h.dom.window.document.body }, activate: row => h.plugin.selectAnnotation(h.file.path, row) }; h.plugin.hostFor = () => pdf;
+        h.plugin.typeTextBox(h.file.path, pdf, area, 'small');
+        const { content } = h.sidebar(), editor = content.querySelector('.annotator-editor-card');
+        assert.equal(editor.querySelector('.annotator-editor-kind').textContent, 'Text box · page 3'); assert.ok(editor.querySelector('.annotator-editor-inks')); assert.equal(editor.querySelector('blockquote'), null);
+        h.plugin.updateComment('Words for the page  \n\n'); h.plugin.setInk('green'); await h.plugin.save();
+        const stored = h.records().find(row => row.id !== 'keep');
+        assert.deepEqual({ text: stored.text, pageText: stored.pageText, color: stored.color, nativePdf: stored.nativePdf, selector: stored.target[0].selector[0].value }, { text: 'Words for the page', pageText: 'small', color: 'green', nativePdf: { version: 1, page: 3 }, selector: 'page=3&xywh=percent:62,8.5,30,4' });
+        assert.equal(h.plugin.draft, null); assert.equal(h.plugin.lastInk, 'green');
     } finally { h.dispose(); }
 });

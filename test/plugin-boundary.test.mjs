@@ -1562,3 +1562,80 @@ test('the plugin starts when another plugin already opens .fb2 files, and opens 
   h.add('Books/Other.epub');await h.plugin.openNoteTarget(h.add('Other.md','',{'annotation-target':'Books/Other.epub'}));assert.equal(h.opened.length,1);assert.equal(h.opened[0].file.path,'Books/Other.epub');assert.equal(states.length,4);
  }finally{h.dispose();}
 });
+// The host's own Markdown editor, as far as the composer on the page uses it: a field that says when it changes.
+function hostEditor(h){
+ const w=h.dom.window,made=[];
+ class Base{constructor(app,container){this.value='';this.editorEl=w.document.createElement('div');this.editorEl.className='cm-content';container.append(this.editorEl);this.sourceMode=false;const self=this;this.editor={focus(){},lastLine:()=>0,getLine:()=>self.value,setCursor(){},getSelection:()=>'',getCursor:()=>({line:0,ch:0}),replaceSelection(){}};this.cm={contentDOM:this.editorEl};made.push(this);}
+  buildLocalExtensions(){return [];} onUpdate(){} set(value){this.value=value;} get(){return this.value;} destroy(){}
+  type(value){this.value=value;this.onUpdate({docChanged:true,state:{doc:{toString:()=>value}}},true);}}
+ class Shown extends Base{}
+ h.app.embedRegistry={embedByExtension:{md:()=>({editable:false,showEditor(){this.editMode=new Shown(h.app,w.document.createElement('div'));made.pop();},unload(){}})}};
+ h.app.keymap={pushScope(){},popScope(){}};h.app.scope={};
+ return made;
+}
+test('a text box from start to page: the command places it, its words are typed beside it and shown on the page as they are typed, and saving writes an area that shows its note; nothing is written for one given up',async()=>{
+ const {Notice,Platform}=await import('./.generated/plugin-boundary.mjs');
+ const h=host();try{
+  const {leaf}=matchPdf(h,[['Neural machine translation is studied here.']]);const editors=hostEditor(h),w=h.dom.window,proto=w.HTMLElement.prototype,measure=proto.getBoundingClientRect;
+  proto.getBoundingClientRect=function(){return this.closest?.('.page')?{left:0,top:0,width:100,height:100,right:100,bottom:100}:measure.call(this);};
+  const painted=()=>new Promise(resolve=>setTimeout(resolve,60)).then(settleMatches);
+  await h.plugin.onload();h.plugin.bindSources();await settleMatches();const binding=h.plugin.bindings.get(leaf.view),pdf=binding.host,key='Papers/Paper.pdf';await pdf.loading;
+  leaf.contentEl.innerHTML='<div class="page" data-page-number="1"><div class="textLayer"><span>Neural machine translation is studied here.</span></div></div>';await settleMatches();
+  const page=leaf.contentEl.querySelector('.page'),pointer=(type,target,x,y)=>target.dispatchEvent(new w.MouseEvent(type,{bubbles:true,cancelable:true,button:0,clientX:x,clientY:y}));
+  const composer=()=>w.document.querySelector('.annotator-floating-composer'),draft=()=>leaf.contentEl.querySelector('.annotator-text-draft .annotator-text-box');
+  // The command, for a hotkey: offered where a PDF is open, and it starts placing a box at the size used last.
+  const command=h.plugin.commands.find(each=>each.id==='add-text-box');assert.equal(command.name,'Add text box (PDF)');assert.equal(command.checkCallback(true),true);
+  h.plugin.lastTextSize='large';command.checkCallback(false);assert.equal(pdf.placingText,true);assert.equal(leaf.contentEl.querySelector('.annotator-text-hint [aria-pressed="true"]').dataset.size,'large');
+  pointer('pointerdown',page,20,30);pointer('pointerup',w.document,20,30);
+  // Placed: nothing is written yet; the words are typed beside the box, which shows them as they come.
+  assert.equal(pdf.placingText,false);assert.equal([...h.files.keys()].some(path=>path.endsWith('.md')),false,'no note made for a box with no words');
+  assert.deepEqual(h.plugin.draft.box,{area:{page:1,x:2000,y:3000,w:3000,h:4800},size:'large'});assert.equal(h.plugin.editMode,true);
+  assert.ok(composer());assert.equal(composer().classList.contains('is-sheet'),false);assert.equal(composer().querySelector('.annotator-editor-kind').textContent,'Text box · page 1');assert.equal(composer().querySelector('.annotator-floating-quote'),null);
+  assert.ok(draft());assert.equal(draft().textContent,'');
+  editors.at(-1).type('Hello **page**\nand a second line');assert.equal(h.plugin.comment,'Hello **page**\nand a second line');assert.equal(draft().textContent,'Hello page\nand a second line');
+  composer().querySelector('.annotator-editor-inks [data-annotator-ink="blue"]').click();assert.equal(draft().dataset.annotatorInk,'blue');
+  // Saved: an area of the page with its words as its note and the one member that shows them.
+  composer().querySelector('.annotator-native-actions button.mod-cta').click();await settleMatches();
+  const stored=h.plugin.notes.get(key).records.find(row=>row.pageText);assert.ok(stored);
+  assert.deepEqual({text:stored.text,pageText:stored.pageText,color:stored.color,page:stored.nativePdf.page,selector:stored.target[0].selector},{text:'Hello **page**\nand a second line',pageText:'large',color:'blue',page:1,selector:[{type:'FragmentSelector',conformsTo:'http://www.w3.org/TR/media-frags/',value:'page=1&xywh=percent:20,30,30,48'}]});
+  assert.equal(h.plugin.draft,null);assert.equal(composer(),null);assert.equal(draft(),null);await painted();
+  const saved=()=>leaf.contentEl.querySelector('.annotator-native-areas .annotator-text-box');assert.equal(saved().textContent,'Hello page\nand a second line');
+  // Typed in again (Enter on the box): its note opens beside it, and the page shows the words being changed; saving is an ordinary edit of the note.
+  saved().dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));assert.equal(h.plugin.editing.annotation.id,stored.id);assert.equal(composer().querySelector('.annotator-editor-kind').textContent,'Text box · page 1');
+  editors.at(-1).type('Changed words');assert.equal(saved().textContent,'Changed words');
+  composer().querySelector('.annotator-native-actions button.mod-cta').click();await settleMatches();await painted();
+  const changed=h.plugin.notes.get(key).records.find(row=>row.id===stored.id);assert.equal(changed.text,'Changed words');assert.equal(changed.pageText,'large');assert.deepEqual(changed.target,stored.target);
+  // Given up: no words, nothing saved, and Cancel takes the box away and keeps no draft.
+  const note=h.plugin.notes.get(key).note,before=h.contents.get(note.path),since=Notice.messages.length;
+  h.plugin.addTextBoxOn(key);pointer('pointerdown',page,50,50);pointer('pointerup',w.document,50,50);assert.ok(draft());
+  composer().querySelector('.annotator-native-actions button.mod-cta').click();await settleMatches();assert.equal(h.contents.get(note.path),before);assert.ok(Notice.messages.slice(since).some(each=>/Type the words of the text box first/.test(String(each))));
+  [...composer().querySelectorAll('.annotator-native-actions button')].find(button=>button.textContent==='Cancel').click();assert.equal(draft(),null);assert.equal(h.plugin.draft,null);assert.equal(h.plugin.recoverableDrafts.length,0);assert.equal(h.contents.get(note.path),before);
+  // A phone: no header button, the command starts it, a tap places it and the words are typed in the sheet along the bottom.
+  Platform.isMobile=true;Platform.isPhone=true;w.document.body.classList.add('is-mobile','is-phone');let collapsed=0;h.app.workspace.rightSplit.collapse=()=>collapsed++;
+  command.checkCallback(false);assert.match(leaf.contentEl.querySelector('.annotator-text-hint span').textContent,/^Tap where the words go/);pointer('pointerdown',page,10,10);pointer('pointerup',w.document,10,10);
+  assert.ok(composer().classList.contains('is-sheet'));assert.equal(collapsed,1,'the drawer steps aside for the sheet');assert.equal(composer().querySelector('.annotator-editor-kind').textContent,'Text box · page 1');assert.ok(draft());
+  editors.at(-1).type('Typed on a phone');assert.equal(draft().textContent,'Typed on a phone');composer().querySelector('.annotator-native-actions button.mod-cta').click();await settleMatches();
+  assert.ok(h.plugin.notes.get(key).records.some(row=>row.text==='Typed on a phone'&&row.pageText==='large'));
+  proto.getBoundingClientRect=measure;
+ }finally{Platform.isMobile=false;Platform.isPhone=false;h.dispose();}
+});
+test('any area can show its note on the page and stop again; a text box\'s size is chosen from its menu, and only one member of its note changes',async()=>{
+ const h=host();try{
+  const {leaf}=matchPdf(h,[['Neural machine translation is studied here.']]);
+  await h.plugin.onload();h.plugin.bindSources();await settleMatches();const key='Papers/Paper.pdf',pdf=h.plugin.bindings.get(leaf.view).host;await pdf.loading;
+  await h.plugin.saveArea(key,pdf,{page:1,x:1000,y:1000,w:3000,h:2000},null,'');await settleMatches();
+  const note=h.plugin.notes.get(key).note,row=()=>h.plugin.notes.get(key).records[0],titles=menu=>menu.items.map(item=>[item.title,item.checked]),item=(menu,title)=>menu.items.find(each=>each.title===title);
+  h.plugin.updateComment('A figure that matters');await h.plugin.save();await settleMatches();
+  // An area offers to show its note on the page; it is not shown yet, and no sizes are offered.
+  let menu=h.plugin.annotationMenu(key,row());assert.deepEqual(titles(menu).filter(([title])=>/text$|on the page/.test(title)),[['Show note on the page',false]]);
+  const before=h.contents.get(note.path);item(menu,'Show note on the page').run();await settleMatches();
+  assert.equal(row().pageText,'medium','at the size used last');assert.equal(h.contents.get(note.path),before.replace(/("page":1})}/,'$1,"pageText":"medium"}'),'one member added; everything else as it was');
+  // A text box: its three sizes, its own checked; another size rewrites the member in place.
+  menu=h.plugin.annotationMenu(key,row());assert.deepEqual(titles(menu).filter(([title])=>/text$|on the page/.test(title)),[['Show note on the page',true],['Small text',false],['Medium text',true],['Large text',false]]);
+  item(menu,'Small text').run();await settleMatches();assert.equal(row().pageText,'small');assert.equal(h.plugin.lastTextSize,'small','the size is remembered for the next box');
+  item(h.plugin.annotationMenu(key,row()),'Show note on the page').run();await settleMatches();assert.equal(row().pageText,undefined);assert.equal(h.contents.get(note.path),before,'the area is exactly what it was');
+  // A passage or a drawing has no such items.
+  const passage={...row(),id:'p',target:[{source:row().target[0].source,selector:[{type:'TextQuoteSelector',exact:'machine'}]}]};
+  assert.equal(h.plugin.annotationMenu(key,passage).items.some(each=>each.title==='Show note on the page'),false);
+ }finally{h.dispose();}
+});

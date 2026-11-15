@@ -52,6 +52,24 @@ settings:
             - label: Bold
               value: 3px
     -
+        id: annotator-heading-text-boxes
+        title: Text boxes
+        description: Words typed onto a PDF page.
+        type: heading
+        level: 2
+        collapsed: true
+    -
+        id: annotator-box-font
+        title: Font of text boxes
+        description: On the page; a PDF exported with annotations uses Helvetica. Reset to follow your theme's text font.
+        type: variable-text
+        default: 'var(--font-text)'
+    -
+        id: annotator-box-clear
+        title: Text boxes without a ground
+        description: The words over the page itself, as in a handwriting app. Harder to read over print.
+        type: class-toggle
+    -
         id: annotator-heading-inks
         title: Ink colours
         description: By default every ink follows your theme's own colour palette. Set one here to override it.
@@ -191,6 +209,8 @@ body {
     --annotator-line-thickness: 2px;
     /* Quoted passages in the sidebar. */
     --annotator-quote-font: var(--font-text);
+    /* Words typed onto a PDF page (text boxes). */
+    --annotator-box-font: var(--font-text);
     --annotator-quote-size: var(--font-ui-small);
     --annotator-quote-color: color-mix(in srgb, var(--text-normal) 55%, var(--text-muted));
     --annotator-quote-lines: 4;
@@ -1770,3 +1790,64 @@ body.annotator-reading-fullscreen .workspace-leaf.mod-active > .workspace-leaf-c
 /* Open from outside Obsidian: the recipe as text to copy, and the button in the notice for a file outside the vault. */
 .annotator-open-with-recipe { width: 24em; max-width: 100%; font-family: var(--font-monospace); font-size: var(--font-smallest); white-space: pre; resize: vertical; }
 .notice .annotator-outside-copy { display: block; margin-top: var(--size-4-2); }
+/* ── Text boxes: words typed onto a PDF page ──────────────────────────────
+   An area whose note is shown on the page. The words are the page's own ink
+   on an opaque ground of the page's paper, so they read on a light, a sepia
+   and a dark page alike and in every ink; the ink is the rule on the leading
+   edge. The box is at least its region's height and grows down to the foot of
+   the page; what does not fit there is cut off, and the box says so. */
+.annotator-text-box { --annotator-page-ground: #fff; --annotator-page-ink: #1f1f1f; }
+[data-annotator-paper="sepia"] .annotator-text-box { --annotator-page-ground: var(--annotator-paper, #f4ecd8); --annotator-page-ink: var(--annotator-paper-text, #433422); }
+[data-annotator-page="dark"] .annotator-text-box { --annotator-page-ground: #202020; --annotator-page-ink: #dadada; }
+.theme-dark [data-annotator-page="dark"] .annotator-text-box { --annotator-page-ground: var(--background-primary); --annotator-page-ink: var(--text-normal); }
+:is(.annotator-native-areas, .annotator-text-draft) .annotator-native-mark.annotator-area-mark.annotator-text-box,
+:is(.annotator-native-areas, .annotator-text-draft) .annotator-native-mark.annotator-area-mark.annotator-text-box:hover {
+    display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; box-sizing: border-box; height: auto; margin: 0;
+    padding: .2em .35em .25em; border: 0; border-inline-start: 2px solid rgb(var(--annotator-ink)); border-radius: 2px;
+    background: var(--annotator-box-ground, var(--annotator-page-ground)); color: var(--annotator-box-text, var(--annotator-page-ink));
+    box-shadow: none; pointer-events: auto; cursor: pointer; overflow: visible;
+    font-family: var(--annotator-box-font); font-size: calc(var(--annotator-box-points, 12) * var(--scale-factor, 1.333333) * 1px);
+    font-weight: normal; font-style: normal; letter-spacing: normal; line-height: 1.3; text-align: start; text-transform: none;
+    --no-tooltip: true;
+}
+.annotator-text-box .annotator-text-box-words {
+    display: block; flex: 0 1 auto; min-height: 0; overflow: hidden;
+    white-space: pre-wrap; overflow-wrap: anywhere; word-break: normal; unicode-bidi: plaintext; user-select: none; -webkit-user-select: none;
+}
+/* At rest a box is its words and its rule; the frame shows on hover, while it is in hand, and when it has the keyboard. */
+:is(.annotator-native-areas, .annotator-text-draft) .annotator-native-mark.annotator-area-mark.annotator-text-box::before { display: none; }
+:is(.annotator-native-areas, .annotator-text-draft) .annotator-native-mark.annotator-area-mark.annotator-text-box::after { content: none; }
+.annotator-native-areas .annotator-native-mark.annotator-area-mark.annotator-text-box:is(:hover, .is-hover) { box-shadow: 0 0 0 1px rgba(var(--annotator-ink), .7); }
+.annotator-native-areas .annotator-native-mark.annotator-area-mark.annotator-text-box.is-active { box-shadow: 0 0 0 2px rgba(var(--annotator-ink), .55); }
+.annotator-native-areas .annotator-native-mark.annotator-area-mark.annotator-text-box:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
+/* An empty box (a note whose words were all taken away) keeps a place to be found by. */
+.annotator-native-areas .annotator-native-mark.annotator-area-mark.annotator-text-box.is-empty { min-width: 1.5em; box-shadow: 0 0 0 1px rgba(var(--annotator-ink), .5); }
+/* The words being typed: a dashed frame, until they are saved. */
+.annotator-text-draft { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
+.annotator-text-draft .annotator-native-mark.annotator-area-mark.annotator-text-box { position: absolute; pointer-events: none; box-shadow: 0 0 0 1px rgba(var(--annotator-ink), .8); outline: 1px dashed rgb(var(--annotator-ink)); outline-offset: 2px; }
+/* Moving or resizing: the ground goes see-through, so what the box will cover can be seen. */
+.annotator-native-areas .annotator-native-mark.annotator-area-mark.annotator-text-box.is-moving { background: transparent; box-shadow: 0 0 0 1px rgba(var(--annotator-ink), .7); }
+/* More words than the page has room for: the last line fades and a mark in the ink says there is more. */
+.annotator-native-areas .annotator-native-mark.annotator-area-mark.annotator-text-box.is-clipped::after,
+.annotator-text-draft .annotator-native-mark.annotator-area-mark.annotator-text-box.is-clipped::after {
+    content: "…"; position: absolute; inset: auto 0 0 auto; padding: 0 .35em 0 1.5em; pointer-events: none; clip-path: none;
+    background: linear-gradient(to right, transparent, var(--annotator-box-ground, var(--annotator-page-ground)) 1.2em);
+    color: rgb(var(--annotator-ink)); font-weight: bold; line-height: 1.3;
+}
+body.annotator-box-clear .annotator-text-box { --annotator-box-ground: transparent; }
+/* Placing a box: the pointer says words go here. */
+.annotator-text-mode .page, .annotator-text-mode .page * { cursor: text !important; }
+.view-action.annotator-text-action.is-active { background: var(--interactive-accent); color: var(--text-on-accent); }
+.view-action.annotator-text-action:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
+.annotator-text-sizes { display: flex; align-items: center; gap: 2px; }
+.annotator-area-hint button.annotator-text-size { display: flex; align-items: center; justify-content: center; width: 28px; min-width: 0; padding: 0; background: none; box-shadow: none; border: 1px solid transparent; border-radius: var(--radius-s); color: var(--text-normal); font-family: var(--annotator-box-font); }
+.annotator-text-size[data-size="small"] span { font-size: 11px; }
+.annotator-text-size[data-size="medium"] span { font-size: 14px; }
+.annotator-text-size[data-size="large"] span { font-size: 19px; }
+.annotator-area-hint button.annotator-text-size[aria-pressed="true"] { border-color: var(--background-modifier-border-hover); background: var(--background-modifier-hover); }
+.annotator-area-hint button.annotator-text-size:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
+.is-mobile .annotator-area-hint button.annotator-text-size { width: 36px; }
+.annotator-area-hint.annotator-text-hint { flex-wrap: wrap; justify-content: center; row-gap: 6px; }
+/* In the sidebar a text box's card says so; its words are the note below. */
+.annotator-card-area.is-text-box .annotator-card-area-icon svg { stroke-width: 2.25; }
+@media (prefers-reduced-motion: reduce) { .annotator-native-areas .annotator-native-mark.annotator-area-mark.annotator-text-box { transition: none; } }

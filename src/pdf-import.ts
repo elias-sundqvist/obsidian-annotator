@@ -3,6 +3,7 @@ import { HIGHLIGHT_RGB, LINE_RGB, type PdfPageGeometry, type PdfTextItem } from 
 import { AREA_MINIMUM, fitArea, type PageArea } from './area';
 import { drawingSvg, type Drawing, type Stroke } from './drawing';
 import { INKS, DEFAULT_INK, type Ink } from './ink';
+import { nearestSize, type TextSize } from './text-box';
 import type { Rgb } from './pdf-write';
 
 /**
@@ -11,6 +12,7 @@ import type { Rgb } from './pdf-write';
  *
  *   a mark over text          a highlight of the text under it
  *   a rectangle, oval, box    an area
+ *   a text box with words     a text box (an area whose note shows on the page)
  *   a sticky note             an area at its spot (it keeps its place)
  *   ink                       a drawing
  *   an answer to any of them  a reply
@@ -159,6 +161,7 @@ export type Imported = Common &
               /** A sticky note's spot: there is nothing there to take a picture of. */ spot: boolean;
           }
         | { kind: 'drawing'; drawing: Drawing }
+        | { kind: 'textbox'; area: PageArea; /** The size nearest the words' own. */ size: TextSize }
     );
 export interface ImportPlan {
     notes: Imported[];
@@ -318,6 +321,23 @@ export function planImport(
                     reason: strokes.length ? 'The ink is more than a drawing can hold.' : 'The ink has no strokes.'
                 });
             }
+        } else if (each.kind === 'freetext' && common.text) {
+            // A text box: its words stay on the page. A line of words can be thinner than the least region, so it is given that height.
+            const area = each.rect ? textRegion(page, each.page + 1, each.rect) : null;
+            if (!area) {
+                plan.skipped.push({ key: each.key, reason: 'The text box has no place on its page.' });
+                continue;
+            }
+            // The ink is the words' colour where they have one; black, grey or white words take the default ink.
+            const color = each.textColor,
+                tinted = !!color && Math.max(...color) - Math.min(...color) > 0.15;
+            plan.notes.push({
+                kind: 'textbox',
+                area,
+                size: nearestSize(each.fontSize),
+                ...common,
+                ink: tinted ? nearestInk(color) : DEFAULT_INK
+            });
         } else if (each.kind === 'text') {
             // A sticky note says something or it is nothing; it keeps its place as a small area.
             if (!common.text && !replies.length) continue;
@@ -336,6 +356,26 @@ export function planImport(
         }
     }
     return plan;
+}
+/**
+ * A text box's region: its rectangle on the page as shown, made at least as wide and as tall as the least region (a
+ * line of words can be thinner), growing down and right and turning back where the page ends.
+ */
+function textRegion(page: PdfPageGeometry, number: number, rect: readonly number[]): PageArea | null {
+    const [ax, ay] = pageFraction(page.view, page.rotate, rect[0], rect[1]),
+        [bx, by] = pageFraction(page.view, page.rotate, rect[2], rect[3]);
+    if (![ax, ay, bx, by].every(Number.isFinite)) return null;
+    const least = (AREA_MINIMUM + 10) / 10000,
+        span = (a: number, b: number) => {
+            const low = Math.max(0, Math.min(1, Math.min(a, b))),
+                high = Math.max(0, Math.min(1, Math.max(a, b))),
+                size = Math.max(least, high - low),
+                start = Math.max(0, Math.min(1 - size, low));
+            return [start, start + size];
+        };
+    const [left, right] = span(ax, bx),
+        [top, bottom] = span(ay, by);
+    return fitArea(number, left, top, right, bottom);
 }
 /** The smallest area there is, around a point of the paper, held on the page. */
 function spot(page: PdfPageGeometry, number: number, x: number, y: number): PageArea | null {

@@ -113,6 +113,15 @@ import {
     OpenSourceModal
 } from './library';
 import { annotationNotes } from './annotation-notes';
+import {
+    DEFAULT_TEXT_SIZE,
+    TEXT_SIZES,
+    TEXT_SIZE_NAMES,
+    isTextSize,
+    pageTextOf,
+    textBoxOf,
+    type TextSize
+} from './text-box';
 import { FloatingComposer, type Box } from './floating-composer';
 import {
     annotationMarkdown,
@@ -261,6 +270,10 @@ interface Draft {
     parent?: Annotation;
     identity: SourceIdentity;
     /** For a note about a PDF: the page that was being read when it was begun. */ page?: number;
+    /** A text box being typed: where it goes on its page and the size of its words. Saved as an area that shows its note. */ box?: {
+        area: PageArea;
+        size: TextSize;
+    };
 }
 /** As much of the app as is asked about the Dataview plugin, when it is installed. */
 interface DataviewHost {
@@ -375,6 +388,8 @@ export default class AnnotatorPlugin extends Plugin {
     lastInk: Ink = DEFAULT_INK;
     /** How a new passage is marked: as a highlight, or with the line last chosen in the selection bar. */
     lastStyle: MarkStyle = DEFAULT_STYLE;
+    /** The size new text boxes' words start at: the one chosen last. */
+    lastTextSize: TextSize = DEFAULT_TEXT_SIZE;
     inkLabels: InkLabels = {};
     summary: SummaryOptions = { ...DEFAULT_SUMMARY };
     /** Sidebar display choices, applied as body classes so snippets and Style Settings can set them too. */
@@ -450,6 +465,8 @@ export default class AnnotatorPlugin extends Plugin {
         remove: (source: string, id: string) => this.logic.call('remove', source, id),
         removeMany: (source: string, ids: string[]) => this.logic.call('removeMany', source, ids),
         recolor: (source: string, id: string, ink: string) => this.logic.call('recolor', source, id, ink),
+        setPageText: (source: string, id: string, size: string | null) =>
+            this.logic.call('setPageText', source, id, size),
         requote: (source: string, id: string, text: string | null) => this.logic.call('requote', source, id, text),
         replaceFragment: (source: string, id: string, from: string, to: string) =>
             this.logic.call('replaceFragment', source, id, from, to),
@@ -560,6 +577,7 @@ export default class AnnotatorPlugin extends Plugin {
         const inks = settingsObject(this.savedData.nativeInks);
         this.lastInk = isInk(inks.last) ? inks.last : DEFAULT_INK;
         this.lastStyle = isMarkStyle(inks.style) ? inks.style : DEFAULT_STYLE;
+        this.lastTextSize = isTextSize(inks.textSize) ? inks.textSize : DEFAULT_TEXT_SIZE;
         this.ink = this.lastInk;
         this.inkLabels = inkLabels(inks.labels);
         this.summary = summaryOptions(this.savedData.nativeSummary);
@@ -934,6 +952,23 @@ export default class AnnotatorPlugin extends Plugin {
                 if (!checking) {
                     if (host.drawingMode) new Notice('Draw on the page. Done keeps it; Escape leaves.');
                     else host.startDrawing(this.lastInk);
+                }
+                return true;
+            }
+        });
+        this.addCommand({
+            id: 'add-text-box',
+            name: 'Add text box (PDF)',
+            checkCallback: checking => {
+                const host: unknown = this.currentFile ? this.bindingFor(this.currentFile)?.host : undefined;
+                if (!(host instanceof NativePdf)) return false;
+                if (!checking) {
+                    if (!host.placingText) host.startTextBox(this.lastTextSize);
+                    new Notice(
+                        Platform.isMobile
+                            ? 'Tap where the words go. Cancel leaves.'
+                            : 'Click where the words go, or drag to set the width. Escape leaves.'
+                    );
                 }
                 return true;
             }
@@ -1844,6 +1879,14 @@ export default class AnnotatorPlugin extends Plugin {
                         void this.changeDrawing(key, annotation, drawing, ink);
                     };
                     pdf.onPage = () => this.pageMoved(key);
+                    pdf.textSizeForBox = () => this.lastTextSize;
+                    pdf.onTextSize = size => {
+                        if (size === this.lastTextSize) return;
+                        this.lastTextSize = size;
+                        this.queueDraftSave();
+                    };
+                    pdf.onTextBox = (area, size) => this.typeTextBox(key, pdf, area, size);
+                    pdf.onTextBoxOpen = annotation => this.editAnnotation(key, annotation);
                 }
                 if (!this.collectionStateCleanups.has(view))
                     this.collectionStateCleanups.set(
@@ -3052,6 +3095,7 @@ export default class AnnotatorPlugin extends Plugin {
             menu.addSeparator();
             this.addStyleItems(menu, file, annotation);
         }
+        this.addTextBoxItems(menu, file, annotation);
         menu.addSeparator();
         // No confirmation here: the deletion notice offers Undo.
         menu.addItem(item =>
@@ -3082,6 +3126,72 @@ export default class AnnotatorPlugin extends Plugin {
         this.preserveEdit();
         this.queueDraftSave();
         this.refresh();
+    }
+    /**
+     * For a marked area of a PDF page: whether its note is shown on the page (a text box), and for a text box the size
+     * of its words. Nothing for a passage, a drawing or a picture of a book.
+     */
+    addTextBoxItems(menu: Menu, file: string, annotation: Annotation) {
+        const region = areaOf(annotation);
+        if (!region || annotationQuote(annotation) || drawingOf(annotation) || !this.isPdfSource(file)) return;
+        const size = pageTextOf(annotation);
+        menu.addSeparator();
+        menu.addItem(item =>
+            item
+                .setTitle('Show note on the page')
+                .setIcon('type')
+                .setChecked(!!size)
+                .onClick(() => {
+                    void this.setPageText(file, annotation, size ? null : this.lastTextSize);
+                })
+        );
+        if (size)
+            for (const each of TEXT_SIZES)
+                menu.addItem(item =>
+                    item
+                        .setTitle(`${TEXT_SIZE_NAMES[each]} text`)
+                        .setIcon('baseline')
+                        .setChecked(size === each)
+                        .onClick(() => {
+                            void this.setPageText(file, annotation, each);
+                        })
+                );
+    }
+    /** Whether a source is a PDF read in Obsidian's own viewer, where an area's note can be shown on its page. */
+    private isPdfSource(file: string): boolean {
+        return /\.pdf$/i.test(collectionSource(file)) || this.bindingFor(file)?.host instanceof NativePdf;
+    }
+    /**
+     * Show a saved area's note on its page at a size, or no longer: one member of its stored data is written, and its
+     * region, note, tags and everything else stay byte for byte. Its size is remembered for the next text box.
+     */
+    async setPageText(file: string, annotation: Annotation, size: TextSize | null) {
+        if (this.busy || size === pageTextOf(annotation) || this.damaged(file)) return;
+        this.busy = true;
+        try {
+            const note = this.noteHolding(file, annotation.id);
+            if (!note) throw new Error('Annotation note is unavailable.');
+            await this.rewrite(note, async source => {
+                if (this.stopped) throw new Error('Plugin was unloaded before the text box was changed.');
+                const current = (await this.codec.readAll(source)).find(row => row.id === annotation.id);
+                if (JSON.stringify(current) !== JSON.stringify(annotation))
+                    throw new Error('Annotation changed externally; reopen it before changing its text box.');
+                return await this.codec.setPageText(source, annotation.id, size);
+            });
+            if (size && size !== this.lastTextSize) {
+                this.lastTextSize = size;
+                this.queueDraftSave();
+            }
+            await this.loadNote(file);
+            const stored = this.notes.get(file)?.records.find(row => row.id === annotation.id);
+            if (stored && this.editing?.annotation.id === annotation.id && !this.editMode)
+                this.editing = { file, annotation: stored };
+        } catch (error) {
+            this.fail(error);
+        } finally {
+            this.busy = false;
+            this.refresh();
+        }
     }
     /** The style new passages are marked in; kept with the settings, as the last ink is. */
     setMarkStyle(style: MarkStyle) {
@@ -3675,6 +3785,59 @@ export default class AnnotatorPlugin extends Plugin {
             this.fail(error);
         }
     }
+    /**
+     * A text box was placed on a PDF page: its words are typed next, where notes are written (beside the box on a
+     * desktop or tablet, in the sheet on a phone), and the box shows them as they are typed. Nothing is stored until
+     * they are saved, so a box given up, or saved with no words, leaves nothing behind.
+     */
+    typeTextBox(file: string, host: NativePdf, area: PageArea, size: TextSize) {
+        if (this.stopped || this.damaged(file)) return;
+        try {
+            this.preserveEdit();
+            this.activeDraftId = uuid();
+            this.draftSerial++;
+            this.currentFile = file;
+            this.selection = null;
+            this.editing = null;
+            this.editMode = true;
+            this.draft = { file, identity: host.identity(), page: area.page, box: { area, size } };
+            this.comment = '';
+            this.tags = [];
+            this.tagInput = '';
+            this.ink = this.lastInk;
+            this.refresh();
+            // Written in the sidebar when notes are written there.
+            if (this.display.composer !== 'page' || !this.composerOnPage)
+                void this.openSidebar().catch(error => this.fail(error));
+        } catch (error) {
+            this.fail(error);
+        }
+    }
+    /** What a PDF shows of the text box being typed: a new one, or a saved one whose note is open. */
+    private syncTypedBox() {
+        const box = this.draft?.box,
+            editing = this.editing ? textBoxOf(this.editing.annotation) : null,
+            typed =
+                this.editMode && box && this.draft
+                    ? { file: this.draft.file, id: null, area: box.area, size: box.size }
+                    : this.editMode && editing && this.editing
+                      ? {
+                            file: this.editing.file,
+                            id: this.editing.annotation.id,
+                            area: editing.area,
+                            size: editing.size
+                        }
+                      : null;
+        for (const { host, file } of this.bindings.values()) {
+            const pdf: unknown = host;
+            if (!(pdf instanceof NativePdf)) continue;
+            pdf.setTypedBox(
+                typed && typed.file === file
+                    ? { id: typed.id, area: typed.area, size: typed.size, ink: this.ink, text: this.comment }
+                    : null
+            );
+        }
+    }
     async save() {
         if (this.busy) return;
         this.busy = true;
@@ -3683,7 +3846,10 @@ export default class AnnotatorPlugin extends Plugin {
         // A region's note is its picture and what follows; trailing blank lines left for writing are not part of it.
         const selected = this.selection,
             editing = this.editing,
-            comment = this.editing && regionNote(this.editing.annotation) ? this.comment.trimEnd() : this.comment,
+            comment =
+                (this.editing && regionNote(this.editing.annotation)) || this.draft?.box
+                    ? this.comment.trimEnd()
+                    : this.comment,
             draft = this.draft,
             tags = [...this.tags];
         try {
@@ -3712,11 +3878,18 @@ export default class AnnotatorPlugin extends Plugin {
                                       }
                                   ]
                               }
-                            : {
-                                  ...draft.identity,
-                                  target: [{ source: draft.identity.uri }],
-                                  ...(draft.page ? { nativePdf: { version: 1, page: draft.page } } : {})
-                              })
+                            : draft.box
+                              ? {
+                                    ...draft.identity,
+                                    target: [{ source: draft.identity.uri, selector: [areaSelector(draft.box.area)] }],
+                                    nativePdf: { version: 1, page: draft.box.area.page },
+                                    pageText: draft.box.size
+                                }
+                              : {
+                                    ...draft.identity,
+                                    target: [{ source: draft.identity.uri }],
+                                    ...(draft.page ? { nativePdf: { version: 1, page: draft.page } } : {})
+                                })
                     }
                   : await this.hostFor(file, selected || undefined)?.payload(
                         selected!,
@@ -3725,7 +3898,11 @@ export default class AnnotatorPlugin extends Plugin {
                     );
             if (annotation) annotation = { ...annotation, tags };
             const ink = this.ink,
-                recolored = editing ? ink !== inkOf(editing.annotation) : !!selected && ink !== DEFAULT_INK;
+                recolored = editing
+                    ? ink !== inkOf(editing.annotation)
+                    : (!!selected || !!draft?.box) && ink !== DEFAULT_INK;
+            // A text box is its words: without any there is nothing to show on the page.
+            if (draft?.box && !comment.trim()) throw new Error('Type the words of the text box first.');
             if (draft && !comment.trim() && !tags.length)
                 throw new Error('A page note or reply needs a comment or tag.');
             if (!annotation) throw new Error('The source was closed; select the passage again.');
@@ -4132,6 +4309,8 @@ export default class AnnotatorPlugin extends Plugin {
         this.comment = value;
         this.draftSerial++;
         this.preserveEdit();
+        // A text box shows its words on the page as they are typed.
+        if (this.draft?.box || (this.editing && textBoxOf(this.editing.annotation))) this.syncTypedBox();
     }
     updateTags(value: string[], raw = [...new Set(value)].join(', ')) {
         this.tags = [...new Set(value)];
@@ -4336,13 +4515,15 @@ export default class AnnotatorPlugin extends Plugin {
             this.editing && (annotationQuote(this.editing.annotation) || regionNote(this.editing.annotation))
                 ? this.editing
                 : null;
+        // A text box being typed is written beside it, as a note on a passage is.
+        const box = !editing && !this.selection && this.draft?.file === file ? this.draft.box || null : null;
         const wants =
             this.editMode &&
             !!file &&
             !!key &&
             this.display.composer === 'page' &&
             !this.activeVideo &&
-            (!!this.selection || !!editing);
+            (!!this.selection || !!editing || !!box);
         if (!wants) {
             this.floating?.close();
             this.floating = null;
@@ -4372,21 +4553,28 @@ export default class AnnotatorPlugin extends Plugin {
                 ? Array.from(root.querySelectorAll<HTMLElement>('[data-annotation-id]'))
                       .filter(mark => mark.dataset.annotationId === editing.annotation.id)
                       .map(mark => mark.getBoundingClientRect())
-                : range
-                  ? Array.from(range.getClientRects())
-                  : [];
+                : box
+                  ? Array.from(root.querySelectorAll<HTMLElement>('.annotator-text-draft .annotator-text-box')).map(
+                        mark => mark.getBoundingClientRect()
+                    )
+                  : range
+                    ? Array.from(range.getClientRects())
+                    : [];
             const boxes = rects.filter(rect => rect.width > 0.5 && rect.height > 0.5);
             return boxes.length ? boxes : null;
         };
         // A new passage with nothing on screen to point at is composed in the sidebar instead.
-        if (!editing && !passage()) return;
+        if (!editing && !box && !passage()) return;
         const region = editing ? areaOf(editing.annotation) : null,
-            figure = editing && !region ? figureOf(editing.annotation) : null;
-        let quote =
-            this.selection?.exact ||
-            annotationQuote(this.editing!.annotation)?.exact ||
-            (region ? `Area on page ${region.page}` : figure ? areaWords(editing!.annotation) || 'Picture' : '');
-        if (editing) quote = this.shownQuote(file!, editing.annotation) || quote;
+            figure = editing && !region ? figureOf(editing.annotation) : null,
+            typed = box || (editing ? textBoxOf(editing.annotation) : null);
+        // A text box's words are on the page above the composer; there is no passage to quote.
+        let quote = typed
+            ? ''
+            : this.selection?.exact ||
+              annotationQuote(this.editing!.annotation)?.exact ||
+              (region ? `Area on page ${region.page}` : figure ? areaWords(editing!.annotation) || 'Picture' : '');
+        if (editing && !typed) quote = this.shownQuote(file!, editing.annotation) || quote;
         const live = () => !this.stopped && this.editMode && session === `${this.currentFile}:${this.editorSessionKey}`;
         this.floating = FloatingComposer.open({
             app: this.app,
@@ -4395,10 +4583,19 @@ export default class AnnotatorPlugin extends Plugin {
             sheet: Platform.isPhone,
             session,
             note: this.editing ? this.noteHolding(file!, this.editing.annotation.id) : this.shownNote(file!),
-            kind: region ? `Area · page ${region.page}` : figure ? 'Picture' : editing ? 'Edit note' : 'New note',
+            kind: typed
+                ? `Text box · page ${typed.area.page}`
+                : region
+                  ? `Area · page ${region.page}`
+                  : figure
+                    ? 'Picture'
+                    : editing
+                      ? 'Edit note'
+                      : 'New note',
             quote,
+            ...(typed ? { placeholder: 'Type the words for the page…' } : {}),
             labels: this.inkLabels,
-            paintsPassage: !editing,
+            paintsPassage: !editing && !box,
             state: () => ({
                 ink: this.ink,
                 style: styleOf({ tags: this.tags }),
@@ -4444,7 +4641,9 @@ export default class AnnotatorPlugin extends Plugin {
             const composer = this.floating,
                 start = editing
                     ? root.querySelector<HTMLElement>(`[data-annotation-id="${CSS.escape(editing.annotation.id)}"]`)
-                    : range?.startContainer.parentElement;
+                    : box
+                      ? root.querySelector<HTMLElement>('.annotator-text-draft .annotator-text-box')
+                      : range?.startContainer.parentElement;
             window.setTimeout(() => {
                 if (this.floating === composer) start?.scrollIntoView?.({ block: 'start' });
             }, 350);
@@ -4452,6 +4651,7 @@ export default class AnnotatorPlugin extends Plugin {
     }
     private refresh() {
         if (this.stopped) return;
+        this.syncTypedBox();
         this.syncComposer();
         for (const leaf of this.app.workspace.getLeavesOfType(VIEW))
             if (leaf.view instanceof AnnotationView) leaf.view.show();
@@ -4481,6 +4681,7 @@ export default class AnnotatorPlugin extends Plugin {
                     ...settingsObject(this.savedData.nativeInks),
                     last: this.lastInk,
                     style: this.lastStyle,
+                    textSize: this.lastTextSize,
                     labels: { ...this.inkLabels }
                 },
                 nativeSummary: { ...settingsObject(this.savedData.nativeSummary), ...this.summary },
@@ -4660,6 +4861,11 @@ export default class AnnotatorPlugin extends Plugin {
     drawOn(key: string) {
         const host: unknown = this.bindingFor(key)?.host;
         if (host instanceof NativePdf && !host.drawingMode) host.startDrawing(this.lastInk);
+    }
+    /** Start placing a text box on this PDF. */
+    addTextBoxOn(key: string) {
+        const host: unknown = this.bindingFor(key)?.host;
+        if (host instanceof NativePdf && !host.placingText) host.startTextBox(this.lastTextSize);
     }
     /** Whether this source is a PDF file whose annotations can be written into a copy of it. */
     /** How many annotations made in other programs the PDF file holds that are not in the notes yet; null until it has been looked at. Looked at once for each state of the file and of the notes. */
@@ -5984,10 +6190,11 @@ export default class AnnotatorPlugin extends Plugin {
                 ? (await this.app.vault.modifyBinary(target, buffer), target)
                 : await this.app.vault.createBinary(path, buffer);
             const count = plan.notes.length,
-                left = plan.skipped.length;
+                left = plan.skipped.length,
+                boxed = plan.boxed || 0;
             const message = createFragment(fragment => {
                 fragment.createDiv({
-                    text: `${count} ${count === 1 ? 'annotation' : 'annotations'} written into ${saved.path}.${left ? ` ${left} could not be placed and ${left === 1 ? 'was' : 'were'} left out.` : ''}`
+                    text: `${count} ${count === 1 ? 'annotation' : 'annotations'} written into ${saved.path}.${left ? ` ${left} could not be placed and ${left === 1 ? 'was' : 'were'} left out.` : ''}${boxed ? ` ${boxed === 1 ? 'A text box has' : `${boxed} text boxes have`} letters the standard PDF font does not, so ${boxed === 1 ? 'it is' : 'they are'} written as a frame with the words as its comment.` : ''}`
                 });
                 const open = fragment.createEl('button', { text: 'Open the copy', attr: { type: 'button' } });
                 open.style.marginTop = '6px';

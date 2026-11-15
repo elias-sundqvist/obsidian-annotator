@@ -34,6 +34,8 @@ Where to start:
   scanned PDFs: the design, what was built on it and where it was tried.
   [RECOGNITION_RELEASE.md](RECOGNITION_RELEASE.md): the files a release
   must put up for it, and how.
+- [TEXT_BOXES_DESIGN.md](TEXT_BOXES_DESIGN.md): typed words that stay on a
+  PDF page: the design, its criticism, and what was built on it.
 - [RELEASE_EVIDENCE_MATRIX.md](RELEASE_EVIDENCE_MATRIX.md) and
   [PARITY.md](PARITY.md): what was checked, version by version.
 

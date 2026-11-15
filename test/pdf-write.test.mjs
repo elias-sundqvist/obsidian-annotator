@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { deflateSync } from 'node:zlib';
-import { annotatePdf, PdfFile, PdfExportError, pdfText, readPdfText, PDF_NOTE_PREFIX } from './.generated/readers/pdf-write.js';
+import { annotatePdf, PdfFile, PdfExportError, pdfText, readPdfText, winAnsi, PDF_NOTE_PREFIX } from './.generated/readers/pdf-write.js';
+import { readPdfAnnotations } from './.generated/readers/pdf-read.js';
 
 const bytes = text => Uint8Array.from(text, c => c.charCodeAt(0) & 255);
 const text = (data, start = 0, end = data.length) => String.fromCharCode(...data.subarray(start, end));
@@ -138,4 +139,28 @@ test('PDF text strings: plain where the text is plain, UTF-16 otherwise, and rea
         const out = annotatePdf(classic().data, [{ ...NOTES[2], contents: `x${value}x` }]), file = new PdfFile(out);
         assert.equal(readPdfText(named(file, listed(file, 2).annots, 'c3').get('Contents')), `x${value}x`);
     }
+});
+test('a text box is written as a FreeText: its words as its contents and as lines of Helvetica in its appearance, no fill colour, upright on a turned page; read back as the text box it is', () => {
+    const box = { kind: 'freetext', page: 0, id: 'f1', modified: WHEN, color: [0.89, 0.24, 0.55], contents: 'Words (here) — naïve\nline two', author: 'Reader', rect: [100, 600, 300, 650], rotate: 0, lines: ['Words (here) — naïve', 'line two'], size: 12 };
+    const out = annotatePdf(classic().data, [box, { ...box, id: 'f2', page: 1, rotate: 90, rect: [100, 100, 150, 300], lines: ['Turned'], contents: 'Turned' }]), file = new PdfFile(out);
+    const free = named(file, listed(file, 0).annots, 'f1');
+    assert.equal(free.get('Subtype').value, 'FreeText'); assert.deepEqual(numbers(free.get('Rect')), [100, 600, 300, 650]); assert.equal(free.get('F'), 4);
+    assert.equal(readPdfText(free.get('Contents')), 'Words (here) — naïve\nline two'); assert.equal(readPdfText(free.get('T')), 'Reader');
+    // The words' font and colour are its default appearance, as the format asks; no /C, which programs take for a FreeText's fill; no border.
+    assert.equal(text(free.get('DA')), '/Helv 12 Tf 0 g'); assert.equal(free.get('C'), undefined); assert.equal(free.get('BS').get('W'), 0); assert.equal(free.get('Rotate'), undefined);
+    const look = file.object(free.get('AP').get('N').num);
+    assert.deepEqual(numbers(look.value.get('BBox')), [0, 0, 200, 50]); assert.deepEqual(numbers(look.value.get('Matrix')), [1, 0, 0, 1, 0, 0]);
+    const font = look.value.get('Resources').get('Font').get('Helv'); assert.deepEqual([font.get('Subtype').value, font.get('BaseFont').value, font.get('Encoding').value], ['Type1', 'Helvetica', 'WinAnsiEncoding']);
+    // White paper, the rule in the ink along the leading edge, the words clipped to the box: brackets escaped, letters past ASCII in WinAnsi as octal.
+    assert.equal(text(look.stream), 'q 1 g 0 0 200 50 re f\n0.89 0.24 0.55 RG 2 w 1 0 m 1 50 l S\n0 0 200 50 re W n\nBT /Helv 12 Tf 0 g 15.6 TL 6.2 35.6 Td\n(Words \\(here\\) \\227 na\\357ve) Tj\nT* (line two) Tj\nET\nQ');
+    assert.equal(look.value.get('Length'), look.stream.length);
+    // On a page shown turned a quarter, the words are drawn in a box as wide as the paper is tall there, and turned with the page.
+    const turned = named(file, listed(file, 1).annots, 'f2'), upright = file.object(turned.get('AP').get('N').num);
+    assert.deepEqual(numbers(upright.value.get('BBox')), [0, 0, 200, 50]); assert.deepEqual(numbers(upright.value.get('Matrix')), [0, 1, -1, 0, 0, 0]); assert.equal(turned.get('Rotate'), 90);
+    // What any reader of PDF annotations reads of it: a text box of ours, its words, their size and colour.
+    const found = readPdfAnnotations(out).found.filter(each => each.kind === 'freetext');
+    assert.deepEqual(found.map(each => [each.page, each.ours, each.contents, each.fontSize, each.textColor, each.color]), [[0, true, 'Words (here) — naïve\nline two', 12, [0, 0, 0], null], [1, true, 'Turned', 12, [0, 0, 0], null]]);
+    // A line the standard font cannot write is refused, never written wrong.
+    assert.throws(() => annotatePdf(classic().data, [{ ...box, lines: ['日本語'] }]), error => error instanceof PdfExportError && /standard font/.test(error.message));
+    assert.deepEqual(winAnsi('A\t€’ÿ'), [65, 32, 0x80, 0x92, 0xff]); assert.equal(winAnsi('Ā'), null);
 });
