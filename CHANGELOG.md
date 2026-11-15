@@ -12,6 +12,12 @@ What changed for someone using Annotator. How to use each thing is in
   video transcript's bar, name the keys chosen. **Next mark style** is now a
   command, so every action on a selection can also have a hotkey of
   Obsidian's.
+- **A note page after a PDF page.** **Add a note page after this page
+  (PDF)** starts a note of your own about the page being read, in Markdown,
+  kept in the annotation note as that page's page note. A marker at the foot
+  of the page stands for it; pointing at it shows its words, and a click
+  opens it in the sidebar. It is stored as page notes always were, so an
+  older version lists it among them.
 - A PDF or book on a server that asks for a user name and password (HTTP
   Basic, for example a Calibre-Web library behind nginx) can be downloaded:
   the reader asks for them when the server does, and keeps them only until

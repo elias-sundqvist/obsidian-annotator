@@ -513,6 +513,44 @@ test('a note about the document that was written on a page is at that page: list
   assert.equal(h.adapter.currentPage(),3);h.viewer.currentPageNumber=0;assert.equal(h.adapter.currentPage(),null);
  }finally{h.close();}
 });
+test('a note about a page is a marker at the foot of that page, inside it as every mark is: it names the note, opens it, keeps its focus while the note is the same, and comes back when pdf.js draws the page again',async()=>{
+ const words=['Alpha passage omega','Second page text','Third page text'],pdf={fingerprints:['one'],numPages:3,async getPage(number){return{async getTextContent(){return{items:[{str:words[number-1]}]};}};}};
+ const h=host(pdf);try{
+  const pages=()=>{h.root.innerHTML=words.map((text,i)=>`<div class="page" data-page-number="${i+1}"><div class="textLayer"><span>${text}</span></div></div>`).join('');};pages();
+  const opened=[];h.adapter.onOpen=row=>opened.push(row.id);
+  const note=(id,extra)=>({id,text:'',tags:[],document:{documentFingerprint:'one'},target:[{source:'urn:x-pdf:one'}],...extra});
+  const own=note('own',{text:'## My own page\n\nThoughts between **two** and three.',nativePdf:{version:1,page:2}}),second=note('second',{text:'Another',color:'blue',nativePdf:{version:1,page:2}}),tagged=note('tagged',{tags:['todo'],nativePdf:{version:1,page:3}});
+  const reply=note('reply',{text:'An answer',references:['own'],nativePdf:{version:1,page:2}}),loose=note('loose',{text:'About the whole PDF'}),beyond=note('beyond',{text:'Far',nativePdf:{version:1,page:9}});
+  h.adapter.setAnnotations([annotation,own,second,tagged,reply,loose,beyond]);await h.flush();
+  const layer=n=>h.root.querySelector(`.page[data-page-number="${n}"] > .annotator-page-notes`),marks=n=>[...(layer(n)?.querySelectorAll('button.annotator-page-note-mark')||[])];
+  // Page 1 has a highlight and no page note: no marker. Replies, notes with no page and pages the PDF lacks have none either.
+  assert.equal(layer(1),null);assert.equal(h.root.querySelectorAll('.page[data-page-number="1"] .annotator-native-mark').length,1);
+  assert.deepEqual(marks(2).map(mark=>mark.dataset.annotationId),['own','second']);assert.deepEqual(marks(3).map(mark=>mark.dataset.annotationId),['tagged']);
+  assert.equal(h.root.querySelectorAll('.annotator-page-note-mark').length,3);
+  // Each is a button named by its note, as a highlight with a note is; what it does is its description. No system tooltip.
+  const [first,other]=marks(2);
+  assert.equal(first.tagName,'BUTTON');assert.equal(first.getAttribute('aria-label'),'My own page Thoughts between two and three.');assert.equal(first.getAttribute('aria-description'),'Page note on page 2: open it');
+  assert.equal(marks(3)[0].getAttribute('aria-label'),'#todo');assert.equal(other.dataset.annotatorInk,'blue');
+  for(const mark of h.root.querySelectorAll('.annotator-page-notes, .annotator-page-note-mark'))assert.equal(mark.hasAttribute('title'),false);
+  assert.equal(layer(2).getAttribute('role'),'group');assert.equal(layer(2).getAttribute('aria-label'),'Notes on page 2');assert.ok(first.querySelector('svg[aria-hidden="true"]'));
+  assert.ok(layer(2).classList.contains('annotator-native-marks'),'a layer of marks: the reader takes it for its own and pdf.js is not disturbed by it');
+  // Pressing one opens its note and shows it as the one in hand; the marker stays the same element, so the focus is not lost.
+  first.click();assert.deepEqual(opened,['own']);await h.flush();assert.equal(marks(2)[0],first);assert.ok(first.classList.contains('is-active'));assert.equal(other.classList.contains('is-active'),false);
+  // Painted again with the same notes (a scroll, a zoom), the markers are left as they are.
+  h.adapter.schedule();await h.flush();assert.equal(marks(2)[0],first);
+  // A note that changes is shown changed.
+  h.adapter.setAnnotations([annotation,{...own,text:'Rewritten'},second,tagged]);await h.flush();assert.notEqual(marks(2)[0],first);assert.equal(marks(2)[0].getAttribute('aria-label'),'Rewritten');
+  // pdf.js empties a page when it draws it again: the markers come back at once, before its text is laid out, and stay after.
+  h.root.querySelector('.page[data-page-number="2"]').replaceChildren();await h.flush();assert.deepEqual(marks(2).map(mark=>mark.dataset.annotationId),['own','second']);
+  h.root.querySelector('.page[data-page-number="2"]').insertAdjacentHTML('afterbegin','<div class="canvasWrapper"></div><div class="textLayer"><span>Second page text</span></div>');await h.flush();assert.deepEqual(marks(2).map(mark=>mark.dataset.annotationId),['own','second']);
+  assert.equal(h.root.querySelectorAll('.page[data-page-number="2"] > .annotator-page-notes').length,1);
+  // Opened from the sidebar, the PDF goes to its page and the marker pulses once, as a highlight does.
+  h.viewer.currentPageNumber=1;h.adapter.activate(own);await h.flush();assert.equal(h.viewer.currentPageNumber,2);assert.ok(marks(2)[0].classList.contains('is-flash'));
+  // A note taken away takes its marker; the last one on a page takes the layer.
+  h.adapter.setAnnotations([annotation,second]);await h.flush();assert.deepEqual(marks(2).map(mark=>mark.dataset.annotationId),['second']);assert.equal(layer(3),null);
+  h.adapter.dispose();assert.equal(h.root.querySelectorAll('.annotator-page-notes').length,0);
+ }finally{h.close();}
+});
 test('a passage that runs over line ends is shown with the spaces the page left out; the stored quote stays what the PDF holds (issues 140, 335)',async()=>{
  const lines=['The quick brown','fox jumps over the inter-','national date line','and stops.'];
  const pdf={fingerprints:['one'],numPages:1,async getPage(){return{async getTextContent(){return{items:lines.map((str,index)=>({str,hasEOL:index<lines.length-1}))};}};}};

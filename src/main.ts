@@ -949,6 +949,22 @@ export default class AnnotatorPlugin extends Plugin {
                 } else new Notice('Open a source to annotate first.');
             }
         });
+        // A page of one's own between two pages of a PDF, as a page note of the page being read: its marker sits at the
+        // foot of that page. Stored as any page note is, so an older version lists it as one.
+        this.addCommand({
+            id: 'add-note-page',
+            name: 'Add a note page after this page (PDF)',
+            checkCallback: checking => {
+                const file = this.currentFile,
+                    host: unknown = file ? this.bindingFor(file)?.host : undefined;
+                if (!file || !(host instanceof NativePdf) || !host.currentPage()) return false;
+                if (!checking)
+                    void this.openSidebar()
+                        .then(() => this.newNote(file))
+                        .catch(error => this.fail(error));
+                return true;
+            }
+        });
         this.addCommand({
             id: 'copy-annotations-markdown',
             name: 'Copy all annotations as Markdown',

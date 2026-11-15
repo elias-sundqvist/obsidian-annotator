@@ -1619,6 +1619,36 @@ test('a text box from start to page: the command places it, its words are typed 
   proto.getBoundingClientRect=measure;
  }finally{Platform.isMobile=false;Platform.isPhone=false;h.dispose();}
 });
+test('a note page after a PDF page: the command begins a note about the page being read, kept as the page note it is, so the original Annotator lists it as one; its marker at the foot of that page opens it',async()=>{
+ const legacy=await import('./.generated/legacy.mjs');
+ const h=host();try{
+  const {leaf}=matchPdf(h,[['First page words.'],['Second page words.'],['Third page words.']]);const viewer=leaf.view.viewer.child.pdfViewer.pdfViewer;
+  await h.plugin.onload();h.plugin.bindSources();await settleMatches();const binding=h.plugin.bindings.get(leaf.view),pdf=binding.host,key='Papers/Paper.pdf';await pdf.loading;
+  leaf.contentEl.innerHTML=['First','Second','Third'].map((word,i)=>`<div class="page" data-page-number="${i+1}"><div class="textLayer"><span>${word} page words.</span></div></div>`).join('');await settleMatches();
+  // Offered where a PDF is open, at a page.
+  const command=h.plugin.commands.find(each=>each.id==='add-note-page');assert.equal(command.name,'Add a note page after this page (PDF)');assert.equal(command.checkCallback(true),true);
+  viewer.currentPageNumber=0;assert.equal(command.checkCallback(true),false,'no page being read, nothing to put a page after');
+  viewer.currentPageNumber=2;command.checkCallback(false);await settleMatches();
+  assert.equal(h.plugin.editMode,true);assert.equal(h.plugin.draft.page,2);assert.equal(h.plugin.draft.parent,undefined);assert.equal(h.plugin.selection,null);
+  h.plugin.updateComment('## My own page\n\n- a list\n- of thoughts');await h.plugin.save();await settleMatches();
+  const stored=h.plugin.notes.get(key).records.find(row=>row.text.startsWith('## My own page'));assert.ok(stored);
+  assert.deepEqual(stored.nativePdf,{version:1,page:2});assert.deepEqual(stored.target,[{source:stored.uri}]);assert.equal(stored.references,undefined);
+  // The same as a page note begun on that page by "New page note": nothing new is stored.
+  const plain=h.plugin.commands.find(each=>each.id==='new-page-note');plain.callback();await settleMatches();h.plugin.updateComment('Plain page note');await h.plugin.save();await settleMatches();
+  const other=h.plugin.notes.get(key).records.find(row=>row.text==='Plain page note'),shape=row=>({keys:Object.keys(row).sort(),target:row.target,nativePdf:row.nativePdf,document:row.document,uri:row.uri});
+  assert.deepEqual(shape(stored),shape(other));
+  // The original Annotator reads it from the note as a page note: no selector, the same words.
+  const notePath=[...h.contents.keys()].find(path=>path.endsWith('.md')),old=legacy.loadAnnotationsAtUriFromFileText(new URL(`https://local.invalid/search?uri=${stored.uri}`),h.contents.get(notePath));
+  const read=old.rows.find(row=>row.id===stored.id);assert.ok(read);assert.equal(read.text,stored.text);assert.deepEqual(read.target,[{source:stored.uri}]);
+  // On the page: a marker at the foot of page 2, which opens the note in the sidebar, rendered and editable there.
+  await new Promise(resolve=>setTimeout(resolve,60));await settleMatches();
+  const marker=leaf.contentEl.querySelector(`.page[data-page-number="2"] > .annotator-page-notes .annotator-page-note-mark[data-annotation-id="${stored.id}"]`);assert.ok(marker);
+  assert.equal(marker.getAttribute('aria-label'),'My own page a list of thoughts');assert.equal(leaf.contentEl.querySelector('.page[data-page-number="1"] .annotator-page-notes'),null);
+  marker.click();assert.equal(h.plugin.editing.annotation.id,stored.id);assert.equal(h.plugin.editMode,false);
+  // Without a PDF the command is not offered.
+  h.app.workspace.getLeavesOfType=()=>[];h.plugin.currentFile=null;assert.equal(command.checkCallback(true),false);
+ }finally{h.dispose();}
+});
 test('any area can show its note on the page and stop again; a text box\'s size is chosen from its menu, and only one member of its note changes',async()=>{
  const h=host();try{
   const {leaf}=matchPdf(h,[['Neural machine translation is studied here.']]);

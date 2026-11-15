@@ -131,6 +131,19 @@ function placeHint(root: HTMLElement, hint: HTMLElement) {
     const bottom = toolbar.getBoundingClientRect().bottom - parent.getBoundingClientRect().top;
     if (Number.isFinite(bottom) && bottom > 0) hint.style.top = `${Math.round(bottom + 8)}px`;
 }
+/** Lucide "sticky-note", inlined: the page note's marker is drawn by the reader, which has no host icons. */
+const PAGE_NOTE_ICON = ['M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z', 'M15 3v4a2 2 0 0 0 2 2h4'];
+function pageNoteIcon(document: Document): SVGSVGElement {
+    const icon = document.createElementNS(SVG_NS, 'svg');
+    icon.setAttribute('viewBox', '0 0 24 24');
+    icon.setAttribute('aria-hidden', 'true');
+    for (const d of PAGE_NOTE_ICON) {
+        const path = document.createElementNS(SVG_NS, 'path');
+        path.setAttribute('d', d);
+        icon.appendChild(path);
+    }
+    return icon;
+}
 /** The part of a page element the page is drawn in (inside its border), where marks are placed and positions are measured. */
 function pageBox(page: HTMLElement) {
     const rect = page.getBoundingClientRect(),
@@ -1582,7 +1595,10 @@ export class NativePdf {
         }[] = [];
         const clear = (pageEl: HTMLElement) => {
             this.kept.delete(pageEl);
-            pageEl.querySelectorAll(':scope > .annotator-native-marks').forEach(node => node.remove());
+            // A page's notes are painted on their own (paintPageNotes), and are kept while they stay the same.
+            pageEl
+                .querySelectorAll(':scope > .annotator-native-marks:not(.annotator-page-notes)')
+                .forEach(node => node.remove());
         };
         const drawnPages = new Set<HTMLElement>();
         for (const pageEl of this.view.contentEl.querySelectorAll<HTMLElement>('.page[data-page-number]')) {
@@ -1812,6 +1828,7 @@ export class NativePdf {
                 }
             }
         }
+        this.paintPageNotes(drawnPages);
         if (this.boxesPainted.length) this.markClipped();
         if (again && this.retry === null && !this.disposed)
             this.retry = setTimeout(() => {
@@ -1820,6 +1837,78 @@ export class NativePdf {
             }, 150);
         this.land();
         if (previousErrors !== JSON.stringify([...this.paintErrors])) this.onChange();
+    }
+    /** What each page's notes were last painted from, so that a page whose notes are the same keeps its markers (and the focus on one). */
+    private pageNotesPainted = new WeakMap<HTMLElement, string>();
+    /**
+     * Notes about a page (page notes that remember their page) as markers at the foot of that page, in its margin:
+     * the place a page of one's own would have between this page and the next. A marker opens its note. They are
+     * children of the page, as every mark is, so pdf.js's own layout of its pages, its zoom, scrolling, page numbers,
+     * find and spreads are left alone; nothing is put between its pages.
+     */
+    private paintPageNotes(pages: Iterable<HTMLElement>) {
+        const noted = new Map<number, Annotation[]>();
+        for (const row of this.records) {
+            const page = this.notePage(row);
+            if (!page) continue;
+            const list = noted.get(page);
+            if (list) list.push(row);
+            else noted.set(page, [row]);
+        }
+        for (const pageEl of pages) {
+            const number = Number(pageEl.dataset.pageNumber),
+                notes = noted.get(number) || [],
+                held = pageEl.querySelector<HTMLElement>(':scope > .annotator-page-notes');
+            if (!notes.length) {
+                held?.remove();
+                continue;
+            }
+            const content = JSON.stringify(notes.map(row => [row.id, row.text, row.tags, inkOf(row)]));
+            // The note in hand is shown on the marker that is there: a marker just pressed keeps the focus.
+            if (held && this.pageNotesPainted.get(held) === content) {
+                for (const mark of Array.from(held.querySelectorAll<HTMLElement>('.annotator-page-note-mark'))) {
+                    mark.classList.toggle('is-active', mark.dataset.annotationId === this.activeId);
+                    // A landing pulse that is over is taken off, so that the next landing on it pulses again.
+                    if (this.reveal?.id !== mark.dataset.annotationId) mark.classList.remove('is-flash');
+                }
+                continue;
+            }
+            held?.remove();
+            const layer = pageEl.createDiv({ cls: 'annotator-native-marks annotator-page-notes' });
+            layer.setAttribute('role', 'group');
+            layer.setAttribute('aria-label', `Notes on page ${number}`);
+            this.pageNotesPainted.set(layer, content);
+            for (const row of notes) {
+                const gist = noteGist(row.text) || (row.tags || []).map(tag => `#${tag}`).join(' '),
+                    open = `Page note on page ${number}: open it`;
+                const mark = layer.createEl('button', {
+                    cls: 'annotator-native-mark annotator-page-note-mark',
+                    attr: {
+                        ...(gist
+                            ? {
+                                  'aria-label': gist,
+                                  'aria-description': open,
+                                  'data-tooltip-position': 'left',
+                                  'data-tooltip-delay': '350'
+                              }
+                            : { 'aria-label': open }),
+                        'data-annotation-id': row.id
+                    }
+                });
+                mark.type = 'button';
+                decorateMark(mark, row, false);
+                // Named by its words, as a highlight with a note is: the host's tooltip shows them.
+                mark.classList.toggle('has-note', !!gist);
+                mark.classList.toggle('is-active', this.activeId === row.id);
+                mark.appendChild(pageNoteIcon(pageEl.ownerDocument));
+                mark.onclick = event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    if (this.disposed || !mark.isConnected) return;
+                    this.activate(row, false);
+                };
+            }
+        }
     }
     /** A saved region: an outlined box in its ink, placed in page percentages so it holds at any zoom. */
     private paintArea(pageEl: HTMLElement, annotation: Annotation, area: PageArea) {

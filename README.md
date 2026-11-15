@@ -219,7 +219,8 @@ Select text. A small bar appears with the mark style, six inks and **Note**.
 - **Page notes** (the second tab) are notes about the whole source. One
   written while a PDF page or a book chapter is in view remembers it: its card
   says "Page 12" (or the chapter) and goes there, and in an exported PDF it
-  sits on that page.
+  sits on that page. On the PDF it is a small note marker at the foot of its
+  page; see [a note page between pages](#a-note-page-between-pages).
 
 The sidebar can sort by place or by date, filter by colour or to what has a
 note, and search
@@ -329,6 +330,24 @@ in the strip at the top; the last one used is remembered.
 - A box given up before it has words leaves nothing behind.
 - On a phone the command **Add text box (PDF)** starts it, a tap places it,
   and the words are typed in the sheet above the keyboard.
+
+### A note page between pages
+
+To add a page of your own between two pages of a PDF, as a tablet note app
+does, run **Add a note page after this page (PDF)**: it starts a note about the
+page you are reading, written in Obsidian's editor like any note, so headings,
+lists, links and images all work. It is kept in the annotation note as a page
+note of that page. A marker at the foot of the page, in its corner, stands for
+it: the note's words show when you point at it, and a click opens it in the
+sidebar, where it is shown as Markdown and can be edited. A page with several
+has a marker for each.
+
+The note is not drawn as a page in among the PDF's pages: Obsidian's PDF view
+lays out its own pages and takes away anything put between them whenever it
+changes the layout (two pages side by side, scrolling by page), so a page
+inserted there would come and go. The marker is part of the page and goes
+wherever the page goes, at any zoom. An older version of Annotator, on another
+device, lists the note among the page notes.
 
 ### Scanned PDFs: recognising the text
 
