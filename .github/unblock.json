@@ -1491,6 +1491,24 @@
       "dependsOn": [],
       "estimate": 2,
       "notes": "Done 2026-11-15: Built 2026-11-15 by a subagent on feature/devonthink-links, merged into next. x-devonthink-item links are followed on a Mac by asking DEVONthink through osascript (JXA, UUID passed as an argument), after a first-use question; then the usual copy-in question. Tried with DEVONthink 4.4.2 (the owner's copy, trial) and from inside Obsidian 1.13.7: the link was followed, the copy-in asked, the PDF opened; no macOS permission prompt was needed here. A database whose record points at a missing file is reported with what to do. Not tried: DEVONthink 3."
+    },
+    {
+      "id": "keys-and-note-pages",
+      "title": "Choosable keys on a selection, and a note page after a PDF page",
+      "status": "done",
+      "parent": "community",
+      "dependsOn": [],
+      "estimate": 2,
+      "notes": "Done 2026-11-15: Built 2026-11-15 by a subagent on feature/keys-and-note-pages, merged into next. Keys for mark, note and next style are set in 'Keys on a selection'; a page note after a page is shown as a marker at the foot of that page (inserting a real page into pdf.js's viewer is not robust: it clears foreign elements on spread, scroll-mode and reload), with the command 'Add a note page after this page'. Tried in Obsidian 1.13.7: the settings section, and a note page on page 3 with its marker."
+    },
+    {
+      "id": "annotation-headings",
+      "title": "A heading for each annotation",
+      "status": "done",
+      "parent": "community",
+      "dependsOn": [],
+      "estimate": 3,
+      "notes": "Done 2026-11-15: Built 2026-11-15 by a subagent on feature/annotation-headings, merged into next. Off by default; a heading line above each annotation (prose, kept byte for byte by the checked CRUD; read back after every write); rename, removal with Undo, a command to add headings to a note. Tried in Obsidian 1.13.7: a new highlight got its ### heading and Obsidian's index lists it, so note#heading links work."
     }
   ]
 }
