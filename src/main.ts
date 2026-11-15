@@ -318,6 +318,8 @@ export default class AnnotatorPlugin extends Plugin {
             this.logic.call('replaceFragment', source, id, from, to),
         replaceStoredString: (source: string, id: string, from: string, to: string) =>
             this.logic.call('replaceStoredString', source, id, from, to),
+        keepAreaWords: (source: string, id: string, words: string) =>
+            this.logic.call('keepAreaWords', source, id, words),
         renameTag: (source: string, from: string, to: string) => this.logic.call('renameTag', source, from, to),
         importHypothesis: (source: string, raw: string) => this.logic.call('importHypothesis', source, raw),
         exportHypothesis: (source: string) => this.logic.call('exportHypothesis', source),
@@ -4231,14 +4233,12 @@ export default class AnnotatorPlugin extends Plugin {
         try {
             const note = this.notes.get(file)?.note;
             if (!note) throw new Error('Annotation note is unavailable.');
-            const own = (annotation as { nativePdf?: Record<string, unknown> }).nativePdf || { version: 1 },
-                next = { ...annotation, nativePdf: { ...own, words } } as Annotation;
             await this.rewrite(note, async source => {
                 if (this.stopped) throw new Error('Plugin was unloaded before the words were kept.');
                 const current = (await this.codec.readAll(source)).find(row => row.id === annotation.id);
                 if (JSON.stringify(current) !== JSON.stringify(annotation))
                     throw new Error('Annotation changed externally; reopen it before reading its words.');
-                return await this.codec.update(source, next);
+                return await this.codec.keepAreaWords(source, annotation.id, words);
             });
             await this.loadNote(file);
             const message = createFragment(fragment => {

@@ -112,3 +112,15 @@ test('a marked area of a page is handed over on its own, as sharp as on the whol
         const pixels = await h.adapter.pagePicture(1, 792, { page: 1, x: 0, y: 0, w: 5000, h: 5000 }); assert.deepEqual([pixels.width, pixels.height], [306, 396]);
     } finally { h.close(); }
 });
+test('a passage whose surroundings were read differently keeps its place while its own words are once on its page', async () => {
+    // The copy as it reads now: page 1 was read again, and what stood before the passage is not what it was.
+    const h = view(['Read afresh, the words before differ. Margins and measures follow here.', 'Margins and measures, and again Margins and measures.']);
+    try {
+        const passage = (id, page, extra = {}) => ({ id, text: '', tags: [], document: { documentFingerprint: 'scan' }, target: [{ source: 'urn:x-pdf:scan', selector: [{ type: 'TextQuoteSelector', exact: 'Margins and measures', prefix: 'KEPT FROM BEFORE ', suffix: ' Leave room' }, { type: 'TextPositionSelector', start: 16, end: 36 }] }], ...(page ? { nativePdf: { version: 1, page, units: 'document-utf16' } } : {}), ...extra });
+        h.adapter.setAnnotations([passage('once', 1), passage('twice', 2), passage('nopage', 0), passage('elsewhere', 4)]); await h.flush();
+        assert.equal(h.adapter.status('once'), 'Page 1', 'its words are on its page once: that is its place');
+        assert.match(h.adapter.status('twice'), /could not be located/, 'twice on its page: no telling which, so nowhere');
+        assert.match(h.adapter.status('nopage'), /could not be located/, 'a passage that names no page is found only with its surroundings, as before');
+        assert.match(h.adapter.status('elsewhere'), /could not be located/, 'not looked for on other pages than its own');
+    } finally { h.close(); }
+});

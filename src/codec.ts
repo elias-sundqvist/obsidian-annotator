@@ -173,6 +173,49 @@ export function remove(source: string, id: string): string {
     return deleteTypedAnnotation(source, id).source;
 }
 
+/**
+ * Give a marked area the words it says (read off its picture by a
+ * recogniser), where an area made on a page with text has had them from the
+ * start. Only that one value among the reader's own details of the
+ * annotation changes: its region, its note, its tags and everything else are
+ * read back as they were, or nothing is written. Refused for anything that is
+ * not an area.
+ */
+export function keepAreaWords(source: string, id: string, words: string): string {
+    const current = readAll(source).find(row => row.id === id);
+    if (!current) throw new Error('Annotation was removed externally; reload before reading its words.');
+    const selectors = current.target?.[0]?.selector || [];
+    if (
+        !selectors.some(selector => selector.type === 'FragmentSelector') ||
+        selectors.some(selector => selector.type === 'TextQuoteSelector')
+    )
+        throw new Error('Only a marked area can be given the words it says.');
+    const said = String(words).replace(/\s+/g, ' ').trim().slice(0, 4000);
+    if (!said) throw new Error('There are no words to keep.');
+    const own = (current as { nativePdf?: Record<string, unknown> }).nativePdf,
+        result = write(source, {
+            ...current,
+            nativePdf: { ...(own && typeof own === 'object' ? own : { version: 1 }), words: said }
+        });
+    const after = readAll(result),
+        stored = after.find(row => row.id === id) as (Annotation & { nativePdf?: Record<string, unknown> }) | undefined;
+    const rest = (row: Annotation | undefined) => {
+        const { nativePdf, ...others } = (row || {}) as Annotation & { nativePdf?: Record<string, unknown> },
+            { words: _words, ...details } = nativePdf || {};
+        return JSON.stringify([others, details]);
+    };
+    if (
+        !stored ||
+        stored.nativePdf?.words !== said ||
+        rest(stored) !==
+            rest({ ...current, nativePdf: own && typeof own === 'object' ? own : { version: 1 } } as Annotation) ||
+        JSON.stringify(after.filter(row => row.id !== id)) !==
+            JSON.stringify(readAll(source).filter(row => row.id !== id))
+    )
+        throw new Error("The area's words could not be kept without changing something else.");
+    return result;
+}
+
 // Shared local-backend write entry. Keep untouched typed JSON subtrees rather
 // than serializing the loaded JS object: unknown numeric lexemes survive edits.
 // Full client payloads may edit selectors/metadata; omitted keys are retained.

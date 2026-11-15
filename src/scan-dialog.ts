@@ -39,7 +39,7 @@ export function scanIntroduction(question: Pick<ScanQuestion, 'what' | 'copy' | 
     if (question.what === 'area')
         return 'Reads the words in the marked area, on this device. Nothing is sent anywhere. The words are kept with the area, so it is found by what it says.';
     if (question.what === 'again')
-        return `Reads the ${count(question.without.length, 'page')} of this copy that ${question.without.length === 1 ? 'was' : 'were'} read in ${question.before || 'another language'} again, on this device. The words read before are taken out of the copy and the new ones put in. A highlight made on them is found again by its words; one whose words now read differently stays in its note, without a place on the page.`;
+        return `Reads the ${count(question.without.length, 'page')} of this copy that ${question.without.length === 1 ? 'was' : 'were'} read in ${question.before || 'another language'} again, on this device. The words read before are taken out of the copy and the new ones put in. A highlight made on them keeps its place where its words still read the same; one whose words now read differently stays in its note, without a place on the page.`;
     return question.copy
         ? `Reads the words on scanned pages, on this device. Nothing is sent anywhere. The words are saved in a copy, ${question.copy}, beside the PDF; the PDF itself is not changed.`
         : 'Reads the words on scanned pages, on this device. Nothing is sent anywhere. This PDF is a searchable copy already: the words are added to it.';
@@ -143,7 +143,7 @@ export class ScanDialog extends Modal {
             little = new Setting(this.contentEl)
                 .setName('Pages with a little text')
                 .setDesc(
-                    `${count(question.little.length, 'page has', 'pages have')} only a little text of ${question.little.length === 1 ? 'its' : 'their'} own, such as a stamp or a header over a scanned page. What they have is left as it is; the words around it are read.`
+                    `${count(question.little.length, 'page has', 'pages have')} only a little text of ${question.little.length === 1 ? 'its' : 'their'} own, such as a stamp or a header over a scanned page. That text is left as it is; the words around it are read.`
                 )
                 .addToggle(toggle =>
                     toggle.setValue(withLittle).onChange(value => {
