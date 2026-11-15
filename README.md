@@ -302,6 +302,22 @@ link and export them. They keep the date they were made.
   anything in an encrypted PDF. A mark over a scanned page (no text under
   it) comes in as an area.
 
+### Links to passages, from Obsidian or PDF++
+
+Obsidian's own **Copy link to selection**, and the PDF++ plugin, keep a
+highlight as a link in a note: `[[paper.pdf#page=3&selection=4,0,6,12]]`,
+with PDF++ adding a colour. **Take in links to this PDF's passages**
+(sidebar menu or command palette) reads every such link in your vault that
+points at the open PDF and makes each an ordinary highlight: the passage the
+link marks, in the link's colour, with a note saying which of your notes link
+to it. Your notes and their links are left exactly as they are, so PDF++
+keeps working beside it.
+
+- Taking in again adds only what is new; the same passage linked from
+  several notes comes in once and names them all.
+- A link that marks nothing on its page as the page is read now is counted
+  and left out. Links to a rectangle (`rect=`) are not taken yet.
+
 ## Books (EPUB)
 
 ![A book in the Pages layout: a page is turned, a sentence is highlighted, and the text is made larger from the reading controls](docs/book.gif)

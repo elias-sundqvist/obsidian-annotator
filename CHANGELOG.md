@@ -37,6 +37,12 @@ What changed for someone using Annotator. How to use each thing is in
 - A PDF or book that Obsidian itself opened from outside the vault (it can,
   since Obsidian 1.14.4) is shown without annotations, and says why. Before,
   the reader could have made its note beside that file, outside the vault.
+- Links to a passage of a PDF, as Obsidian's **Copy link to selection** and
+  PDF++ write them, can be taken in as highlights with **Take in links to
+  this PDF's passages**. The notes that hold the links are left alone.
+- A PDF or book whose annotation note was deleted or renamed outside
+  Obsidian no longer stays stuck with "Associated annotation note is
+  missing": it finds the note that names it, or starts afresh.
 
 ## 0.3.1 (2026-11-13)
 

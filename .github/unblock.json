@@ -1354,6 +1354,24 @@
       "dependsOn": [],
       "estimate": 1,
       "notes": "Done 2026-11-14: Built 2026-11-14 on branch feature/embedded-highlights (not merged, not released). Found by the Open-with plan: since Obsidian 1.14.4 a file outside the vault can be opened, its path is a file: address, and the reader would have named its note after it. Now such a source has no key: no painter, no note, no export, no saved position; ensureNote refuses it whatever led there; a notice says why, once per file. Test in plugin-boundary.test.mjs. NOT tried in a running Obsidian 1.14.4 or later: the test vault runs 1.13.7, so what 0.3.1 really did there, and that the guard holds, is unconfirmed in the app."
+    },
+    {
+      "id": "selection-links",
+      "title": "Take in PDF++ and Obsidian selection links as highlights",
+      "status": "done",
+      "parent": "community",
+      "dependsOn": [],
+      "estimate": 3,
+      "notes": "Done 2026-11-15: Built 2026-11-14/15 on branch next (not merged, not released). src/selection-links.ts reads a link of the form file.pdf#page=N&selection=a,b,c,d (with PDF++'s colour) and places it in the page's text; NativePdf.selectionPlan makes each a highlight with verified anchors; main.importSelectionLinks gathers every such link in the vault that points at the open PDF. Read off the running app: Obsidian numbers a page's text runs from nought including empty ones, and counts a ligature as one letter where the reader's text has two; both are handled. Tried end to end in Obsidian 1.13.7 with two real selections (one across a ligature): the highlights carry exactly the selected words, and a second run adds nothing. Tests: selection-links.test.mjs, plugin-boundary.test.mjs. Not done: rectangle links (rect=), which could become areas. Top-ranked idea of the feature brainstorm (a way across for PDF++ users)."
+    },
+    {
+      "id": "stale-association",
+      "title": "A source whose note is gone finds its note again",
+      "status": "done",
+      "parent": "community",
+      "dependsOn": [],
+      "estimate": 1,
+      "notes": "Done 2026-11-15: Built on branch next. Found while testing: after an annotation note was deleted outside the reader's sight, its source stayed stuck with 'Associated annotation note is missing'. Now, once the vault is loaded, the tie is dropped and the note is looked for afresh: one note naming the source is used, none means unannotated, several is said as before. While the vault is still loading the old message stands. Test in plugin-boundary.test.mjs; seen working in the app."
     }
   ]
 }
