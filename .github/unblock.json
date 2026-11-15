@@ -1509,6 +1509,15 @@
       "dependsOn": [],
       "estimate": 3,
       "notes": "Done 2026-11-15: Built 2026-11-15 by a subagent on feature/annotation-headings, merged into next. Off by default; a heading line above each annotation (prose, kept byte for byte by the checked CRUD; read back after every write); rename, removal with Undo, a command to add headings to a note. Tried in Obsidian 1.13.7: a new highlight got its ### heading and Obsidian's index lists it, so note#heading links work."
+    },
+    {
+      "id": "move-under-heading",
+      "title": "Move a note's annotations under the chosen heading",
+      "status": "done",
+      "parent": "community",
+      "dependsOn": [],
+      "estimate": 1,
+      "notes": "Done 2026-11-15: Built 2026-11-15 by a subagent on feature/move-under-heading, fast-forwarded into next. Command 'Move this note's annotations under the heading': raw blocks moved byte for byte to the end of the section (after the ones already there), read back before writing, Undo while unchanged. 1,000 generated notes in its property test. Not yet tried in Obsidian."
     }
   ]
 }
