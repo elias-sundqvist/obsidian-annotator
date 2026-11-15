@@ -477,8 +477,13 @@ export class OpenSourceModal extends Modal {
         this.contentEl.createEl('p', {
             text: 'Something on this computer asked Annotator to open a file from outside the vault. To read and annotate it, it is copied once into \u201cAnnotator sources\u201d and a note is made for it. The file itself is not changed.'
         });
-        const subject = this.contentEl.createEl('p', { text: this.shown, cls: 'annotator-confirm-subject' });
-        subject.title = this.whole;
+        this.contentEl.createEl('p', { text: this.shown, cls: 'annotator-confirm-subject' });
+        // A long path is shown by its two ends; the whole of it is one press away.
+        if (this.whole !== this.shown) {
+            const whole = this.contentEl.createEl('details', { cls: 'annotator-confirm-whole' });
+            whole.createEl('summary', { text: 'The whole path' });
+            whole.createEl('p', { text: this.whole, cls: 'annotator-confirm-subject' });
+        }
         if (this.vault) this.contentEl.createEl('p', { text: `Vault: ${this.vault}` });
         this.contentEl.createEl('p', { text: 'Say yes only if you just asked to open this file.' });
         const row = new Setting(this.contentEl);

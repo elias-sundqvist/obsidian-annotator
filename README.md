@@ -499,11 +499,6 @@ first time, the reader asks, then downloads or copies it once into
 `Annotator sources` in your vault and reads it from there. If that fails it
 says why, and nothing is left behind.
 
-A file that Obsidian itself opened from outside the vault (for example with
-"Open with") is shown without annotations: the reader writes nothing beside
-a file that is not in your vault. Name it in a note's `annotation-target`
-instead, and it is copied in as above.
-
 A file on your computer is written as its full path, the way your system
 writes it, or as a `file:` address:
 
@@ -523,6 +518,51 @@ own: in Obsidian's Properties editor, type the name alone and the path as its
 value. A note whose property is a near miss (`annotation-target:`,
 `annotator-target`) is told so when it opens, with a button that renames the
 property.
+
+### Open a file from outside Obsidian
+
+A PDF or a book in your Downloads, on the desktop or in a mail can be handed
+to Annotator from the file manager or a share sheet. It is copied into
+`Annotator sources`, a note named after it is made where your new notes go,
+and it opens in the reader. The file itself is not changed. Opened again,
+the same file shows the copy and its note; nothing is copied twice.
+
+- **With Obsidian's own "Open with"** (a computer, Obsidian 1.14.4 or later,
+  installed from a current installer). Right-click the file, Open with,
+  Obsidian. Obsidian shows it as it is, outside the vault and without
+  annotations, with a button: **Copy into the vault and annotate**. The copy
+  then takes its place in the same tab. The command *Copy this file into the
+  vault and annotate it* does the same. Obsidian opens such a file in the
+  vault you used last.
+- **With a double-click.** In Annotator's settings, under **Open from
+  outside Obsidian**, press **Make a key**. The settings then show a recipe
+  for your computer: a few lines to paste into Terminal (macOS), a terminal
+  (Linux) or PowerShell (Windows). It adds "Open with Annotator" to your
+  system for PDFs and books, for this vault, and you can make it the program
+  that opens them. The first file from a folder is asked about; **Always
+  from this folder** stops the question for that folder.
+  [OPEN_WITH.md](docs/OPEN_WITH.md) says what each recipe does and how to
+  take it away again.
+- **On Android**, share a PDF to Obsidian, choose **Import**, then **Open in
+  Annotator**. Obsidian does not take books from the share sheet: copy the
+  book into the vault's folder with your file manager (a vault kept in the
+  phone's storage, not in Obsidian's own) and open it from the file list.
+- **On an iPhone or iPad**, save the file into the vault from the share
+  sheet (Save to Files, then On My iPhone or iCloud Drive, Obsidian, your
+  vault) and open it in Obsidian. A Shortcut can do both in one step:
+  [OPEN_WITH.md](docs/OPEN_WITH.md) has the steps.
+
+Behind the recipes is an address that any script or Shortcut can open:
+
+| Address | Opens |
+| --- | --- |
+| `obsidian://annotator-open?vault=…&file=Papers%2FPaper.pdf` | A PDF or book already in the vault, by its path there |
+| `obsidian://annotator-open?vault=…&key=…&source=%2FUsers%2Fme%2FPaper.pdf` | One outside the vault, by its full path (a computer only) |
+
+An address can be opened by any web page, so a file outside the vault is
+read only when the address carries this computer's key. Without it nothing
+is looked at and nothing is asked. The key is kept on this computer, not in
+the settings that sync, and **New key** in the settings ends the old one.
 
 ## With Zotero
 
@@ -734,6 +774,10 @@ and the PDF export is read back with two independent PDF readers. See
   have notes and frame notes.
 - A picture note in a book is not shown by Annotator 0.2 (it has no passage
   to anchor to there); the note itself is kept.
+- Opening a file from outside Obsidian has been tried on macOS with
+  Obsidian 1.15.0. The recipes for Windows and Linux have not been run on
+  those systems (the Linux script was run on macOS), and the menu entry
+  after a share on Android has not been tried on a phone.
 - iOS and iPadOS: the reader's own code has been run in iOS WebKit in the
   Simulator (selection, highlights, notes, drawing, books), not yet inside
   Obsidian for iOS on a device. YouTube may refuse to play there (its Error 153). The

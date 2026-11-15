@@ -883,6 +883,84 @@ documents through `file` (Obsidian's own `open` allows the same, and a
 question there would train the reflex objection 2 warns of), and Obsidian
 coming to the front on every address is Obsidian's doing.
 
+## What was built, and what was seen (15 November 2026)
+
+The owner's standing rule is to build what is planned and take the plan's
+own recommendation where a decision is open. Taken: decision 1, copy into
+the vault, with Obsidian's "Open with" as the main way on a computer;
+decision 2, today's digest-named copy and a note made at once; decision 3,
+outside reads by address only with the key, asked once per folder;
+decision 4, no accounts; decision 5, the share menu used, guarded.
+Decision 6 (asking Obsidian) is a message in the owner's name, and waits for
+the owner's word.
+
+Built (stage 0 and stage 1): `src/open-with.ts` (what an address may ask
+for, the key, note names, the queue, the recipes); in `src/main.ts` the
+address `annotator-open`, the button and command for a file Obsidian opened
+from outside, the item in the share menu, the settings section; in
+`src/library.ts` the question. The guard (0b) was already on `next`. The
+two things noticed in passing were fixed: a yes for a file on this computer
+is for one copy and is no longer kept, and on a disk that ignores case a
+path into the vault in another case is the vault's file. User-facing words
+are in the README, `docs/OPEN_WITH.md`, the CHANGELOG and
+`docs/SECURITY.md`.
+
+Stage 0a, seen live. The scratch Obsidian that would not load earlier was
+waiting on the macOS keychain, because it had been given a substitute home
+folder; Chromium's `--use-mock-keychain` switch let it load. In that
+instance (Obsidian 1.15.0, its own profile, its own socket, a scratch vault
+with the built plugin):
+
+- A file path handed to Obsidian (the code path of "Open with" and of a
+  second launch) opened a PDF from outside the vault in Obsidian's PDF view,
+  as a file whose path is `file:` and the absolute path, with
+  `getRealPath`. A book likewise, in Annotator's book view. So the code
+  reading in "What is already there" holds for PDF and EPUB, not only
+  Markdown. That Obsidian is listed under Finder's "Open With" could not be
+  seen: the installer on this Mac is 1.13.7, which does not list itself.
+- The guard held: no key, no note, nothing written beside either file; the
+  notice with **Copy into the vault and annotate** came up once. Pressing it
+  made `Opened by Obsidian.md`, copied the file into `Annotator sources`,
+  and showed the copy in the same tab. The command did the same for the
+  book.
+- `annotator-open` with `file=` opened a vault PDF and a vault book, with
+  Obsidian running and when the address started it (the handler was found
+  on a cold start). `vault=` worked by ID and by name. A Markdown file and a
+  climbing path were refused with a notice; `source=` without the key gave
+  the one notice and nothing else.
+- With the key: the question came up on **Not now**, with the other two
+  answers held back for the first moment; closing it answered no. **Always
+  from this folder** copied the file in through a new note
+  (`Sample & paper 1 50%.md`, the hash sign removed from the name), kept the
+  folder in the device's storage and not in `data.json`, and left the
+  original byte for byte as it was. A second file from that folder came in
+  without a question; the first one again showed its copy.
+- Found and fixed on the way: right after the note was written, Obsidian had
+  not yet read its properties, so opening it failed and the note was taken
+  away again. The note is now waited for; the tests' stand-in for Obsidian
+  now reads properties late, as Obsidian does.
+- The settings section rendered with the key buttons, the macOS recipe
+  (with this vault's ID and key) and the allowed folder.
+- The macOS recipe, run in a scratch home folder: macOS offered "Open with
+  Annotator" for PDF and EPUB and for nothing else (asked of Launch
+  Services), and the app handed both files over as correct addresses.
+  Registered from a temporary folder, macOS ignores the app; from an
+  ordinary folder it is offered. "Change All" was not pressed.
+
+Still open:
+
+- Windows and Linux: nothing run on those systems (the Linux script ran on
+  macOS under `sh`, `dash` and `bash`). The owner's Windows machine and
+  Ubuntu virtual machine would answer it.
+- Phones: the share-menu item and the Shortcut have not been tried on a
+  device; the share menu on the Android emulator would be the next step.
+- Finder's own "Open With → Obsidian" with a current installer.
+- Helper apps that need accounts were not built (decision 4). What each
+  would cost is in "Stages", stage 2: a Microsoft Store account (free, an
+  identity check); Google Play (25 USD once, an identity check, twelve
+  testers for fourteen days) or F-Droid; the Apple Developer Program (99
+  USD a year) for a notarised Mac app or any iOS app.
+
 ## Noticed in passing
 
 - `docs/SECURITY.md` lists "A note's `annotation-target` is followed without
