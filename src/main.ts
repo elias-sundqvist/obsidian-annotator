@@ -222,6 +222,8 @@ import {
 import { parseDrafts, draftChanged, type DraftSession } from './drafts';
 import { reviewRemote, type RevisionReview } from './remote-review';
 const VIEW = 'annotator-sidebar';
+/** How long a notice with something to do in it (Undo, Open the copy) stays, unless its button is pressed. */
+const ACTION_NOTICE_MS = 15000;
 /** Where a device keeps its own key and allowed folders, in Obsidian's storage for this device and vault. */
 const OPEN_DEVICE = 'annotator-open-with';
 interface NoteState {
@@ -3583,7 +3585,7 @@ export default class AnnotatorPlugin extends Plugin {
             `${moved} ${moved === 1 ? 'annotation' : 'annotations'} of ${target.basename} moved under “${heading}”.`,
             undo
         );
-        const notice = new Notice(message, 15000) as Notice & { hide?(): void };
+        const notice = new Notice(message, ACTION_NOTICE_MS) as Notice & { hide?(): void };
         undo.onclick = () => {
             notice.hide?.();
             void this.undoMove(target, before, after).catch(error => this.fail(error));
@@ -5768,7 +5770,7 @@ export default class AnnotatorPlugin extends Plugin {
                 `${count} ${count === 1 ? 'match' : 'matches'} of “${words}” highlighted.${plan.skipped ? ` ${plan.skipped} could not be anchored and ${plan.skipped === 1 ? 'was' : 'were'} left out.` : ''}${places.already ? ` ${places.already} ${places.already === 1 ? 'was' : 'were'} highlighted already.` : ''}${outside.length ? ` ${outside.length} on pages none of this PDF's annotation notes holds ${outside.length === 1 ? 'was' : 'were'} left out.` : ''}`,
                 undo
             );
-            const notice = new Notice(message, 15000) as Notice & { hide?(): void };
+            const notice = new Notice(message, ACTION_NOTICE_MS) as Notice & { hide?(): void };
             undo.onclick = () => {
                 notice.hide?.();
                 void this.undoMatches(key, ids, { text: request.note, tags, ink }, exact).catch(error =>
@@ -6338,7 +6340,7 @@ export default class AnnotatorPlugin extends Plugin {
                 copy.style.marginTop = '6px';
                 copy.onclick = () => void this.copyText(words, 'Words copied.');
             });
-            new Notice(message, 15000);
+            new Notice(message, ACTION_NOTICE_MS);
         } catch (error) {
             this.fail(error);
         } finally {
@@ -6410,12 +6412,7 @@ export default class AnnotatorPlugin extends Plugin {
             row.style.flexWrap = 'wrap';
             if (saved.path !== source.path) {
                 const open = row.createEl('button', { text: 'Open the copy', attr: { type: 'button' } });
-                open.onclick = () => {
-                    void this.app.workspace
-                        .getLeaf('tab')
-                        .openFile(saved)
-                        .catch(error => this.fail(error));
-                };
+                open.onclick = () => this.openMade(saved);
             }
             if (pointed && note) {
                 const use = row.createEl('button', {
@@ -6423,17 +6420,38 @@ export default class AnnotatorPlugin extends Plugin {
                     attr: { type: 'button', 'aria-label': `Make ${note.basename} the annotation note of the copy` }
                 });
                 use.onclick = () => {
+                    const copy = this.stillThere(saved);
+                    if (!copy) return;
                     use.disabled = true;
                     void this.app.fileManager
                         .processFrontMatter(note, frontmatter => {
-                            (frontmatter as Record<string, unknown>)['annotation-target'] = saved.path;
+                            (frontmatter as Record<string, unknown>)['annotation-target'] = copy.path;
                         })
-                        .then(() => this.app.workspace.getLeaf('tab').openFile(saved))
+                        .then(() => this.app.workspace.getLeaf('tab').openFile(copy))
                         .catch(error => this.fail(error));
                 };
             }
         });
-        new Notice(message, 0);
+        new Notice(message, ACTION_NOTICE_MS);
+    }
+    /**
+     * A file made a moment ago, as a notice's button finds it: at its place now (renamed, it is followed), or, when it
+     * is not in the vault any more, null, and that is said.
+     */
+    private stillThere(made: TFile): TFile | null {
+        const now = this.app.vault.getAbstractFileByPath(made.path);
+        if (now instanceof TFile) return now;
+        new Notice(`${made.path} is not in the vault any more: it was moved to the trash or deleted.`);
+        return null;
+    }
+    /** Open, in a new tab, a file a notice says was made, if it is still there. */
+    private openMade(made: TFile) {
+        const now = this.stillThere(made);
+        if (now)
+            void this.app.workspace
+                .getLeaf('tab')
+                .openFile(now)
+                .catch(error => this.fail(error));
     }
     canExportPdf(key: string) {
         const host: unknown = this.bindingFor(key)?.host;
@@ -6523,14 +6541,9 @@ export default class AnnotatorPlugin extends Plugin {
                 });
                 const open = fragment.createEl('button', { text: 'Open the copy', attr: { type: 'button' } });
                 open.style.marginTop = '6px';
-                open.onclick = () => {
-                    void this.app.workspace
-                        .getLeaf('tab')
-                        .openFile(saved)
-                        .catch(error => this.fail(error));
-                };
+                open.onclick = () => this.openMade(saved);
             });
-            new Notice(message, 12000);
+            new Notice(message, ACTION_NOTICE_MS);
         } finally {
             working.hide();
         }

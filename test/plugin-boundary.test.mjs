@@ -139,6 +139,25 @@ async function remoteHost(){
  globalThis.__annotatorTestPdfJs=async()=>({getDocument:({data})=>({promise:Promise.resolve({numPages:1,fingerprints:[new TextDecoder().decode(data).includes('original')?'original':'updated'],getPage:async()=>({getTextContent:async()=>({items:[{str:'Retained passage in the document.'}]}),cleanup(){}})}),destroy:async()=>{}})});
  globalThis.__annotatorTestRequest=async()=>({status:200,arrayBuffer:new TextEncoder().encode('%PDF-1.7 updated').buffer});await h.plugin.onload();h.plugin.currentFile=path;return{...h,url,path,file,note,raw,original};
 }
+test('the notice after text recognition goes away as the other notices with a button do, and its buttons find the copy where it is now, or say it is gone',async()=>{
+ const h=host();try{
+  const {Notice}=await import('./.generated/plugin-boundary.mjs');await h.plugin.onload();const w=h.dom.window;
+  globalThis.createFragment=build=>{const fragment=w.document.createDocumentFragment();const proto=w.DocumentFragment.prototype;proto.createDiv??=function(o={}){const el=w.document.createElement('div');if(o.text)el.textContent=o.text;this.append(el);return el;};proto.createEl??=function(tag,o={}){const el=w.document.createElement(tag);if(o.text)el.textContent=o.text;for(const[k,v]of Object.entries(o.attr||{}))el.setAttribute(k,v);this.append(el);return el;};w.HTMLElement.prototype.createEl??=proto.createEl;build(fragment);return fragment;};
+  const source=h.add('Scan.pdf'),copy=h.add('Scan (searchable).pdf'),note=h.add('Scan notes.md','',{'annotation-target':'Scan.pdf'});h.plugin.notes.set('Scan.pdf',{note,records:[]});
+  const offer=()=>{h.plugin.offerSearchableCopy(source,copy,'Text recognised on 2 pages.');return Notice.shown.at(-1);},button=(notice,label)=>[...notice.message.querySelectorAll('button')].find(el=>el.textContent===label);
+  let notice=offer();
+  assert.equal(notice.duration,15000,'not up until pressed: as long as the notices with Undo');
+  button(notice,'Open the copy').click();assert.equal(h.opened.at(-1).file,copy);
+  // Renamed since: followed. Moved to the trash: said so, and nothing is opened or written.
+  h.files.delete(copy.path);copy.path='Renamed (searchable).pdf';h.files.set(copy.path,copy);button(notice,'Open the copy').click();assert.equal(h.opened.at(-1).file.path,'Renamed (searchable).pdf');
+  h.files.delete(copy.path);const opened=h.opened.length,since=Notice.messages.length;
+  button(notice,'Open the copy').click();assert.equal(h.opened.length,opened);assert.equal(String(Notice.messages.at(-1)),'Renamed (searchable).pdf is not in the vault any more: it was moved to the trash or deleted.');
+  let written=0;h.app.fileManager={processFrontMatter:async()=>{written++;}};
+  button(notice,'Annotate the copy from now on').click();await new Promise(resolve=>setTimeout(resolve,0));assert.equal(written,0);assert.equal(Notice.messages.length,since+2);
+  // Taken again into a new copy of that name: the buttons of an earlier notice open that one.
+  const again=h.add('Renamed (searchable).pdf');button(notice,'Open the copy').click();assert.equal(h.opened.at(-1).file,again);
+ }finally{delete globalThis.createFragment;h.dispose();}
+});
 test('a source kept under a digest is called by the file it was made from: in the sidebar, and in what is made from it',async()=>{
  const {originalName}=await import('./.generated/readers/remote-source.js');
  assert.equal(originalName('https://example.org/papers/remote.pdf?x=1#page=2'),'remote');assert.equal(originalName('file:///Users/me/Zotero/storage/N7SMB24A/Vaswani%20et%20al.%20-%202017%20-%20Attention.pdf'),'Vaswani et al. - 2017 - Attention');
