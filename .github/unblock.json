@@ -1372,6 +1372,24 @@
       "dependsOn": [],
       "estimate": 1,
       "notes": "Done 2026-11-15: Built on branch next. Found while testing: after an annotation note was deleted outside the reader's sight, its source stayed stuck with 'Associated annotation note is missing'. Now, once the vault is loaded, the tie is dropped and the note is looked for afresh: one note naming the source is used, none means unannotated, several is said as before. While the vault is still loading the old message stands. Test in plugin-boundary.test.mjs; seen working in the app."
+    },
+    {
+      "id": "edited-quote",
+      "title": "Edit quote: the reader's own words for a passage",
+      "status": "done",
+      "parent": "community",
+      "dependsOn": [],
+      "estimate": 2,
+      "notes": "Done 2026-11-15: Built 2026-11-15 on branch next (not released). src/shown-quote.ts decides when a visible line's words are the reader's own; codec.requote writes only the visible line through the checked update and refuses unless the annotation reads back exactly as before; readSome reports the readers' quotes; the card draws them as Markdown and says Quote edited; copies, summaries, exported notes and search use them. Tried in Obsidian 1.13.7: a formula in a quote renders on the card, the dialog shows the source's words, and putting them back leaves the note byte for byte as it was. Tests: shown-quote.test.mjs, design.test.mjs. Asked for in two open requests (edit the copied text; edit the source quotation)."
+    },
+    {
+      "id": "first-highlight-unindexed",
+      "title": "The first highlight of a source is saved before its new note is indexed",
+      "status": "done",
+      "parent": "community",
+      "dependsOn": [],
+      "estimate": 1,
+      "notes": "Done 2026-11-15: Found by the text recognition session in Obsidian 1.15.1 and fixed in the reader's shared code (noteMatchesSource): a note this session made is known by what was written into it until the host has indexed it. Also: a source deleted and written again under its name is read anew. Taken into next on 2026-11-15 with its two plugin-boundary tests."
     }
   ]
 }
