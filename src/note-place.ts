@@ -88,11 +88,17 @@ export function noteHeadings(text: string): { from: number; level: number; text:
  * Where a new annotation goes: the offset it is written at, and whether the
  * heading must be written first (the note does not have it). The offset is
  * the start of the line of the next heading of the same or a higher level
- * after the named one, or the end of the note.
+ * after the named one, or the end of the note. Headings that begin where
+ * `skip` says (annotations' own headings, note-headings.ts) are neither the
+ * named heading nor the end of its section.
  */
-export function placeUnder(text: string, named: NamedHeading | null): { at: number; heading: boolean } {
+export function placeUnder(
+    text: string,
+    named: NamedHeading | null,
+    skip: readonly number[] = []
+): { at: number; heading: boolean } {
     if (!named) return { at: text.length, heading: false };
-    const headings = noteHeadings(text),
+    const headings = noteHeadings(text).filter(heading => !skip.includes(heading.from)),
         index = headings.findIndex(
             heading => heading.text === named.text && (named.level === null || heading.level === named.level)
         );

@@ -24,6 +24,14 @@ What changed for someone using Annotator. How to use each thing is in
   of the page stands for it; pointing at it shows its words, and a click
   opens it in the sidebar. It is stored as page notes always were, so an
   older version lists it among them.
+- **A heading for each annotation** (setting **Give each annotation a
+  heading**, off by default): a new annotation gets a heading of its own in
+  its note, the first words of its passage, so the Outline, folding and
+  links such as `[[Paper notes#First words]]` reach one annotation. Rename it
+  from the card's menu or in the note; it is deleted with its annotation and
+  comes back with Undo. The command **Add headings to this note's
+  annotations** gives older notes theirs. The headings are text between the
+  annotations, so older versions read the note as before.
 - A PDF or book on a server that asks for a user name and password (HTTP
   Basic, for example a Calibre-Web library behind nginx) can be downloaded:
   the reader asks for them when the server does, and keeps them only until

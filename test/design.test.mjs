@@ -1196,3 +1196,52 @@ test('a text box is typed in the sidebar for someone who writes notes there: hea
         assert.equal(h.plugin.draft, null); assert.equal(h.plugin.lastInk, 'green');
     } finally { h.dispose(); }
 });
+
+test('annotation headings: off by default; on, each new annotation gets one, renamed from its menus, deleted and brought back with it, added to an older note by the command', async () => {
+    const { HeadingModal, Menu, Notice } = await import('./.generated/plugin-boundary.mjs');
+    const h = await collection([quoted('a', 'The first passage of the paper', { text: 'my note' }), quoted('b', 'Another passage')]);
+    const shown = Menu.prototype.showAtMouseEvent; let cardMenu = null; Menu.prototype.showAtMouseEvent = function () { cardMenu = this; return this; };
+    const wait = () => new Promise(resolve => setTimeout(resolve, 20));
+    try {
+        const row = id => h.records().find(item => item.id === id), titles = menu => menu.items.map(item => item.title), text = () => h.contents.get(h.note.path);
+        // Off: nothing offered, nothing written, and a new annotation is written as it always was.
+        assert.equal(h.plugin.display.annotationHeadings, false); assert.equal(h.plugin.display.headingLevel, 3);
+        assert.ok(!titles(h.plugin.annotationMenu(h.file.path, row('a'))).includes('Rename heading…'));
+        const plain = await h.plugin.codec.create(text(), quoted('c', 'Third passage'), {}); assert.equal(plain, storeCreate(text(), quoted('c', 'Third passage'), {}));
+        // The command adds headings to the note written before, in one write: every annotation reads as it did.
+        const before = JSON.stringify(h.records()), command = h.plugin.commands.find(item => item.id === 'add-annotation-headings');
+        assert.equal(command.name, "Add headings to this note's annotations");
+        assert.equal(await h.plugin.addHeadingsToNote(h.note), 2); assert.equal(JSON.stringify(h.records()), before);
+        assert.ok(text().includes('\n### The first passage of the paper\n\n>%%') && text().includes('\n### Another passage\n\n>%%')); assert.ok(text().startsWith('Prose that must survive.\n'));
+        assert.match(String(Notice.messages.at(-1)), /2 headings added to Paper notes/);
+        assert.equal(await h.plugin.addHeadingsToNote(h.note), 0); assert.match(String(Notice.messages.at(-1)), /No annotation in Paper notes is without a heading/);
+        // On: offered on the page's menu and the card's, after "Edit quote…".
+        await h.plugin.setDisplay({ annotationHeadings: true });
+        assert.deepEqual(titles(h.plugin.annotationMenu(h.file.path, row('a'))).slice(0, 4), ['Edit note', 'Edit quote…', 'Rename heading…', 'Reply']);
+        const { content } = h.sidebar(); content.querySelector('[data-annotation-id="b"]').dispatchEvent(new h.dom.window.MouseEvent('contextmenu', { bubbles: true }));
+        assert.ok(titles(cardMenu).includes('Rename heading…'));
+        // The dialog: the heading as it is; saved with other words, only that line changes.
+        const opened = []; HeadingModal.prototype.open = function () { opened.push(this); const el = h.dom.window.document.createElement('div'); h.dom.window.document.body.append(el); this.contentEl = el; this.modalEl = el; this.onOpen(); }; HeadingModal.prototype.close = function () { this.onClose(); };
+        const field = () => opened.at(-1).contentEl.querySelector('input'), button = label => [...opened.at(-1).contentEl.querySelectorAll('button')].find(el => el.textContent === label);
+        cardMenu.items.find(item => item.title === 'Rename heading…').run(); await wait();
+        assert.equal(field().value, 'Another passage'); assert.ok(button('Remove heading'));
+        const was = text(); field().value = '  Key   finding '; button('Save').click(); await wait();
+        assert.equal(text(), was.replace('### Another passage', '### Key finding')); assert.equal(JSON.stringify(h.records()), before);
+        // Taken away, then given again from the dialog, which then suggests the first words.
+        await h.plugin.renameHeading(h.file.path, row('b'), null); assert.ok(!text().includes('Key finding'));
+        h.plugin.editHeading(h.file.path, row('b')); await wait(); assert.equal(field().value, 'Another passage'); assert.equal(button('Remove heading'), undefined);
+        button('Save').click(); await wait(); assert.ok(text().includes('\n### Another passage\n\n>%%'));
+        // A stale card writes nothing.
+        const now = text(); await h.plugin.renameHeading(h.file.path, { ...row('b'), text: 'stale' }, 'Never'); assert.equal(text(), now);
+        // A new annotation gets its heading through the plugin's own write path.
+        const made = await h.plugin.codec.createMany(text(), [{ annotation: quoted('d', 'Fourth passage') }], {}); assert.ok(made.includes('\n### Fourth passage\n\n>%%'));
+        // Deleted with its heading; Undo (the notice's button) brings both back.
+        const heading = '### The first passage of the paper', original = structuredClone(row('a'));
+        h.plugin.editAnnotation(h.file.path, row('a')); await h.plugin.deleteSelected();
+        assert.deepEqual(h.records().map(item => item.id), ['b']); assert.ok(!text().includes(heading)); assert.ok(text().includes('### Another passage'));
+        const undo = Notice.messages.at(-1).querySelector('button'); assert.equal(undo.textContent, 'Undo'); undo.click(); await wait();
+        assert.deepEqual(row('a'), original); assert.ok(text().includes(`\n${heading}\n\n>%%`));
+        // The level is the reader's: read from the settings, anything else is the default.
+        h.plugin.data = { nativeDisplay: { annotationHeadings: true, headingLevel: 9 } }; await h.plugin.onload(); assert.equal(h.plugin.display.headingLevel, 3); assert.equal(h.plugin.display.annotationHeadings, true);
+    } finally { Menu.prototype.showAtMouseEvent = shown; h.dispose(); }
+});

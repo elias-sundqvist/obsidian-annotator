@@ -15,8 +15,14 @@ import {
     replaceFragment,
     replaceStoredString,
     keepAreaWords,
+    removeWithHeading,
+    removeManyWithHeadings,
+    headingFor,
+    renameHeading,
+    addHeadings,
     type Annotation
 } from './codec';
+import type { HeadingOptions } from './note-headings';
 import { importHypothesis, exportHypothesis } from './exchange';
 import { inspectVideo, createVideo, updateVideo, deleteVideo } from './video-codec';
 import {
@@ -45,11 +51,13 @@ function createMany(
     rows: { annotation: Annotation; ink?: string }[],
     settings?: Record<string, boolean>,
     /** The heading new annotations are written under; empty for the end of the note. */
-    under = ''
+    under = '',
+    /** When each annotation has a heading of its own: its level, and so on (note-headings.ts). */
+    headings: HeadingOptions | null = null
 ): string {
     let text = source;
     for (const { annotation, ink } of rows) {
-        text = createUnder(text, annotation, settings, under);
+        text = createUnder(text, annotation, settings, under, headings);
         if (ink) text = recolor(text, annotation.id, ink);
     }
     return text;
@@ -92,6 +100,12 @@ export const logic = {
     createMany,
     removeMany,
     renameTag,
+    /** Annotations' own headings: deleted with them, named, added to a note's annotations that have none. */
+    removeWithHeading,
+    removeManyWithHeadings,
+    headingFor,
+    renameHeading,
+    addHeadings,
     /** Hypothesis JSON in and out of a note. */
     importHypothesis,
     exportHypothesis,

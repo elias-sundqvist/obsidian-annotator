@@ -120,6 +120,26 @@ test('nothing is folded outside Live Preview or with the setting off, and the se
     assert.equal(state.doc.toString(), text, 'the text is what it was');
 });
 
+test('annotations with headings of their own (the line above each) fold as before, and the headings are never folded', async () => {
+    const { createUnder } = await import('./.generated/codec.mjs');
+    const quoted = (id, exact) => ({ id, uri: 'urn:x-pdf:paper', text: `note ${id}`, tags: [], target: [{ source: 'urn:x-pdf:paper', selector: [{ type: 'TextQuoteSelector', exact }] }] });
+    for (const nl of ['\n', '\r\n']) {
+        const text = ['ha1', 'hb2', 'hc3'].reduce((source, id, n) => createUnder(source, quoted(id, ['First passage', 'Second passage', 'Third passage'][n]), {}, '## Highlights', { level: 3, keep: ['## Highlights'] }), `# Paper${nl}${nl}## Highlights${nl}${nl}## Thoughts${nl}${nl}Mine.${nl}`);
+        const found = foldedBlocks(text), headings = ['### First passage', '### Second passage', '### Third passage'].map(line => ({ from: text.indexOf(line), to: text.indexOf(line) + line.length }));
+        assert.deepEqual(found.map(item => item.id), (await readAll(text)).map(row => row.id)); assert.deepEqual(found.map(item => item.id), ['ha1', 'hb2', 'hc3']);
+        assert.ok(headings.every(range => range.from >= 0), nl);
+        // Each annotation starts after its heading and the blank line; no fold, folded or opened, reaches a heading.
+        found.forEach((item, at) => assert.ok(item.from > headings[at].to && (at === 0 || headings[at].from > found[at - 1].to)));
+        const field = foldingField(() => true), state = EditorState.create({ doc: text, selection: { anchor: 0 }, extensions: [LIVE, field] });
+        // The editor keeps its text with one kind of line end, so the headings are looked for in its text.
+        const doc = state.doc.toString(), shown = ['### First passage', '### Second passage', '### Third passage'].map(line => ({ from: doc.indexOf(line), to: doc.indexOf(line) + line.length }));
+        const folded = marks(state.field(field)); assert.equal(folded.length, every(found).length);
+        for (const [from, to] of folded) assert.ok(shown.every(range => range.from >= 0 && (to <= range.from || from >= range.to)), `${from}-${to}`);
+        // The cursor on a heading opens nothing: it is prose.
+        assert.equal(marks(EditorState.create({ doc: text, selection: { anchor: shown[1].from + 4 }, extensions: [LIVE, field] }).field(field)).length, folded.length);
+    }
+});
+
 test('a long note: folding two thousand annotations, and moving through them, stays quick', () => {
     const parts = []; for (let at = 0; at < 2000; at++) parts.push(block(`id${String(at).padStart(6, '0')}`));
     const text = note('\n', ...parts), field = foldingField(() => true);

@@ -63,6 +63,43 @@ before the next heading of the same or a higher level, in the order they
 were made. A note that has no such heading gets it at its end. Annotations
 already in a note stay where they are.
 
+### A heading for each annotation
+
+Turn on **Give each annotation a heading** and each new annotation gets a
+heading of its own, the first words of its passage (or of its note, for a
+page note), on the line above it:
+
+```markdown
+### Attention is all you need
+
+>%%
+>```annotation-json
+…
+^d0c2a8e1
+```
+
+It is an ordinary heading: the Outline lists it, it folds, and
+`[[Paper notes#Attention is all you need]]` links to it, for a map of
+content or another plugin that reads headings. Two annotations with the same
+first words get `(2)`, `(3)`. Rename a heading with **Rename heading…** in
+the menu of the annotation's card or highlight, or edit it in the note.
+Deleting an annotation deletes its heading, and Undo brings both back.
+Annotator's own links to an annotation (`#^d0c2a8e1`) are as before. For a
+note written before, the command **Add headings to this note's
+annotations** gives a heading to each annotation that has none, and changes
+nothing else.
+
+A heading of the chosen level (**Level of annotation headings**, `###` by
+default) directly above an annotation, with only blank lines between, is
+taken to be that annotation's; the headings named in **Write new
+annotations under this heading** and **New annotation notes start with**
+never are. So choose a level that your own headings just above annotations
+do not use. With the setting off, headings are left alone: an annotation is
+deleted without the heading above it. The headings are plain text between
+the annotations, so Annotator 0.2 and every version since read, edit and
+delete the annotations as before (they leave a deleted annotation's heading
+in place).
+
 The `annotation-target` may be written in any of the usual ways:
 
 | Written as | Example |
