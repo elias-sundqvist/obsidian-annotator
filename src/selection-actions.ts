@@ -14,7 +14,8 @@ function editingContext(target: EventTarget | null): boolean {
     return element.ownerDocument.designMode?.toLowerCase() === 'on';
 }
 /** Selection is retained as source data; clicking these actions cannot collapse it. */
-export type SelectionAction = 'annotate' | 'highlight';
+/** `highlight-link` highlights and copies the new annotation's link, for pasting into a note in one step. */
+export type SelectionAction = 'annotate' | 'highlight' | 'highlight-link';
 export interface SelectionInkState {
     ink: Ink;
     labels?: InkLabels;
@@ -100,8 +101,10 @@ export class SelectionActions {
             } else {
                 button.setAttribute('aria-label', `Highlight in ${name} (${index + 1})`);
             }
+            // With Shift, the highlight's link is copied as well.
+            button.setAttribute('aria-description', 'Shift-click to highlight and copy its link.');
             button.onpointerdown = event => event.preventDefault();
-            button.onclick = () => this.run('highlight', ink);
+            button.onclick = event => this.run(event.shiftKey ? 'highlight-link' : 'highlight', ink);
             swatches.appendChild(button);
         }
         const note = this.document.createElement('button');
@@ -159,12 +162,19 @@ export class SelectionActions {
         )
             return;
         const key = event.key.toLowerCase(),
-            ink = /^[1-9]$/.test(key) ? inkAt(Number(key)) || undefined : undefined;
+            // With Shift a number key gives its symbol ("!"), so the key's place is read instead.
+            digit = /^[1-9]$/.test(key) ? key : /^(?:Digit|Numpad)([1-9])$/.exec(event.code || '')?.[1],
+            ink = digit ? inkAt(Number(digit)) || undefined : undefined;
         if (event.key === 'Escape') this.hide();
-        else if (key === 'a' || key === 'h' || ink) {
+        else if (key === 'a' && !event.shiftKey) {
             event.preventDefault();
             event.stopPropagation();
-            this.run(key === 'a' ? 'annotate' : 'highlight', ink);
+            this.run('annotate');
+        } else if (key === 'h' || ink) {
+            event.preventDefault();
+            event.stopPropagation();
+            // Shift+H, Shift+1–6: highlight and copy its link.
+            this.run(event.shiftKey ? 'highlight-link' : 'highlight', ink);
         }
     };
     // The bar is placed once, beside the selection, so it goes when the selection moves under it: when the

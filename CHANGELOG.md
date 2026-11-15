@@ -5,6 +5,9 @@ What changed for someone using Annotator. How to use each thing is in
 
 ## Unreleased
 
+- Highlight and copy its link in one step: `Shift+H`, `Shift+1`–`6` or a
+  Shift-click on a colour in the selection bar, or the command **Highlight
+  selection and copy its link**. The link is ready to paste into a note.
 - New annotations can be written under a heading of your choosing (setting
   **Write new annotations under this heading**, for example
   `## Highlights`), so your own prose after that section stays after them.

@@ -126,6 +126,10 @@ Select text. A small bar appears with six inks and **Note**.
 
 - A colour highlights the passage. `H` highlights in the last colour used,
   `1`–`6` pick a colour, `A` opens a note on the passage.
+- To quote a passage in a note you are writing, hold `Shift`: `Shift+H`,
+  `Shift+1`–`6` or a Shift-click on a colour highlights it and copies the
+  highlight's link, ready to paste. The command **Highlight selection and
+  copy its link** does the same and can be given a hotkey.
 - A note is written in Obsidian's own editor: links, tags, lists and
   formatting work as in any note. `Ctrl/Cmd+Enter` saves, `Escape` cancels.
 - A selection may run over a page break in a PDF; it is one highlight.
@@ -636,7 +640,7 @@ each with its own annotations.
 
 | Where | Keys |
 | --- | --- |
-| Text selected | `H` highlight, `1`–`6` ink, `A` note |
+| Text selected | `H` highlight, `1`–`6` ink, `A` note; with `Shift`, highlight and copy its link |
 | Writing a note | `Ctrl/Cmd+Enter` save, `Escape` cancel |
 | Marking an area | `Enter` place or keep, arrows move, `Shift`+arrows resize, `Escape` leave |
 | A saved area, focused | arrows move, `Shift`+arrows resize, `Alt` for fine steps |

@@ -93,6 +93,26 @@ test('a new highlight remembers its ink and the choice persists', async () => {
     } finally { h.dispose(); }
 });
 
+test('highlight and copy its link: the link of the highlight just made, and nothing when none was made', async () => {
+    const h = await collection([quoted('a', 'Passage')]);
+    try {
+        const copied = [], capture = { file: h.file.path, exact: 'New passage', revision: 'r' };
+        h.plugin.copyAnnotationLink = async (_file, row) => { copied.push(row.id); };
+        // A save that makes a highlight, one that is refused, and one that leaves an older annotation selected.
+        let outcome = 'made', serial = 0;
+        h.plugin.save = async function () {
+            if (outcome === 'made') { const row = quoted(`new${++serial}`, 'New passage'); this.notes.get(h.file.path).records.push(row); this.editing = { file: h.file.path, annotation: row }; }
+            else if (outcome === 'older') this.editing = { file: h.file.path, annotation: this.notes.get(h.file.path).records[0] };
+        };
+        await h.plugin.beginCapture(capture, 'highlight-link'); assert.deepEqual(copied, ['new1']);
+        await h.plugin.beginCapture(capture, 'highlight'); assert.deepEqual(copied, ['new1'], 'a plain highlight copies nothing');
+        outcome = 'refused'; await h.plugin.beginCapture(capture, 'highlight-link'); assert.deepEqual(copied, ['new1']);
+        outcome = 'older'; await h.plugin.beginCapture(capture, 'highlight-link'); assert.deepEqual(copied, ['new1']);
+        // The command is there for a hotkey.
+        assert.ok(h.plugin.commands.some(command => command.id === 'highlight-selection-copy-link' && command.name === 'Highlight selection and copy its link'));
+    } finally { h.dispose(); }
+});
+
 test('the sidebar groups passages under section headings, shows an ink legend and filters by ink', async () => {
     const h = await collection([quoted('p1', 'One', { color: 'blue' }), quoted('p2', 'Two'), quoted('p3', 'Three', { color: 'blue', text: 'With a note' }), { id: 'n', uri: 'urn:x-pdf:draft', text: 'A page note', tags: [], target: [{ source: 'urn:x-pdf:draft' }] }]);
     try {
@@ -198,6 +218,10 @@ test('the selection bar offers every ink; the remembered ink is the highlight ac
         swatches[4].click(); assert.deepEqual(chosen.pop(), ['highlight', 'blue']); assert.equal(w.document.querySelector('[role=toolbar]'), null);
         open(); w.document.querySelector('[aria-label="Annotate selection (a)"]').click(); assert.deepEqual(chosen.pop(), ['annotate', undefined]);
         for (const [key, expected] of [['h', ['highlight', undefined]], ['a', ['annotate', undefined]], ['1', ['highlight', 'yellow']], ['6', ['highlight', 'green']]]) { open(); w.document.dispatchEvent(new w.KeyboardEvent('keydown', { key, bubbles: true })); assert.deepEqual(chosen.pop(), expected); }
+        // With Shift: highlight and copy its link. A number key under Shift gives its symbol, so its place is read.
+        for (const [init, expected] of [[{ key: 'H', shiftKey: true }, ['highlight-link', undefined]], [{ key: '!', code: 'Digit1', shiftKey: true }, ['highlight-link', 'yellow']], [{ key: '^', code: 'Digit6', shiftKey: true }, ['highlight-link', 'green']], [{ key: '5', code: 'Numpad5', shiftKey: true }, ['highlight-link', 'blue']]]) { open(); w.document.dispatchEvent(new w.KeyboardEvent('keydown', { ...init, bubbles: true })); assert.deepEqual(chosen.pop(), expected, JSON.stringify(init)); }
+        open(); w.document.querySelectorAll('[role=toolbar] .annotator-ink-swatch')[2].dispatchEvent(new w.MouseEvent('click', { shiftKey: true, bubbles: true })); assert.deepEqual(chosen.pop(), ['highlight-link', 'pink']);
+        open(); w.document.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'A', shiftKey: true, bubbles: true })); assert.equal(chosen.length, 0, 'Shift+A is not a note');
         open(); for (const key of ['7', '0', 'x']) w.document.dispatchEvent(new w.KeyboardEvent('keydown', { key, bubbles: true }));
         assert.equal(chosen.length, 0); assert.ok(w.document.querySelector('[role=toolbar]'), 'unassigned keys leave the bar open');
     } finally { actions.dispose(); w.close(); }

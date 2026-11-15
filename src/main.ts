@@ -114,7 +114,7 @@ import {
 import { AnnotationView } from './sidebar';
 import { CitationsView, CITATIONS_VIEW } from './citations-view';
 import type { CiteLogic } from './pdf-citations';
-import { SelectionActions } from './selection-actions';
+import { SelectionActions, type SelectionAction } from './selection-actions';
 import { installAnnotationLinks } from './link-navigation';
 import {
     remoteKind,
@@ -668,6 +668,13 @@ export default class AnnotatorPlugin extends Plugin {
                     void this.captureLast('highlight', ink);
                 }
             });
+        this.addCommand({
+            id: 'highlight-selection-copy-link',
+            name: 'Highlight selection and copy its link',
+            callback: () => {
+                void this.captureLast('highlight-link');
+            }
+        });
         this.addCommand({
             id: 'next-annotation',
             name: 'Go to next annotation',
@@ -2053,7 +2060,7 @@ export default class AnnotatorPlugin extends Plugin {
         this.notes.set(pdf, { note, records: [] });
         return note;
     }
-    async captureLast(action: 'annotate' | 'highlight' = 'annotate', ink?: Ink) {
+    async captureLast(action: SelectionAction = 'annotate', ink?: Ink) {
         const active = this.app.workspace.getMostRecentLeaf()?.view;
         const view = active && this.sourceKey(active) ? active : this.lastSource;
         const key = view && this.sourceKey(view),
@@ -2228,7 +2235,7 @@ export default class AnnotatorPlugin extends Plugin {
         this.summary = summaryOptions(value);
         await this.persist();
     }
-    async beginCapture(capture: Capture, action: 'annotate' | 'highlight', ink?: Ink) {
+    async beginCapture(capture: Capture, action: SelectionAction, ink?: Ink) {
         if (this.busy || this.stopped) return;
         this.selectionActions?.hide();
         this.preserveEdit();
@@ -2261,13 +2268,19 @@ export default class AnnotatorPlugin extends Plugin {
         this.tagInput = '';
         this.draft = null;
         this.editMode = true;
-        if (action === 'highlight') {
+        if (action === 'highlight' || action === 'highlight-link') {
+            const known = new Set((this.notes.get(capture.file)?.records || []).map(row => row.id));
             this.quietSelect++;
             try {
                 await this.save();
             } finally {
                 this.quietSelect--;
             }
+            // The link is copied only for the highlight this made: a save that was refused leaves nothing to link to.
+            // `save` has set what is selected since: read it afresh, not as it stood above.
+            const made = this.editing as AnnotatorPlugin['editing'];
+            if (action === 'highlight-link' && made && made.file === capture.file && !known.has(made.annotation.id))
+                await this.copyAnnotationLink(made.file, made.annotation).catch(error => this.fail(error));
         }
         // A note is written beside its passage when that is possible; the sidebar is opened only when it hosts the composer.
         else {
