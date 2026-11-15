@@ -51,6 +51,11 @@ export function selectionKeys(raw: unknown): SelectionKeys {
     }
     return keys;
 }
+/** A key as it is named to the reader, on a keyboard's key cap: a letter in capitals ("H"), anything else as it is. */
+export function keyLabel(key: string): string {
+    const upper = key.toUpperCase();
+    return Array.from(upper).length === 1 ? upper : key;
+}
 /** Whether a key press is this key, with or without Shift (a letter under Shift is its capital). */
 export function pressed(event: { key: string }, key: string): boolean {
     return keyOf(event.key) === keyOf(key);

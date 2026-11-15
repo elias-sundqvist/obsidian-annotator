@@ -26,6 +26,7 @@ import { MARK_STYLES, STYLE_NAMES, styleIcon, styleOf } from './mark-style';
 import { createCommentEditor, type CommentEditor } from './rich-editor';
 import { displayTitle } from './library';
 import { describePages } from './page-ranges';
+import { keyLabel } from './selection-keys';
 // @ts-expect-error The proofs' JavaScript wrappers carry no type declarations.
 import { arrange, tabs as partitionTabs } from '../proofs/reader.mjs';
 
@@ -2105,9 +2106,11 @@ export class AnnotationView extends ItemView {
         hint.createEl('span', {
             text: 'Pick a colour from the bar that appears, or choose Note to write about the passage. From the keyboard: '
         });
-        hint.createEl('kbd', { text: 'H' });
+        // The keys chosen under "Keys on a selection", as the bar's keys are named.
+        const keys = this.plugin.selectionKeys;
+        hint.createEl('kbd', { text: keyLabel(keys.mark) });
         hint.createEl('span', { text: ' to highlight, ' });
-        hint.createEl('kbd', { text: 'A' });
+        hint.createEl('kbd', { text: keyLabel(keys.note) });
         hint.createEl('span', { text: ' to add a note, or ' });
         hint.createEl('kbd', { text: '1' });
         hint.createEl('span', { text: '–' });

@@ -860,6 +860,19 @@ test('a source with no selectable text says so in the empty sidebar and offers w
         buttons[0].click(); buttons[1].click(); buttons[2].click(); assert.deepEqual(started, [['area', h.file.path], ['draw', h.file.path], ['text', h.file.path]]);
     } finally { h.dispose(); }
 });
+test('the empty sidebar names the keys chosen under "Keys on a selection", not the first ones', async () => {
+    const h = await collection([]);
+    try {
+        const keys = content => [...content.querySelectorAll('.annotator-empty-hint kbd')].map(key => key.textContent);
+        assert.deepEqual(keys(h.sidebar().content), ['H', 'A', '1', '6']);
+        assert.equal(await h.plugin.setSelectionKey('mark', 'm'), null); assert.equal(await h.plugin.setSelectionKey('note', ';'), null);
+        const { content } = h.sidebar();
+        assert.deepEqual(keys(content), ['M', ';', '1', '6']);
+        assert.match(content.querySelector('.annotator-empty-hint').textContent, /From the keyboard: M to highlight, ; to add a note, or 1–6 for a colour\./);
+        const { keyLabel } = await import('./.generated/readers/selection-keys.js');
+        assert.deepEqual(['h', 'é', 'ß', '/'].map(keyLabel), ['H', 'É', 'ß', '/'], 'a letter in capitals, unless its capital is more than one letter');
+    } finally { h.dispose(); }
+});
 test('a changed drawing is rewritten in place: its strokes, its region and its ink, and nothing else of its note; with nothing left it is deleted and can be brought back', async () => {
     const svg = d => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 6120 7920"><path d="${d}" fill="none" stroke-width="25" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
     const sketch = { id: 'sketch', uri: 'urn:x-pdf:draft', text: 'See the *curve* here', tags: ['figure'], target: [{ source: 'urn:x-pdf:draft', selector: [{ type: 'FragmentSelector', conformsTo: 'http://www.w3.org/TR/media-frags/', value: 'page=1&xywh=percent:9.8,19.84,40.4,40.32' }, { type: 'SvgSelector', value: svg('M612 1584L3060 4752') }] }] };
