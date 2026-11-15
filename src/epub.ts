@@ -16,7 +16,7 @@ import {
 } from './dom-source';
 import { matcher, matchPattern, type MatchOptions, type Occurrence, type Occurrences } from './every-match';
 import { fileRevision, type ReaderCallbacks, type SourceCapture, type SourceIdentity } from './source';
-import { openPublication, archivePath, type Publication } from './epub-book';
+import { openPublication, archivePath, fictionBookName, type Publication } from './epub-book';
 import { EpubResolver, publicationSections } from './epub-resolver';
 import { ReadingAxis } from './epub-flow';
 import { domRange, indexLayer } from './anchors';
@@ -212,7 +212,7 @@ export class EpubView extends FileView {
         return 'book-open';
     }
     getDisplayText() {
-        return this.book?.title || this.file?.basename || 'EPUB';
+        return this.book?.title || this.file?.basename || 'Book';
     }
     async onLoadFile(file: TFile) {
         this.opened = false;
@@ -232,10 +232,15 @@ export class EpubView extends FileView {
         this.history = [];
         this.contentEl.empty();
         this.contentEl.addClass('annotator-publication', 'annotator-epub-reader');
-        this.statusEl = this.contentEl.createEl('p', { text: 'Opening EPUB…' });
+        // A FictionBook is read by its own converter, which is loaded when the first one is opened; from there on it is a book like any other.
+        const fictionBook = fictionBookName(file.path);
+        this.statusEl = this.contentEl.createEl('p', { text: 'Opening book…' });
         try {
             const revision = fileRevision(file),
-                book = await openPublication(await this.app.vault.readBinary(file), this.contentEl.ownerDocument);
+                bytes = await this.app.vault.readBinary(file),
+                book = fictionBook
+                    ? await (await import('./fb2-book')).openFictionBook(bytes, this.contentEl.ownerDocument)
+                    : await openPublication(bytes, this.contentEl.ownerDocument);
             if (epoch !== this.epoch || this.stopped || fileRevision(file) !== revision) return;
             const sections = await publicationSections(
                 book,
@@ -383,11 +388,11 @@ export class EpubView extends FileView {
     private buildToolbar(book: Publication) {
         const toolbar = this.contentEl.createDiv({
             cls: 'annotator-book-toolbar',
-            attr: { 'aria-label': 'EPUB reader controls' }
+            attr: { 'aria-label': 'Book reader controls' }
         });
         const primary = toolbar.createDiv({
             cls: 'annotator-book-primary',
-            attr: { role: 'group', 'aria-label': 'EPUB navigation' }
+            attr: { role: 'group', 'aria-label': 'Book navigation' }
         });
         const icon = (label: string, name: string, action: () => void, cls = '') => {
             const button = primary.createEl('button', {

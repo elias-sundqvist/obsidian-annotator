@@ -2017,7 +2017,7 @@ export class AnnotationView extends ItemView {
             empty.createDiv({ cls: 'annotator-empty-title', text: 'Nothing open to annotate' });
             empty.createDiv({
                 cls: 'annotator-empty-hint',
-                text: 'Open a PDF, EPUB, saved web page or video note and its annotations appear here.'
+                text: 'Open a PDF, a book, a saved web page or a video note and its annotations appear here.'
             });
             return;
         }

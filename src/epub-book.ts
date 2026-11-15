@@ -57,6 +57,10 @@ export interface Publication {
     font?(path: string): Promise<Uint8Array | null>;
     image(path: string): Promise<{ bytes: Uint8Array; mime: string } | null>;
 }
+/** Whether a file's name says it is a FictionBook 2 book: `.fb2`, or zipped as `.fb2.zip` or `.fbz`. */
+export function fictionBookName(name: string): boolean {
+    return /\.(?:fb2|fbz|fb2\.zip)$/i.test(name);
+}
 export function archivePath(base: string, href: string): { path: string; fragment: string } {
     if (/^[a-z][\w+.-]*:|^\/\//i.test(href)) throw new Error('External archive reference');
     const [location, fragment = ''] = href.split('#', 2),
@@ -78,7 +82,7 @@ function decode(bytes: Uint8Array): string {
         bytes[0] === 255 && bytes[1] === 254 ? 'utf-16le' : bytes[0] === 254 && bytes[1] === 255 ? 'utf-16be' : 'utf-8';
     return new TextDecoder(encoding, { fatal: true }).decode(bytes);
 }
-async function bounded(entry: JSZip.JSZipObject | null, max: number): Promise<Uint8Array> {
+export async function bounded(entry: JSZip.JSZipObject | null, max: number): Promise<Uint8Array> {
     if (!entry) throw new Error('Missing EPUB resource');
     return new Promise((resolve, reject) => {
         const chunks: Uint8Array[] = [];
@@ -385,16 +389,7 @@ export async function openPublication(bytes: ArrayBuffer, doc: Document): Promis
             const entry = zip.file(path);
             if (!entry) return null;
             const data = await bounded(entry, 12 * 1024 * 1024);
-            const mime =
-                data[0] === 137 && data[1] === 80 && data[2] === 78 && data[3] === 71
-                    ? 'image/png'
-                    : data[0] === 255 && data[1] === 216
-                      ? 'image/jpeg'
-                      : decodeAscii(data.slice(0, 3)) === 'GIF'
-                        ? 'image/gif'
-                        : decodeAscii(data.slice(0, 4)) === 'RIFF' && decodeAscii(data.slice(8, 12)) === 'WEBP'
-                          ? 'image/webp'
-                          : null;
+            const mime = pictureMime(data);
             if (mime) return { bytes: data, mime };
             if (mediaTypes.get(path) === 'image/svg+xml' || /\.svg$/i.test(path)) {
                 const safe = passiveSvgImage(decode(data), doc);
@@ -405,6 +400,18 @@ export async function openPublication(bytes: ArrayBuffer, doc: Document): Promis
     };
 }
 const decodeAscii = (bytes: Uint8Array) => String.fromCharCode(...bytes);
+/** What kind of picture the bytes are, by how they begin; null for anything that is not a PNG, JPEG, GIF or WebP. */
+export function pictureMime(data: Uint8Array): string | null {
+    return data[0] === 137 && data[1] === 80 && data[2] === 78 && data[3] === 71
+        ? 'image/png'
+        : data[0] === 255 && data[1] === 216
+          ? 'image/jpeg'
+          : decodeAscii(data.slice(0, 3)) === 'GIF'
+            ? 'image/gif'
+            : decodeAscii(data.slice(0, 4)) === 'RIFF' && decodeAscii(data.slice(8, 12)) === 'WEBP'
+              ? 'image/webp'
+              : null;
+}
 export function chapterUri(chapter: Chapter, location?: Pick<Location, 'origin' | 'pathname'> | null): string {
     // Use the live Location origin (including Electron's registered app scheme),
     // not a URL parser's interpretation of a custom-scheme origin. Exclude the

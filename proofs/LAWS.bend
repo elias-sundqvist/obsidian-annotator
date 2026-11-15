@@ -1,4 +1,5 @@
 import ./citations.bend as Cite
+import ./chapters.bend as Chapters
 import ./book.bend as Book
 import ./stroke.bend as Stroke
 import ./area.bend as Area
@@ -1738,3 +1739,25 @@ law cite_name_stem:
 law cite_name_bytes:
   for +text: String
   {Nat.is_le(Cite.bytes(Cite.name(text)), 180n) == True{} : Bool}
+
+# ── A book's pieces gathered into chapters ──────────────────────────────────
+# Spread out again, the chapters are the row of pieces as it was: no piece is
+# dropped, none is there twice, and none has changed places with another.
+law chapters_keep:
+  for +row: List<&2, Chapters.Piece>
+  {Chapters.spread(Chapters.gather(row)) == row : List<&2, Chapters.Piece>}
+
+# There are as many chapters as there are pieces that open one. (A chapter is
+# one opening piece and the quiet pieces around it by its shape, so each
+# opening piece has its own chapter and each chapter its own opening piece.)
+law chapters_count:
+  for +row: List<&2, Chapters.Piece>
+  {Chapters.count(Chapters.gather(row)) == Chapters.opens(row) : Nat}
+
+# A long row may be read a stretch at a time, the later stretch first and the
+# earlier one onto it: that reads exactly what reading the whole row reads.
+law chapters_stretches:
+  for +early: List<&2, Chapters.Piece>
+  for +late: List<&2, Chapters.Piece>
+  for +start: Chapters.Scan
+  {Chapters.scan_onto(Chapters.join(early, late), start) == Chapters.scan_onto(early, Chapters.scan_onto(late, start)) : Chapters.Scan}

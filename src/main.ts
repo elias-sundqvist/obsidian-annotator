@@ -103,6 +103,7 @@ import {
 import {
     AnnotationSearch,
     LibrarySwitcher,
+    FictionBookSwitcher,
     MigrationModal,
     PromptModal,
     displayTitle,
@@ -126,6 +127,7 @@ import { annotationThreads } from './annotation-threads';
 import { compareLocations, defaultLocation } from './annotation-search';
 import { NativePdf } from './native-pdf';
 import { EpubView, EPUB_VIEW, type FigureCapture } from './epub';
+import { fictionBookName } from './epub-book';
 import { makeSnapshot, SnapshotHost } from './snapshot';
 import { refreshSnapshotEditors, snapshotEditorExtension } from './snapshot-editor';
 import { noteFolding, refold } from './note-folding';
@@ -635,6 +637,14 @@ export default class AnnotatorPlugin extends Plugin {
             return view;
         });
         this.registerExtensions(['epub'], EPUB_VIEW);
+        // FictionBook files open in the book reader too. Obsidian refuses an extension another plugin has already taken;
+        // the plugin must still start then, and such a book is opened from its menu (Annotate) or its annotation note.
+        for (const extension of ['fb2', 'fbz'])
+            try {
+                this.registerExtensions([extension], EPUB_VIEW);
+            } catch {
+                /* Another plugin opens these files by default. */
+            }
         this.registerView(VIDEO_VIEW, leaf => new VideoView(leaf, this.videoCallbacks()));
         // Side-by-side installs must not claim the old plugin's view.
         this.registerView(
@@ -685,7 +695,7 @@ export default class AnnotatorPlugin extends Plugin {
         });
         this.addCommand({
             id: 'toggle-reader-dark-appearance',
-            name: 'Toggle PDF and EPUB dark appearance',
+            name: 'Toggle PDF and book dark appearance',
             callback: () => {
                 const dark =
                     this.reader.theme === 'dark' ||
@@ -1025,15 +1035,13 @@ export default class AnnotatorPlugin extends Plugin {
         );
         this.registerEvent(
             this.app.workspace.on('file-menu', (menu, file) => {
-                if (file instanceof TFile && /^(pdf|epub)$/i.test(file.extension))
+                if (file instanceof TFile && (/^(pdf|epub)$/i.test(file.extension) || fictionBookName(file.path)))
                     menu.addItem(item =>
                         item
                             .setTitle('Annotate')
                             .setIcon('highlighter')
                             .onClick(() => {
-                                void this.app.workspace
-                                    .getLeaf(false)
-                                    .openFile(file)
+                                void this.openSourceFile(this.app.workspace.getLeaf(false), file)
                                     .then(() => this.openSidebar())
                                     .catch(error => this.fail(error));
                             })
@@ -1045,6 +1053,21 @@ export default class AnnotatorPlugin extends Plugin {
             name: 'Open annotated source…',
             callback: () => {
                 void this.openLibrary().catch(error => this.fail(error));
+            }
+        });
+        this.addCommand({
+            id: 'open-fictionbook',
+            name: 'Open a FictionBook (FB2) from this vault…',
+            callback: () => {
+                new FictionBookSwitcher(
+                    this.app,
+                    this.app.vault.getFiles().filter(file => fictionBookName(file.path)),
+                    file => {
+                        void this.openSourceFile(this.app.workspace.getLeaf(false), file)
+                            .then(() => this.openSidebar())
+                            .catch(error => this.fail(error));
+                    }
+                ).open();
             }
         });
         this.addCommand({
@@ -2232,7 +2255,7 @@ export default class AnnotatorPlugin extends Plugin {
         const key = view && this.sourceKey(view),
             host = key ? this.hostFor(key) : undefined;
         if (!host) {
-            new Notice('Open a PDF, EPUB, saved reading copy or core Web viewer first.');
+            new Notice('Open a PDF, a book, a saved reading copy or the core Web viewer first.');
             return;
         }
         try {
@@ -5987,7 +6010,7 @@ export default class AnnotatorPlugin extends Plugin {
         else {
             const source = this.app.vault.getAbstractFileByPath(key);
             if (!(source instanceof TFile)) throw new Error('Source is missing.');
-            await leaf.openFile(source, { active: shouldActivate() });
+            await this.openSourceFile(leaf, source, shouldActivate());
         }
         this.bindSources();
         if (shouldActivate()) {
@@ -6000,6 +6023,15 @@ export default class AnnotatorPlugin extends Plugin {
             if (!row) throw new Error('Annotation block was not found.');
             this.openAnnotation(context, row);
         }
+    }
+    /**
+     * Open a source file in a pane. A FictionBook is opened in the book reader by name: a zipped one ends in `.zip`,
+     * which is not the reader's to claim for every archive, and `.fb2` may be another plugin's by default.
+     */
+    private async openSourceFile(leaf: WorkspaceLeaf, file: TFile, active = true) {
+        if (fictionBookName(file.path))
+            await leaf.setViewState({ type: EPUB_VIEW, state: { file: file.path }, active });
+        else await leaf.openFile(file, { active });
     }
     /** A pane that already shows this source with this note's annotations, if there is one in the workspace. */
     private leafShowing(source: string, note: string): WorkspaceLeaf | null {
@@ -7186,7 +7218,7 @@ class NativeSettings extends PluginSettingTab {
         new Setting(root).setName('Reading').setHeading();
         new Setting(root)
             .setName('Page appearance')
-            .setDesc('For PDFs and EPUBs.')
+            .setDesc('For PDFs and books.')
             .addDropdown(control =>
                 control
                     .addOptions({ system: 'Follow Obsidian', light: 'Light', dark: 'Dark', sepia: 'Sepia' })
@@ -7195,7 +7227,7 @@ class NativeSettings extends PluginSettingTab {
                         save(plugin.setReader({ ...plugin.reader, theme: value as ReaderPreferences['theme'] }))
                     )
             );
-        new Setting(root).setName('EPUB layout').addDropdown(control =>
+        new Setting(root).setName('Book layout').addDropdown(control =>
             control
                 .addOptions({ scroll: 'Continuous scroll', pagination: 'Pages' })
                 .setValue(plugin.reader.readingMode)
@@ -7203,7 +7235,7 @@ class NativeSettings extends PluginSettingTab {
                     save(plugin.setReader({ ...plugin.reader, readingMode: value as ReaderPreferences['readingMode'] }))
                 )
         );
-        new Setting(root).setName('EPUB text size').addSlider(control =>
+        new Setting(root).setName('Book text size').addSlider(control =>
             control
                 .setLimits(50, 200, 5)
                 .setValue(plugin.reader.fontSize)

@@ -8,7 +8,7 @@ import { quoteOf } from './source';
  * One scan feeds the "open annotated source" switcher and the migration
  * check. It only reads; nothing is rewritten.
  */
-export type SourceKind = 'pdf' | 'epub' | 'web' | 'video' | 'other';
+export type SourceKind = 'pdf' | 'epub' | 'fb2' | 'web' | 'video' | 'other';
 export interface LibraryEntry {
     note: TFile;
     title: string;
@@ -35,6 +35,7 @@ export interface LibraryHost {
 function kindOf(raw: string, key: string | null, type: string | null): SourceKind {
     if (type === 'video' || key?.startsWith('video:')) return 'video';
     if (type === 'pdf' || /\.pdf(?:[?#]|$)/i.test(raw)) return 'pdf';
+    if (/\.(?:fb2|fbz|fb2\.zip)(?:[?#]|$)/i.test(raw)) return 'fb2';
     if (type === 'epub' || /\.epub(?:[?#]|$)/i.test(raw)) return 'epub';
     if (key?.startsWith('web:') || /^https?:/i.test(raw)) return 'web';
     return 'other';
@@ -42,6 +43,7 @@ function kindOf(raw: string, key: string | null, type: string | null): SourceKin
 export const KIND_ICON: Record<SourceKind, string> = {
     pdf: 'file-text',
     epub: 'book-open',
+    fb2: 'book-open',
     web: 'globe',
     video: 'play-circle',
     other: 'file'
@@ -49,6 +51,7 @@ export const KIND_ICON: Record<SourceKind, string> = {
 export const KIND_LABEL: Record<SourceKind, string> = {
     pdf: 'PDF',
     epub: 'EPUB',
+    fb2: 'FB2',
     web: 'Web page',
     video: 'Video',
     other: 'Source'
@@ -103,7 +106,7 @@ export function displayTitle(basename: string) {
     return (
         basename
             .replace(/(?:-[0-9a-f]{8})?\.md\.annotations$/i, '')
-            .replace(/\.(pdf|epub)\.annotations$/i, '')
+            .replace(/\.(pdf|epub|fb2\.zip|fb2|fbz)\.annotations$/i, '')
             .replace(/\.annotations$/i, '') || basename
     );
 }
@@ -111,6 +114,30 @@ const count = (value: number, noun: string) => `${value} ${noun}${value === 1 ? 
 const when = (time: number) =>
     new Date(time).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 
+/**
+ * Quick switcher over the FictionBook files of the vault. A zipped one ends in `.zip`, which Obsidian's file list
+ * does not show unless every file type is shown, so this is the way to it.
+ */
+export class FictionBookSwitcher extends FuzzySuggestModal<TFile> {
+    constructor(
+        app: App,
+        private books: TFile[],
+        private choose: (file: TFile) => void
+    ) {
+        super(app);
+        this.setPlaceholder('Open a FictionBook…');
+        this.emptyStateText = 'No FictionBook files (.fb2, .fb2.zip, .fbz) in this vault.';
+    }
+    getItems() {
+        return this.books;
+    }
+    getItemText(file: TFile) {
+        return file.path;
+    }
+    onChooseItem(file: TFile) {
+        this.choose(file);
+    }
+}
 /** Quick switcher over everything you have annotated. */
 export class LibrarySwitcher extends FuzzySuggestModal<LibraryEntry> {
     constructor(
@@ -124,7 +151,7 @@ export class LibrarySwitcher extends FuzzySuggestModal<LibraryEntry> {
             { command: '↵', purpose: 'open in the reader' },
             { command: 'esc', purpose: 'dismiss' }
         ]);
-        this.emptyStateText = 'Nothing annotated yet. Open a PDF or EPUB and select some text to begin.';
+        this.emptyStateText = 'Nothing annotated yet. Open a PDF or a book and select some text to begin.';
         this.modalEl?.addClass?.('annotator-library');
     }
     getItems() {
@@ -198,7 +225,7 @@ export class MigrationModal extends Modal {
                 );
                 verdict.createEl('span', {
                     text: !entries.length
-                        ? 'No annotation notes yet. Open a PDF or EPUB and select some text to begin.'
+                        ? 'No annotation notes yet. Open a PDF or a book and select some text to begin.'
                         : broken.length
                           ? `${count(readable.length, 'note')} ready. ${count(broken.length, 'note')} could not be read and ${broken.length === 1 ? 'was' : 'were'} left untouched.`
                           : 'Every annotation note is readable as it is. Nothing needs converting, and nothing has been changed.'
@@ -235,7 +262,7 @@ export class MigrationModal extends Modal {
                 new Setting(body)
                     .setName('Open annotation notes in the reader')
                     .setDesc(
-                        'Opening an annotation note shows its PDF, EPUB, page or video with highlights. Off, such notes open as ordinary Markdown.'
+                        'Opening an annotation note shows its PDF, book, page or video with highlights. Off, such notes open as ordinary Markdown.'
                     )
                     .addToggle(toggle =>
                         toggle.setValue(this.actions.autoOpen).onChange(value => {

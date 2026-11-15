@@ -3,7 +3,7 @@
 
 # Annotator
 
-Read and annotate PDFs, EPUB books, web pages and videos inside
+Read and annotate PDFs, books (EPUB and FB2), web pages and videos inside
 [Obsidian](https://obsidian.md), and keep what you mark as Markdown in your
 vault. Every annotation is a block in an ordinary note, so it links, embeds,
 searches and syncs like the rest of your notes.
@@ -431,7 +431,7 @@ keeps working beside it.
   for a figure or a table) becomes a marked area there, with its picture and
   the same note. One that lies off its page is left out.
 
-## Books (EPUB)
+## Books (EPUB and FB2)
 
 ![A book in the Pages layout: a page is turned, a sentence is highlighted, and the text is made larger from the reading controls](docs/book.gif)
 
@@ -461,6 +461,32 @@ turns, **Find**, **Keep a picture** and **Reading controls**.
   laid out again.
 
 The thin line at the bottom is how far you are through the book.
+
+### FictionBook (FB2)
+
+FictionBook files (`.fb2`, and zipped as `.fb2.zip` or `.fbz`) open in the
+same reader, with everything above. A FictionBook is one file of nested
+sections, so the reader makes the chapters: each section that has text of its
+own is a chapter, under the headings it stands in (a part, an act), and the
+book's own contents list is built from its titles. Its cover is the first
+page; footnotes are links to the notes at the end, and **Back** returns.
+Poems, epigraphs, citations and tables are set as the book marks them, in your
+theme's colours and the typeface you chose.
+
+- Obsidian does not show a `.fb2.zip` in its file list unless *Detect all file
+  extensions* is on. **Open a FictionBook (FB2) from this vault…** lists every
+  FictionBook in the vault, zipped or not.
+- If another plugin already opens `.fb2` files, Annotator leaves them to it;
+  **Annotate** in the file's menu, the command above and the book's annotation
+  note still open it here.
+- A book is known by the identifier its maker gave it, so a copy of the same
+  file downloaded again, or a newer version of it, finds its annotations. A
+  different library's file of the same work is a different book: its
+  annotations are kept but not shown on it.
+- Older Russian files written in windows-1251, KOI8-R and the like are read as
+  they declare. A file that is not well-formed XML is refused with the reason;
+  [Calibre](https://calibre-ebook.com) can repair it.
+- FB3 and MOBI are not read; Calibre converts them to EPUB.
 
 ## Videos and recordings
 
@@ -825,6 +851,11 @@ and the PDF export is read back with two independent PDF readers. See
   Obsidian 1.15.0. The recipes for Windows and Linux have not been run on
   those systems (the Linux script was run on macOS), and the menu entry
   after a share on Android has not been tried on a phone.
+- Annotator 0.2 does not open FictionBook (FB2) files; their annotation notes
+  are kept by it but not shown with the book.
+- A FictionBook whose sections are added to or taken out in a later version
+  finds its highlights by their words; a note on a whole chapter is then kept
+  and said to need checking rather than moved to another chapter.
 - iOS and iPadOS: the reader's own code has been run in iOS WebKit in the
   Simulator (selection, highlights, notes, drawing, books), not yet inside
   Obsidian for iOS on a device. YouTube may refuse to play there (its Error 153). The

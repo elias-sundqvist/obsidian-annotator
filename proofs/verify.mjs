@@ -177,6 +177,10 @@ for (const [name, file, oldCode, brokenCode] of [
     ["a title alone makes a note the work's note", 'citations.bend', "Bool.and(both(title, title2), Bool.and(both(year, year2), both(first, first2)))", "both(title, title2)"],
     ["a DOI that may be cut is taken as a key", 'citations.bend', "Bool.and(Bool.not(cut), Bool.and(Bool.not(cut2), both(doi, doi2)))", "both(doi, doi2)"],
     ["a source is added to cited-by a second time", 'citations.bend', "    case True{}:\n      list\n", "    case True{}:\n      append(list, [source])\n"],
+    ['words after a waiting heading overtake it into the chapter before', 'chapters.bend', 'Scan{Nil{}, Con{Waiting{id}, add(follows, waits)}, done}', 'Scan{follows, Con{Waiting{id}, waits}, done}'],
+    ['the pieces waiting when a chapter opens are dropped', 'chapters.bend', 'Con{Chapter{Nil{}, id, follows}, Con{Chapter{add(waits, lead), open, tail}, more}}', 'Con{Chapter{Nil{}, id, follows}, Con{Chapter{lead, open, tail}, more}}'],
+    ['the pieces before the first chapter are lost', 'chapters.bend', 'Chapters{Con{Chapter{add(follows, add(waits, lead)), open, tail}, more}}', 'Chapters{Con{Chapter{add(waits, lead), open, tail}, more}}'],
+    ['a stretch read onto what was read forgets it', 'chapters.bend', "    case Nil{}:\n      start\n    case Con{head, rest}:\n      step(head, scan_onto(rest, start))", "    case Nil{}:\n      Scan{Nil{}, Nil{}, Nil{}}\n    case Con{head, rest}:\n      step(head, scan_onto(rest, start))"],
 ]) {
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'annotator-bend-proof-'));
     try {
@@ -196,7 +200,7 @@ for (const [name, file, oldCode, brokenCode] of [
         fs.rmSync(temporary, { recursive: true, force: true });
     }
 }
-const tests = run(process.execPath, ['--import', loader, '--test', 'bridge.test.mjs', 'typed.test.mjs', 'video.test.mjs', 'video-document.test.mjs', 'reader.test.mjs', 'citations.test.mjs'], { timeout: 180000 });
+const tests = run(process.execPath, ['--import', loader, '--test', 'bridge.test.mjs', 'typed.test.mjs', 'video.test.mjs', 'video-document.test.mjs', 'reader.test.mjs', 'citations.test.mjs', 'chapters.test.mjs'], { timeout: 180000 });
 process.stdout.write(tests.stdout);
 process.stderr.write(tests.stderr);
 assert.equal(tests.status, 0, 'JavaScript bridge tests failed');
