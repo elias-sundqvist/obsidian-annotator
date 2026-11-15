@@ -24,3 +24,4 @@ export {foldingField, noteFolding, refold} from '../../src/note-folding';
 export {foldedBlocks} from '../../src/note-folds';
 export {EditorState, EditorSelection} from '@codemirror/state';
 export {CitationsView, CITATIONS_VIEW} from '../../src/citations-view';
+export {scanIntroduction, chosenPages, scanStanding} from '../../src/scan-dialog';

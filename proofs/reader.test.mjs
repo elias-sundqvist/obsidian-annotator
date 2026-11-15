@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { inkKey, inkShortcut, storedInk, recolorJson, tabs, arrange, exportBlock, exportTitle, importBlock, areaFit, areaValid, areaMove, areaResize, AREA_FULL, AREA_LEAST, spanShift } from './reader.mjs';
+import { inkKey, inkShortcut, storedInk, recolorJson, tabs, arrange, exportBlock, exportTitle, importBlock, areaFit, areaValid, areaMove, areaResize, AREA_FULL, AREA_LEAST, spanShift, scanWords, SCAN_MOST, SCAN_BOXES } from './reader.mjs';
 
 test('inks: stored keys, defaults and shortcuts', () => {
     for (const ink of ['yellow', 'orange', 'pink', 'purple', 'blue', 'green']) assert.equal(inkKey(ink), ink);
@@ -163,4 +163,41 @@ test('how far through a book: a character\'s place is exactly that character, in
     for (const chapter of [0, 1999, 2000, 2001, 4000, 7000, 7001, 9000]) assert.equal(bookBefore(long, chapter, 13), before(long, chapter, 13), String(chapter));
     for (const bad of [[[1.5], 0], [[-1], 0], [[3], 1.5], ['x', 0], [[3], -1]]) assert.equal(bookPlace(...bad), null);
     assert.equal(bookTotal([1, NaN]), null); assert.equal(bookBefore([3], 0.5, 0), null);
+});
+
+test('the words of a recogniser are sifted: believed and boxed words are kept in order, words on the page\'s own text are left out', () => {
+    const seen = [
+        { sure: 96, ax: 1000, ay: 1000, bx: 2000, by: 1200 },   // kept
+        { sure: 96, ax: 2000, ay: 1200, bx: 1000, by: 1000 },   // the same box from its other corners
+        { sure: 20, ax: 3000, ay: 1000, bx: 4000, by: 1200 },   // the recogniser hardly believes it
+        { sure: 96, ax: 5000, ay: 1000, bx: 5000, by: 1200 },   // no width: a rule, a speck
+        { sure: 96, ax: 9900, ay: 9900, bx: 12000, by: 12000 }, // held on the page
+        { sure: 96, ax: 20000, ay: 100, bx: 30000, by: 300 },   // wholly past the edge
+        { sure: 300, ax: 6000, ay: 1000, bx: 7000, by: 1200 }   // surer than sure is sure
+    ];
+    assert.deepEqual(scanWords(4, 60, seen), [
+        { index: 0, sure: 96, page: 4, x: 1000, y: 1000, w: 1000, h: 200 }, { index: 1, sure: 96, page: 4, x: 1000, y: 1000, w: 1000, h: 200 },
+        { index: 4, sure: 96, page: 4, x: 9900, y: 9900, w: 100, h: 100 }, { index: 6, sure: 100, page: 4, x: 6000, y: 1000, w: 1000, h: 200 }
+    ]);
+    assert.deepEqual(scanWords(4, 0, seen).map(word => word.index), [0, 1, 2, 4, 6], 'with no floor, only what has no box goes');
+    assert.deepEqual(scanWords(0, 60, seen), [], 'pages count from 1');
+    // A stamp the page has as text, over the first word and beside the last: a word whose middle lies on it is left out.
+    const stamp = [{ page: 4, x: 900, y: 950, w: 700, h: 300 }], beside = [{ page: 4, x: 7001, y: 900, w: 500, h: 400 }, { page: 4, x: 6000, y: 1101, w: 1000, h: 400 }];
+    assert.deepEqual(scanWords(4, 60, seen, stamp).map(word => word.index), [4, 6]);
+    assert.deepEqual(scanWords(4, 60, seen, beside).map(word => word.index), [0, 1, 4, 6], 'a box that only touches a word, beside or below its middle, does not take it');
+    assert.deepEqual(scanWords(4, 60, seen, [{ page: 4, x: 6500, y: 1100, w: 1, h: 1 }]).map(word => word.index), [0, 1, 4], 'a box on the very middle does');
+    for (const odd of [-1, 1.5, NaN, '3', null]) { assert.equal(scanWords(odd, 60, seen), null); assert.equal(scanWords(1, odd, seen), null); assert.equal(scanWords(1, 60, [{ ...seen[0], ax: odd }]), null); assert.equal(scanWords(1, 60, seen, [{ page: 1, x: odd, y: 0, w: 1, h: 1 }]), null); }
+    assert.equal(scanWords(1, 60, 'words'), null); assert.equal(scanWords(1, 60, [null]), null);
+    assert.equal(scanWords(1, 60, seen, Array.from({ length: SCAN_BOXES + 1 }, () => stamp[0])), null, 'a page with that much text of its own is not a scan');
+});
+test('a long page is sifted a stretch at a time and comes out as one: in order, each word judged alone, and never more than the most', () => {
+    const many = Array.from({ length: 1800 }, (_, i) => ({ sure: i % 7 ? 90 : 10, ax: (i % 90) * 100, ay: Math.floor(i / 90) * 400, bx: (i % 90) * 100 + 80, by: Math.floor(i / 90) * 400 + 200 }));
+    const kept = scanWords(1, 50, many), boxes = Array.from({ length: SCAN_BOXES }, (_, i) => ({ page: 1, x: 0, y: (i % 20) * 400, w: 150, h: 200 }));
+    assert.deepEqual(kept.map(word => word.index), many.map((_, i) => i).filter(i => i % 7));
+    // Sifting a page is sifting its parts one after another (law scan_sift_append): any cut gives the same words.
+    for (const cut of [1, 499, 500, 501, 1234]) assert.deepEqual([...scanWords(1, 50, many.slice(0, cut)), ...scanWords(1, 50, many.slice(cut)).map(word => ({ ...word, index: word.index + cut }))], kept);
+    // The first two columns of every row lie on the page's own text (boxes 150 wide from the left edge).
+    assert.deepEqual(scanWords(1, 50, many, boxes).map(word => word.index), kept.map(word => word.index).filter(i => i % 90 > 1));
+    const flood = Array.from({ length: SCAN_MOST + 700 }, () => ({ sure: 90, ax: 10, ay: 10, bx: 500, by: 300 }));
+    const capped = scanWords(1, 50, flood); assert.equal(capped.length, SCAN_MOST); assert.equal(capped[capped.length - 1].index, SCAN_MOST - 1);
 });

@@ -61,13 +61,25 @@ const workerBuild = await build({ entryPoints: [`${SRC}/logic-worker.ts`], bundl
     nodePaths: [path.resolve('node_modules')], plugins: [bendPlugin], minify: true, metafile: true });
 const workerSource = workerBuild.outputFiles[0].text;
 await writeFile(`${OUT}/logic-worker.js`, workerSource);
+// The recogniser of scanned pages runs in a worker of its own, built the same way: its whole script, the engine's
+// JavaScript included, is text inside main.js, so no script is ever fetched. (The engine's WebAssembly and a
+// language's data are not part of the plugin; see src/scan-files.ts.) The engine's code asks where it was loaded
+// from, to find files beside itself; it is given a place that does not exist, and is handed its files as bytes.
+const scanBuild = await build({ entryPoints: [`${SRC}/scan-worker.ts`], bundle: true, write: false, format: 'iife', platform: 'browser', target: 'es2022',
+    nodePaths: [path.resolve('node_modules')], define: { 'import.meta.url': '"file:///annotator-recogniser/"' }, minify: true });
+const scanSource = scanBuild.outputFiles[0].text;
+await writeFile(`${OUT}/scan-worker.js`, scanSource);
+const scanPlugin = { name: 'scan-worker-source', setup(build) {
+    build.onResolve({ filter: /^scan-worker-source$/ }, () => ({ path: 'scan-worker-source', namespace: 'scan-worker-source' }));
+    build.onLoad({ filter: /.*/, namespace: 'scan-worker-source' }, () => ({ contents: `export default ${JSON.stringify(scanSource)};`, loader: 'js' }));
+} };
 const logicPlugin = { name: 'logic-worker-source', setup(build) {
     build.onResolve({ filter: /^logic-worker-source$/ }, () => ({ path: 'logic-worker-source', namespace: 'logic-worker-source' }));
     build.onLoad({ filter: /.*/, namespace: 'logic-worker-source' }, () => ({ contents: `export default ${JSON.stringify(workerSource)};`, loader: 'js' }));
 } };
 await build({ entryPoints: [`${SRC}/main.ts`], outfile: 'dist/main.js', bundle: true,
     format: 'cjs', platform: 'browser', target: 'es2022', external: ['obsidian', '@codemirror/state', '@codemirror/view', 'fs'], nodePaths: [path.resolve('node_modules')],
-    plugins: [bendPlugin, logicPlugin], minify: true, metafile: true }).then(async result => {
+    plugins: [bendPlugin, logicPlugin, scanPlugin], minify: true, metafile: true }).then(async result => {
     const forbidden = Object.keys(result.metafile.inputs).filter(file => /^test\//.test(file));
     if (forbidden.length) throw new Error(`The plugin's bundle includes test code: ${forbidden.join(', ')}`);
     // The rules for what is written into a note run in the worker (src/logic.ts) and nowhere else: the UI thread's
@@ -91,23 +103,23 @@ if (!process.argv.includes('--release')) {
         await copyFile(`test/compat/frozen/${name}`, `${OUT}/${name}`);
     }
 }
-await build({ entryPoints: [`${SUPPORT}/plugin.ts`], outfile: `${OUT}/plugin-boundary.mjs`, bundle: true, format: 'esm', platform: 'browser', target: 'es2022', alias: { obsidian: path.resolve(`${SUPPORT}/obsidian.ts`) }, external: ['fs'], nodePaths: [path.resolve('node_modules')], plugins: [bendPlugin, logicPlugin] });
-await build({ entryPoints: [`${SUPPORT}/plugin.ts`], outfile: `${OUT}/plugin-boundary.cjs`, bundle: true, format: 'cjs', platform: 'browser', target: 'es2022', alias: { obsidian: path.resolve(`${SUPPORT}/obsidian.ts`) }, external: ['fs'], nodePaths: [path.resolve('node_modules')], plugins: [bendPlugin, logicPlugin] });
-await build({ entryPoints: [`${SRC}/epub.ts`], outfile: `${OUT}/epub-lifecycle.mjs`, bundle: true, format: 'esm', platform: 'browser', target: 'es2022', alias: { obsidian: path.resolve(`${SUPPORT}/obsidian.ts`) }, external: ['fs'], nodePaths: [path.resolve('node_modules')], plugins: [bendPlugin, logicPlugin] });
-await build({ entryPoints: [`${SUPPORT}/video-view.ts`], outfile: `${OUT}/video-view.mjs`, bundle: true, format: 'esm', platform: 'browser', target: 'es2022', alias: { obsidian: path.resolve(`${SUPPORT}/obsidian.ts`) }, nodePaths: [path.resolve('node_modules')], plugins: [bendPlugin, logicPlugin] });
-await build({ entryPoints: [`${SRC}/video-codec.ts`], outfile: `${OUT}/video-codec.mjs`, bundle: true, format: 'esm', platform: 'browser', target: 'es2022', plugins: [bendPlugin, logicPlugin] });
+await build({ entryPoints: [`${SUPPORT}/plugin.ts`], outfile: `${OUT}/plugin-boundary.mjs`, bundle: true, format: 'esm', platform: 'browser', target: 'es2022', alias: { obsidian: path.resolve(`${SUPPORT}/obsidian.ts`) }, external: ['fs'], nodePaths: [path.resolve('node_modules')], plugins: [bendPlugin, logicPlugin, scanPlugin] });
+await build({ entryPoints: [`${SUPPORT}/plugin.ts`], outfile: `${OUT}/plugin-boundary.cjs`, bundle: true, format: 'cjs', platform: 'browser', target: 'es2022', alias: { obsidian: path.resolve(`${SUPPORT}/obsidian.ts`) }, external: ['fs'], nodePaths: [path.resolve('node_modules')], plugins: [bendPlugin, logicPlugin, scanPlugin] });
+await build({ entryPoints: [`${SRC}/epub.ts`], outfile: `${OUT}/epub-lifecycle.mjs`, bundle: true, format: 'esm', platform: 'browser', target: 'es2022', alias: { obsidian: path.resolve(`${SUPPORT}/obsidian.ts`) }, external: ['fs'], nodePaths: [path.resolve('node_modules')], plugins: [bendPlugin, logicPlugin, scanPlugin] });
+await build({ entryPoints: [`${SUPPORT}/video-view.ts`], outfile: `${OUT}/video-view.mjs`, bundle: true, format: 'esm', platform: 'browser', target: 'es2022', alias: { obsidian: path.resolve(`${SUPPORT}/obsidian.ts`) }, nodePaths: [path.resolve('node_modules')], plugins: [bendPlugin, logicPlugin, scanPlugin] });
+await build({ entryPoints: [`${SRC}/video-codec.ts`], outfile: `${OUT}/video-codec.mjs`, bundle: true, format: 'esm', platform: 'browser', target: 'es2022', plugins: [bendPlugin, logicPlugin, scanPlugin] });
 await build({ entryPoints: [`${SRC}/codec.ts`], outfile: `${OUT}/codec.mjs`, bundle: true,
-    format: 'esm', platform: 'browser', target: 'es2022', plugins: [bendPlugin, logicPlugin], minify: true });
+    format: 'esm', platform: 'browser', target: 'es2022', plugins: [bendPlugin, logicPlugin, scanPlugin], minify: true });
 await build({ entryPoints: [`${SRC}/exchange.ts`], outfile: `${OUT}/exchange.mjs`, bundle: true,
-    format: 'esm', platform: 'browser', target: 'es2022', plugins: [bendPlugin, logicPlugin], minify: true });
-await build({ entryPoints: [`${SRC}/epub-svg.ts`, `${SRC}/epub-layout.ts`, `${SRC}/native-pdf.ts`, `${SRC}/area.ts`, `${SRC}/pdf-write.ts`, `${SRC}/pdf-export.ts`, `${SRC}/pdf-read.ts`, `${SRC}/pdf-import.ts`, `${SRC}/pdf-details.ts`, `${SRC}/note-template.ts`, `${SRC}/html-file.ts`, `${SRC}/drawing.ts`, `${SRC}/rest.ts`, `${SRC}/pdf-appearance.ts`, `${SRC}/publisher-conditions.ts`, `${SRC}/publisher-styles.ts`, `${SRC}/upgrade-backup.ts`, `${SRC}/dom-source.ts`, `${SRC}/markdown-map.ts`, `${SRC}/guest-agent.ts`, `${SRC}/epub-book.ts`, `${SRC}/web-snapshot.ts`, `${SRC}/epub-resolver.ts`, `${SRC}/selection-actions.ts`, `${SRC}/preferences.ts`, `${SRC}/html-selectors.ts`, `${SRC}/mark-actions.ts`, `${SRC}/remote-source.ts`, `${SRC}/link-navigation.ts`, `${SRC}/annotation-choices.ts`, `${SRC}/annotation-search.ts`, `${SRC}/remote-review.ts`, `${SRC}/drafts.ts`, `${SRC}/video-provider.ts`, `${SRC}/video-store.ts`, `${SRC}/collection-context.ts`, `${SRC}/collection-workspace.ts`, `${SRC}/embedded-video.ts`, `${SRC}/video-transcript.ts`, `${SRC}/local-source.ts`, `${SRC}/app-links.ts`, `${SRC}/selection-links.ts`, `${SRC}/shown-quote.ts`, `${SRC}/portable.ts`, `${SRC}/logic-host.ts`, `${SRC}/rewrite.ts`, `${SRC}/bytes.ts`, `${SRC}/progress.ts`, `${SRC}/pdf-text-memory.ts`, `${SRC}/web-fetch.ts`, `${SRC}/citations.ts`, `${SRC}/pdf-citations.ts`, `${SRC}/reference-note.ts`, `${SRC}/logic.ts`], outdir: `${OUT}/readers`, bundle: true,
-    format: 'esm', platform: 'browser', target: 'es2022', nodePaths: [path.resolve('node_modules')], external: ['fs'], plugins: [bendPlugin, logicPlugin] });
+    format: 'esm', platform: 'browser', target: 'es2022', plugins: [bendPlugin, logicPlugin, scanPlugin], minify: true });
+await build({ entryPoints: [`${SRC}/epub-svg.ts`, `${SRC}/epub-layout.ts`, `${SRC}/native-pdf.ts`, `${SRC}/area.ts`, `${SRC}/pdf-write.ts`, `${SRC}/pdf-searchable.ts`, `${SRC}/scan-words.ts`, `${SRC}/scan-files.ts`, `${SRC}/scan-read.ts`, `${SRC}/scan-manifest.ts`, `${SRC}/scan-run.ts`, `${SRC}/scan-pending.ts`, `${SRC}/scan-engine.ts`, `${SRC}/pdf-export.ts`, `${SRC}/pdf-read.ts`, `${SRC}/pdf-import.ts`, `${SRC}/pdf-details.ts`, `${SRC}/note-template.ts`, `${SRC}/html-file.ts`, `${SRC}/drawing.ts`, `${SRC}/rest.ts`, `${SRC}/pdf-appearance.ts`, `${SRC}/publisher-conditions.ts`, `${SRC}/publisher-styles.ts`, `${SRC}/upgrade-backup.ts`, `${SRC}/dom-source.ts`, `${SRC}/markdown-map.ts`, `${SRC}/guest-agent.ts`, `${SRC}/epub-book.ts`, `${SRC}/web-snapshot.ts`, `${SRC}/epub-resolver.ts`, `${SRC}/selection-actions.ts`, `${SRC}/preferences.ts`, `${SRC}/html-selectors.ts`, `${SRC}/mark-actions.ts`, `${SRC}/remote-source.ts`, `${SRC}/link-navigation.ts`, `${SRC}/annotation-choices.ts`, `${SRC}/annotation-search.ts`, `${SRC}/remote-review.ts`, `${SRC}/drafts.ts`, `${SRC}/video-provider.ts`, `${SRC}/video-store.ts`, `${SRC}/collection-context.ts`, `${SRC}/collection-workspace.ts`, `${SRC}/embedded-video.ts`, `${SRC}/video-transcript.ts`, `${SRC}/local-source.ts`, `${SRC}/portable.ts`, `${SRC}/logic-host.ts`, `${SRC}/rewrite.ts`, `${SRC}/bytes.ts`, `${SRC}/progress.ts`, `${SRC}/pdf-text-memory.ts`, `${SRC}/web-fetch.ts`, `${SRC}/app-links.ts`, `${SRC}/selection-links.ts`, `${SRC}/shown-quote.ts`, `${SRC}/citations.ts`, `${SRC}/pdf-citations.ts`, `${SRC}/reference-note.ts`, `${SRC}/logic.ts`], outdir: `${OUT}/readers`, bundle: true,
+    format: 'esm', platform: 'browser', target: 'es2022', nodePaths: [path.resolve('node_modules')], external: ['fs'], plugins: [bendPlugin, logicPlugin, scanPlugin] });
 await build({ entryPoints: [`${SRC}/epub.ts`, `${SRC}/snapshot.ts`, `${SRC}/live-web.ts`], outdir: `${OUT}/readers`, bundle: true,
-    format: 'esm', platform: 'browser', target: 'es2022', nodePaths: [path.resolve('node_modules')], external: ['obsidian'], plugins: [bendPlugin, logicPlugin] });
+    format: 'esm', platform: 'browser', target: 'es2022', nodePaths: [path.resolve('node_modules')], external: ['obsidian'], plugins: [bendPlugin, logicPlugin, scanPlugin] });
 for (const [name, file] of [
     ['native-pdf', `${SRC}/native-pdf.ts`],
 ]) await build({ entryPoints: [file], outfile: `${OUT}/${name}.mjs`, bundle: true,
-    format: 'esm', platform: 'browser', target: 'es2022', nodePaths: [path.resolve('node_modules')], plugins: [bendPlugin, logicPlugin] });
+    format: 'esm', platform: 'browser', target: 'es2022', nodePaths: [path.resolve('node_modules')], plugins: [bendPlugin, logicPlugin, scanPlugin] });
 }
 // The version is said in four places; a release with them out of step would be installed wrongly or not at all.
 {
@@ -122,5 +134,6 @@ for (const file of ['manifest.json', 'styles.css']) await copyFile(file, `dist/$
 
 await copyFile(`${SRC}/compat/ENTITIES_LICENSE.txt`, 'dist/ENTITIES_LICENSE.txt');
 await copyFile('node_modules/css-tree/LICENSE', 'dist/CSS_TREE_LICENSE.txt');
+await copyFile('node_modules/tesseract-wasm/LICENSE.md', 'dist/TESSERACT_WASM_LICENSE.txt');
 
 await copyFile('node_modules/mdn-data/LICENSE', 'dist/MDN_DATA_LICENSE.txt');

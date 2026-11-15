@@ -84,6 +84,36 @@ What still runs on the interface's thread, and what it costs:
 | Reading a PDF's own annotations; writing the annotated copy | 11–22 ms for 189 pages, 13 MB | Small, and the bytes would have to be copied across. |
 | A book's styles | about 25 ms for an ordinary book; two tasks of 0.15 s for a 445 kB stylesheet | The rules are matched against the book's pages, which only this thread can touch. |
 
+## Recognising text in scans
+
+Measured on 2026-11-14 with the recogniser this version uses (Tesseract as
+`tesseract-wasm` 0.11.0, English "best, integer" data), on a laptop with an
+Apple M5 Max. Inside Obsidian only the fixture's two pages were timed; a
+long document was not, and nothing was measured on Android.
+
+| | |
+| --- | ---: |
+| `main.js` with the recogniser's own script inside it | 1.51 MB (was 1.39 MB) |
+| Fetched on first use: the engine, and English | 1.84 MB, 2.95 MB |
+| Engine and English ready, in a browser worker | 0.08 s |
+| A full page of print (552 words) at 300 dots per inch | 6.6 s |
+| The same page at 200 and at 150 dots per inch | 6.1 s, 5.3 s |
+| Twenty such pages one after another | 6.9 s a page |
+| Memory in the engine for such a page, and after twenty | 96 MB, 96 MB |
+| Longest stretch the interface was held while a page was read | 15 ms |
+| The two scanned pages of the test fixture (80 and 45 words), in Node | 0.42 s, 0.22 s |
+| The same two pages through the whole path in iOS WebKit (Simulator) | 1.1 s for both |
+| The same two pages through the whole path in Obsidian 1.15.1 on the desktop | 1.3 s for both |
+
+Time goes with the number of words on a page, not with the size of its
+picture. The browser figures were taken in Chromium 156 with the window in
+the background, where a worker may be slowed; the same engine read the
+fixture's pages about twice as fast in Node. The full page is clean type
+drawn by the browser, so its 552 of 552 words right say that the engine
+works, not how it reads a poor scan. On the fixture's own pages, which are
+grainy and a little tilted, every word of both was read in order, with one
+speck taken for a full stop.
+
 ## How
 
 Desktop: Obsidian 1.13.7 on an Apple-silicon Mac, a test vault with notes

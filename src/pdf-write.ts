@@ -110,12 +110,12 @@ export type Value = number | boolean | null | Name | Ref | Uint8Array | Dict | L
 
 const WHITE = new Set([0, 9, 10, 12, 13, 32]),
     DELIMITER = new Set([40, 41, 60, 62, 91, 93, 123, 125, 47, 37]);
-const ascii = (text: string) => {
+export const ascii = (text: string) => {
     const out = new Uint8Array(text.length);
     for (let i = 0; i < text.length; i++) out[i] = text.charCodeAt(i) & 255;
     return out;
 };
-const latin = (bytes: Uint8Array, start = 0, end = bytes.length) => {
+export const latin = (bytes: Uint8Array, start = 0, end = bytes.length) => {
     let out = '';
     for (let i = start; i < end; i++) out += String.fromCharCode(bytes[i]);
     return out;
@@ -663,7 +663,7 @@ const num = (value: number) => {
     return text === '-0' ? '0' : text;
 };
 const pad = (value: number, width: number) => String(value).padStart(width, '0');
-const stamp = (date: Date) =>
+export const stamp = (date: Date) =>
     `D:${date.getUTCFullYear()}${pad(date.getUTCMonth() + 1, 2)}${pad(date.getUTCDate(), 2)}${pad(date.getUTCHours(), 2)}${pad(date.getUTCMinutes(), 2)}${pad(date.getUTCSeconds(), 2)}Z`;
 const channel = (value: number) => num(Math.max(0, Math.min(1, value)));
 const rgb = (color: Rgb) => `${channel(color[0])} ${channel(color[1])} ${channel(color[2])}`;
@@ -816,7 +816,7 @@ function noteObjects(note: PdfNote, page: PdfRef, next: () => number): { number:
     return out;
 }
 
-const concat = (parts: Uint8Array[]) => {
+export const concat = (parts: Uint8Array[]) => {
     const out = new Uint8Array(parts.reduce((total, part) => total + part.length, 0));
     let at = 0;
     for (const part of parts) {
@@ -843,10 +843,7 @@ export function annotatePdf(
     replaces?: (existing: Dict, file: PdfFile, page: number) => boolean
 ): Uint8Array {
     const file = new PdfFile(source);
-    let size = 0;
-    for (const number of file.entries.keys()) size = Math.max(size, number + 1);
-    const declared = file.trailer.get('Size');
-    if (typeof declared === 'number') size = Math.max(size, declared);
+    let size = freeNumber(file);
     const next = () => size++;
     const byPage = new Map<number, PdfNote[]>();
     for (const note of notes) {
@@ -854,7 +851,7 @@ export function annotatePdf(
         if (list) list.push(note);
         else byPage.set(note.page, [note]);
     }
-    const objects: { number: number; gen: number; body: Uint8Array }[] = [];
+    const objects: PdfObject[] = [];
     for (const [index, list] of [...byPage].sort((a, b) => a[0] - b[0])) {
         const ref = pages?.get(index) ?? file.pageRef(index),
             loaded = file.object(ref.num),
@@ -900,6 +897,28 @@ export function annotatePdf(
         objects.push({ number: ref.num, gen: loaded.gen, body: concat([...head, annots]) });
     }
     if (!objects.length) return source.slice();
+    return appendUpdate(file, source, objects, size);
+}
+
+/** One object of an update: its number, its generation, and what stands between `obj` and `endobj`. */
+export interface PdfObject {
+    number: number;
+    gen: number;
+    body: Uint8Array;
+}
+/** The first object number the file does not use. */
+export function freeNumber(file: PdfFile): number {
+    let size = 0;
+    for (const number of file.entries.keys()) size = Math.max(size, number + 1);
+    const declared = file.trailer.get('Size');
+    return typeof declared === 'number' ? Math.max(size, declared) : size;
+}
+/**
+ * `source` followed by an incremental update that holds `objects` (new ones, and new versions of ones the file has):
+ * the objects, then a cross-reference section of the same kind as the file's newest one, pointing back at it.
+ * `size` is the first object number still free after `objects`. Not one byte of `source` is changed.
+ */
+export function appendUpdate(file: PdfFile, source: Uint8Array, objects: PdfObject[], size: number): Uint8Array {
     // The update: objects, then a cross-reference section of the same kind as the file's newest one.
     const parts: Uint8Array[] = [];
     let length = source.length;
@@ -939,7 +958,7 @@ export function annotatePdf(
     const inherited = `${keep('Root')}${keep('Info')}${id}`,
         start = length - file.base;
     if (file.xrefStream) {
-        const self = next();
+        const self = size++;
         offsets.set(self, { offset: start, gen: 0 });
         const numbers = [...offsets.keys()].sort((a, b) => a - b),
             index: number[] = [],

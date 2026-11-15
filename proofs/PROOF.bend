@@ -2,6 +2,7 @@ import ./citations.bend as Cite
 import ./book.bend as Book
 import ./stroke.bend as Stroke
 import ./area.bend as Area
+import ./scan_text.bend as Scan
 import ./segments.bend as Segments
 import ./ink.bend as Ink
 import ./shelf.bend as Shelf
@@ -5071,3 +5072,172 @@ def cite_final_bytes(enough: Bool, +text: String, e: {Nat.is_le(Cite.bytes(text)
 
 def Laws.cite_name_bytes(text):
   cite_final_bytes(Cite.long(cite_core(text), 5n), cite_core(text), cite_le_trans(Cite.bytes(Cite.rstrip(Cite.take(Cite.lstrip(Cite.squeezed(Cite.cleaned(text))), 170n))), Cite.bytes(Cite.take(Cite.lstrip(Cite.squeezed(Cite.cleaned(text))), 170n)), 170n, cite_rstrip_bytes(Cite.take(Cite.lstrip(Cite.squeezed(Cite.cleaned(text))), 170n)), cite_take_bytes(Cite.lstrip(Cite.squeezed(Cite.cleaned(text))), 170n)))
+# ── The words recognised on a scanned page ──────────────────────────────────
+# One word, believed or not, boxed or not: what is kept is sound when the rest is.
+def scan_keep_sound(+full: Nat, +floor: Nat, index: Nat, +sure: Nat, believed: Bool, found: Maybe<&2, Area.Area>, +rest: List<&2, Scan.Kept>, eb: {believed == Nat.is_ge(sure, floor) : Bool}, ef: {True{} == Area.sound(full, found) : Bool}, er: {True{} == Scan.sound(full, floor, rest) : Bool}) -> {Scan.sound(full, floor, Scan.keep(index, sure, believed, found, rest)) == True{} : Bool}:
+  match believed found:
+    case True{} Some{area}:
+      %eb : {Bool.and(_, Bool.and(Area.valid(full, area), Scan.sound(full, floor, rest))) == True{} : Bool}
+      %ef : {Bool.and(_, Scan.sound(full, floor, rest)) == True{} : Bool}
+      %er : {_ == True{} : Bool}
+      {==}
+    case True{} None{}:
+      %er : {_ == True{} : Bool}
+      {==}
+    case False{} found:
+      %er : {_ == True{} : Bool}
+      {==}
+
+def Laws.scan_sift_sound(full, floor, page, seen):
+  match seen:
+    case Nil{}:
+      {==}
+    case Con{Scan.Seen{index, sure, ax, ay, bx, by}, rest}:
+      scan_keep_sound(full, floor, index, sure, Nat.is_ge(sure, floor), Area.fit(full, 1n, page, ax, ay, bx, by), Scan.sift(full, floor, page, rest), {==}, Equal.sym(Bool, Area.sound(full, Area.fit(full, 1n, page, ax, ay, bx, by)), True{}, Laws.area_fit_valid(full, 0n, page, ax, ay, bx, by)), Equal.sym(Bool, Scan.sound(full, floor, Scan.sift(full, floor, page, rest)), True{}, Laws.scan_sift_sound(full, floor, page, rest)))
+
+def Laws.scan_sift_either_corner(full, floor, page, index, sure, ax, ay, bx, by, rest):
+  Equal.cong(Maybe<&2, Area.Area>, List<&2, Scan.Kept>, found => Scan.keep(index, sure, Nat.is_ge(sure, floor), found, Scan.sift(full, floor, page, rest)), Area.fit(full, 1n, page, ax, ay, bx, by), Area.fit(full, 1n, page, bx, by, ax, ay), Equal.trans(Maybe<&2, Area.Area>, Area.fit(full, 1n, page, ax, ay, bx, by), Area.fit(full, 1n, page, bx, ay, ax, by), Area.fit(full, 1n, page, bx, by, ax, ay), Laws.area_fit_symmetric_across(full, 1n, page, ax, ay, bx, by), Laws.area_fit_symmetric_down(full, 1n, page, bx, ay, ax, by)))
+
+def scan_keep_append(index: Nat, sure: Nat, believed: Bool, found: Maybe<&2, Area.Area>, -rest: List<&2, Scan.Kept>, -more: List<&2, Scan.Kept>) -> {Scan.keep(index, sure, believed, found, List.append(&2, Scan.Kept, rest, more)) == List.append(&2, Scan.Kept, Scan.keep(index, sure, believed, found, rest), more) : List<&2, Scan.Kept>}:
+  match believed found:
+    case True{} Some{area}:
+      {==}
+    case True{} None{}:
+      {==}
+    case False{} found:
+      {==}
+
+def Laws.scan_sift_append(full, floor, page, a, b):
+  match a:
+    case Nil{}:
+      {==}
+    case Con{Scan.Seen{index, sure, ax, ay, bx, by}, rest}:
+      %Equal.sym(List<&2, Scan.Kept>, Scan.sift(full, floor, page, List.append(&2, Scan.Seen, rest, b)), List.append(&2, Scan.Kept, Scan.sift(full, floor, page, rest), Scan.sift(full, floor, page, b)), Laws.scan_sift_append(full, floor, page, rest, b)) : {Scan.keep(index, sure, Nat.is_ge(sure, floor), Area.fit(full, 1n, page, ax, ay, bx, by), _) == List.append(&2, Scan.Kept, Scan.keep(index, sure, Nat.is_ge(sure, floor), Area.fit(full, 1n, page, ax, ay, bx, by), Scan.sift(full, floor, page, rest)), Scan.sift(full, floor, page, b)) : List<&2, Scan.Kept>}
+      scan_keep_append(index, sure, Nat.is_ge(sure, floor), Area.fit(full, 1n, page, ax, ay, bx, by), Scan.sift(full, floor, page, rest), Scan.sift(full, floor, page, b))
+
+def Laws.scan_first_capped(most, words):
+  match most words:
+    case 0n words:
+      {==}
+    case 1n+less Nil{}:
+      {==}
+    case 1n+less Con{word, rest}:
+      Laws.scan_first_capped(less, rest)
+
+# A word that was sound with what followed it is sound with whatever sound thing follows it now.
+def scan_sound_with(s: Bool, v: Bool, -r: Bool, -q: Bool, kept: {Bool.and(s, Bool.and(v, r)) == True{} : Bool}, then: {r == True{} : Bool} -> {q == True{} : Bool}) -> {Bool.and(s, Bool.and(v, q)) == True{} : Bool}:
+  match s v:
+    case False{} v:
+      kept
+    case True{} False{}:
+      kept
+    case True{} True{}:
+      then(kept)
+
+def Laws.scan_first_sound(full, floor, most, words, kept):
+  match most words:
+    case 0n words:
+      {==}
+    case 1n+less Nil{}:
+      {==}
+    case 1n+less Con{Scan.Kept{index, sure, area}, rest}:
+      scan_sound_with(Nat.is_ge(sure, floor), Area.valid(full, area), Scan.sound(full, floor, rest), Scan.sound(full, floor, Scan.first(less, rest)), kept, e => Laws.scan_first_sound(full, floor, less, rest, e))
+
+# One word, clear of the page's text or not: what is held is clear when the rest is.
+def scan_held_clear(+boxes: List<&2, Area.Area>, ok: Bool, index: Nat, sure: Nat, +area: Area.Area, +rest: List<&2, Scan.Kept>, e: {ok == Scan.clear(boxes, area) : Bool}, er: {True{} == Scan.all_clear(boxes, rest) : Bool}) -> {Scan.all_clear(boxes, Scan.held(ok, Scan.Kept{index, sure, area}, rest)) == True{} : Bool}:
+  match ok:
+    case True{}:
+      %e : {Bool.and(_, Scan.all_clear(boxes, rest)) == True{} : Bool}
+      %er : {_ == True{} : Bool}
+      {==}
+    case False{}:
+      %er : {_ == True{} : Bool}
+      {==}
+
+def Laws.scan_apart_clear(boxes, words):
+  match words:
+    case Nil{}:
+      {==}
+    case Con{Scan.Kept{index, sure, area}, rest}:
+      scan_held_clear(boxes, Scan.clear(boxes, area), index, sure, area, Scan.apart(boxes, rest), {==}, Equal.sym(Bool, Scan.all_clear(boxes, Scan.apart(boxes, rest)), True{}, Laws.scan_apart_clear(boxes, rest)))
+
+def Laws.scan_apart_nothing(words):
+  match words:
+    case Nil{}:
+      {==}
+    case Con{Scan.Kept{index, sure, area}, rest}:
+      %Laws.scan_apart_nothing(rest) : {Con{Scan.Kept{index, sure, area}, Scan.apart(Nil{}, rest)} == Con{Scan.Kept{index, sure, area}, _} : List<&2, Scan.Kept>}
+      {==}
+
+def scan_held_once(+boxes: List<&2, Area.Area>, ok: Bool, index: Nat, sure: Nat, +area: Area.Area, +rest: List<&2, Scan.Kept>, e: {ok == Scan.clear(boxes, area) : Bool}, ih: {Scan.apart(boxes, rest) == rest : List<&2, Scan.Kept>}) -> {Scan.apart(boxes, Scan.held(ok, Scan.Kept{index, sure, area}, rest)) == Scan.held(ok, Scan.Kept{index, sure, area}, rest) : List<&2, Scan.Kept>}:
+  match ok:
+    case True{}:
+      %e : {Scan.held(_, Scan.Kept{index, sure, area}, Scan.apart(boxes, rest)) == Con{Scan.Kept{index, sure, area}, rest} : List<&2, Scan.Kept>}
+      %ih : {Con{Scan.Kept{index, sure, area}, Scan.apart(boxes, rest)} == Con{Scan.Kept{index, sure, area}, _} : List<&2, Scan.Kept>}
+      {==}
+    case False{}:
+      ih
+
+def Laws.scan_apart_once(boxes, words):
+  match words:
+    case Nil{}:
+      {==}
+    case Con{Scan.Kept{index, sure, area}, rest}:
+      scan_held_once(boxes, Scan.clear(boxes, area), index, sure, area, Scan.apart(boxes, rest), {==}, Laws.scan_apart_once(boxes, rest))
+
+def scan_held_append(ok: Bool, -word: Scan.Kept, -rest: List<&2, Scan.Kept>, -more: List<&2, Scan.Kept>) -> {Scan.held(ok, word, List.append(&2, Scan.Kept, rest, more)) == List.append(&2, Scan.Kept, Scan.held(ok, word, rest), more) : List<&2, Scan.Kept>}:
+  match ok:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
+def Laws.scan_apart_append(boxes, a, b):
+  match a:
+    case Nil{}:
+      {==}
+    case Con{Scan.Kept{index, sure, area}, rest}:
+      %Equal.sym(List<&2, Scan.Kept>, Scan.apart(boxes, List.append(&2, Scan.Kept, rest, b)), List.append(&2, Scan.Kept, Scan.apart(boxes, rest), Scan.apart(boxes, b)), Laws.scan_apart_append(boxes, rest, b)) : {Scan.held(Scan.clear(boxes, area), Scan.Kept{index, sure, area}, _) == List.append(&2, Scan.Kept, Scan.held(Scan.clear(boxes, area), Scan.Kept{index, sure, area}, Scan.apart(boxes, rest)), Scan.apart(boxes, b)) : List<&2, Scan.Kept>}
+      scan_held_append(Scan.clear(boxes, area), Scan.Kept{index, sure, area}, Scan.apart(boxes, rest), Scan.apart(boxes, b))
+
+def scan_held_sound(+full: Nat, +floor: Nat, ok: Bool, index: Nat, +sure: Nat, +area: Area.Area, +rest: List<&2, Scan.Kept>, both: {Bool.and(Nat.is_ge(sure, floor), Bool.and(Area.valid(full, area), Scan.sound(full, floor, rest))) == True{} : Bool}) -> {Scan.sound(full, floor, Scan.held(ok, Scan.Kept{index, sure, area}, rest)) == True{} : Bool}:
+  match ok:
+    case True{}:
+      both
+    case False{}:
+      bool_and_right(Area.valid(full, area), Scan.sound(full, floor, rest), bool_and_right(Nat.is_ge(sure, floor), Bool.and(Area.valid(full, area), Scan.sound(full, floor, rest)), both))
+
+def Laws.scan_apart_sound(full, floor, boxes, words, kept):
+  match words:
+    case Nil{}:
+      {==}
+    case Con{Scan.Kept{index, sure, area}, rest}:
+      scan_held_sound(full, floor, Scan.clear(boxes, area), index, sure, area, Scan.apart(boxes, rest), scan_sound_with(Nat.is_ge(sure, floor), Area.valid(full, area), Scan.sound(full, floor, rest), Scan.sound(full, floor, Scan.apart(boxes, rest)), kept, e => Laws.scan_apart_sound(full, floor, boxes, rest, e)))
+
+# A sum is at least its first part.
+def scan_ge_add(+a: Nat, +b: Nat) -> {Nat.is_ge(Nat.add(a, b), a) == True{} : Bool}:
+  match a:
+    case 0n:
+      nat_ge_zero(b)
+    case 1n+p:
+      scan_ge_add(p, b)
+
+# Twice the far end of a span is at least twice its middle.
+def scan_ge_far(+x: Nat, +w: Nat) -> {Nat.is_ge(Nat.add(Nat.add(x, w), Nat.add(x, w)), Nat.add(Nat.add(x, x), w)) == True{} : Bool}:
+  match x:
+    case 0n:
+      scan_ge_add(w, w)
+    case 1n+p:
+      %nat_succ_add(Nat.add(p, w), Nat.add(p, w)) : {Nat.is_ge(_, Nat.add(Nat.add(p, 1n+p), w)) == True{} : Bool}
+      %nat_succ_add(p, p) : {Nat.is_ge(1n+Nat.add(Nat.add(p, w), Nat.add(p, w)), Nat.add(_, w)) == True{} : Bool}
+      scan_ge_far(p, w)
+
+def scan_amid_self(+x: Nat, +w: Nat) -> {Scan.amid(Area.Span{x, w}, Area.Span{x, w}) == True{} : Bool}:
+  %Equal.sym(Bool, Nat.is_ge(Nat.add(Nat.add(x, x), w), Nat.add(x, x)), True{}, scan_ge_add(Nat.add(x, x), w)) : {Bool.and(_, Nat.is_ge(Nat.add(Nat.add(x, w), Nat.add(x, w)), Nat.add(Nat.add(x, x), w))) == True{} : Bool}
+  %Equal.sym(Bool, Nat.is_ge(Nat.add(Nat.add(x, w), Nat.add(x, w)), Nat.add(Nat.add(x, x), w)), True{}, scan_ge_far(x, w)) : {_ == True{} : Bool}
+  {==}
+
+def Laws.scan_covers_centre(page, x, y, w, h):
+  %Equal.sym(Bool, Scan.amid(Area.Span{x, w}, Area.Span{x, w}), True{}, scan_amid_self(x, w)) : {Bool.and(_, Scan.amid(Area.Span{y, h}, Area.Span{y, h})) == True{} : Bool}
+  %Equal.sym(Bool, Scan.amid(Area.Span{y, h}, Area.Span{y, h}), True{}, scan_amid_self(y, h)) : {_ == True{} : Bool}
+  {==}

@@ -1142,10 +1142,10 @@
     {
       "id": "scan-text-recognition",
       "title": "Scanned PDFs: recognise text so pages can be selected and searched",
-      "status": "todo",
+      "status": "doing",
       "parent": "fork-ideas",
       "dependsOn": ["store-release"],
-      "notes": "Idea from this-scott's fork (tesseract.js, unfinished). Today scanned pages can only take area notes. Optional, on demand per document, fully offline, with the result cached beside the source rather than rewriting the PDF. Weigh the size of a recogniser and language data against the 1.3 MB bundle (download on first use?)."
+      "notes": "Idea from this-scott's fork (tesseract.js, unfinished). Record: docs/dev/SCAN_TEXT_DESIGN.md (sections 13 to 18). Built to release quality on the branch: Recognise text… writes a searchable copy beside the PDF (five languages; stamped pages; an interrupted run is picked up; a copy can be read again in another language); the words of a marked area can be read and kept; the settings list the recogniser's files with Remove. Tesseract (tesseract-wasm 0.11.0) runs in a worker of its own; its files are fetched on demand and pinned by checksum. Tried in a separate desktop Obsidian 1.15.1 and in the WebKit harness (Chromium, iOS Simulator); not on Android. Left with the owner: uploading the six files as release assets under recognition-1 (docs/dev/RECOGNITION_RELEASE.md has the steps and the checksums; until then fetching fails and only files placed by hand work), and whether to ask the Obsidian team about fetching a WebAssembly engine (the question is written there)."
     },
     {
       "id": "worker",

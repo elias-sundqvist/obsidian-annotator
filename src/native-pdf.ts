@@ -83,8 +83,11 @@ import type { PdfTextMemory } from './pdf-text-memory';
 import { selectionOffsets, type SelectionLink } from './selection-links';
 import { PdfCitations, type CiteLogic } from './pdf-citations';
 import type { Link, Rect, Run } from './citations';
+import { ownTextBoxes, type OwnTextRun } from './scan-words';
 /** What the reader says while it reads the document's text. Highlights are painted meanwhile; everything else waits. */
 const INDEXING = 'Indexing PDF text…';
+/** A page with no more letters of its own than this may be a scan with a stamp or a header on it. */
+export const LITTLE_TEXT = 300;
 function nativeViewer(view: FileView): PdfViewer | undefined {
     // Private PDF adapter shape shared with native appearance. No global PDFViewerApplication.
     const host = view as unknown as { viewer?: { child?: { pdfViewer?: { pdfViewer?: PdfViewer } } } };
@@ -2440,6 +2443,156 @@ export class NativePdf {
     get withoutText(): boolean {
         return !this.error && !this.disposed && this.pages.length > 0 && this.pages.every(page => !page.text.trim());
     }
+    /** The pages (numbers from 1) that have no text of their own, once the PDF has been read through; null until then. Those are the pages a recogniser can read. */
+    get pagesWithoutText(): number[] | null {
+        if (this.error || this.disposed || !this.pages.length) return null;
+        return this.pages.filter(page => !page.text.trim()).map(page => page.number);
+    }
+    /**
+     * The pages (numbers from 1) that have a little text of their own and may be scans all the same: a library's
+     * stamp or a running header set as text over the picture of a page. Null until the PDF has been read through.
+     */
+    get pagesWithLittleText(): number[] | null {
+        if (this.error || this.disposed || !this.pages.length) return null;
+        return this.pages
+            .filter(page => {
+                const letters = page.text.replace(/\s+/g, '').length;
+                return letters > 0 && letters <= LITTLE_TEXT;
+            })
+            .map(page => page.number);
+    }
+    /** Where a page has text of its own, as boxes in page units; null when it has too much to be a scan, or cannot be read. */
+    async ownText(number: number): Promise<PageArea[] | null> {
+        const doc = nativeViewer(this.view)?.pdfDocument as unknown as
+            | {
+                  getPage?(number: number): Promise<{
+                      rotate?: number;
+                      getViewport(options: { scale: number; rotation?: number }): {
+                          width: number;
+                          height: number;
+                          convertToViewportPoint?(x: number, y: number): number[];
+                      };
+                      getTextContent(): Promise<{ items: OwnTextRun[] }>;
+                  }>;
+              }
+            | undefined;
+        if (this.disposed || !doc || doc !== (this.document as unknown) || typeof doc.getPage !== 'function')
+            return null;
+        try {
+            const source = await doc.getPage(number),
+                viewport = source.getViewport({ scale: 1, rotation: (((source.rotate || 0) % 360) + 360) % 360 }),
+                content = await source.getTextContent();
+            if (
+                typeof viewport.convertToViewportPoint !== 'function' ||
+                !(viewport.width > 0) ||
+                !(viewport.height > 0)
+            )
+                return null;
+            return ownTextBoxes(
+                content.items,
+                (x, y) => {
+                    const [vx, vy] = viewport.convertToViewportPoint!(x, y);
+                    return [vx / viewport.width, vy / viewport.height];
+                },
+                number
+            );
+        } catch {
+            return null;
+        }
+    }
+    /** What says which document is open here: a run of the recogniser that began on another one is over. */
+    get documentToken(): string {
+        return this.disposed ? '' : `${revision(this.view)}:${this.generation}`;
+    }
+    /**
+     * The picture of a page for a recogniser to read: the whole page as the
+     * PDF itself turns it (not as the viewer's own rotation shows it), at
+     * about 300 dots per inch and at most `long` pixels on its long side,
+     * drawn on a canvas of the reader's own. With `part`, only that region of
+     * the page is handed over (the page is still drawn whole, so the region is
+     * as sharp as it would be on the whole page). Null when the page cannot be drawn.
+     */
+    async pagePicture(number: number, long = 3600, part?: PageArea): Promise<ImageBitmap | ImageData | null> {
+        const doc = nativeViewer(this.view)?.pdfDocument as unknown as
+            | {
+                  getPage?(number: number): Promise<{
+                      rotate?: number;
+                      getViewport(options: { scale: number; rotation?: number }): { width: number; height: number };
+                      render?(options: object): { promise: Promise<unknown> };
+                      cleanup?(): unknown;
+                  }>;
+              }
+            | undefined;
+        if (this.disposed || !doc || doc !== (this.document as unknown) || typeof doc.getPage !== 'function')
+            return null;
+        try {
+            const source = await doc.getPage(number);
+            if (typeof source.render !== 'function') return null;
+            const rotation = (((source.rotate || 0) % 360) + 360) % 360,
+                base = source.getViewport({ scale: 1, rotation }),
+                side = Math.max(base.width, base.height);
+            if (!(side > 0)) return null;
+            const viewport = source.getViewport({ scale: Math.min(300 / 72, long / side), rotation }),
+                document = this.view.contentEl.ownerDocument,
+                canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(viewport.width));
+            canvas.height = Math.max(1, Math.round(viewport.height));
+            const context = canvas.getContext('2d');
+            if (!context) return null;
+            try {
+                context.fillStyle = '#ffffff';
+                context.fillRect(0, 0, canvas.width, canvas.height);
+                await source.render({ canvasContext: context, viewport, background: '#ffffff' }).promise;
+                const win = document.defaultView,
+                    hold = (value: number, most: number) => Math.max(0, Math.min(most, Math.round(value))),
+                    left = part ? hold((canvas.width * part.x) / 10000, canvas.width - 1) : 0,
+                    top = part ? hold((canvas.height * part.y) / 10000, canvas.height - 1) : 0,
+                    wide = part
+                        ? Math.max(1, hold((canvas.width * part.w) / 10000, canvas.width - left))
+                        : canvas.width,
+                    tall = part
+                        ? Math.max(1, hold((canvas.height * part.h) / 10000, canvas.height - top))
+                        : canvas.height;
+                return win && typeof win.createImageBitmap === 'function'
+                    ? part
+                        ? await win.createImageBitmap(canvas, left, top, wide, tall)
+                        : await win.createImageBitmap(canvas)
+                    : context.getImageData(left, top, wide, tall);
+            } finally {
+                // The canvas and what the page decoded for it are let go at once: one page is held at a time.
+                canvas.width = 0;
+                canvas.height = 0;
+                source.cleanup?.();
+            }
+        } catch {
+            return null;
+        }
+    }
+    private runStrip: HTMLElement | null = null;
+    /** Say, over the page, how far a run of the recogniser is, with a way to stop it. Called again, it changes the words. */
+    showRun(words: string, stop: () => void) {
+        if (this.disposed) return;
+        if (!this.runStrip?.isConnected) {
+            this.runStrip?.remove();
+            const strip = this.view.contentEl.createDiv({
+                cls: 'annotator-area-hint annotator-scan-strip',
+                attr: { role: 'status' }
+            });
+            strip.createEl('span');
+            const button = strip.createEl('button', { text: 'Stop', attr: { type: 'button' } });
+            button.onclick = () => {
+                button.disabled = true;
+                stop();
+            };
+            this.runStrip = strip;
+        }
+        const span = this.runStrip.querySelector('span');
+        if (span && span.textContent !== words) span.textContent = words;
+    }
+    endRun() {
+        this.runStrip?.remove();
+        this.runStrip = null;
+    }
     get markingArea() {
         return !!this.stopArea;
     }
@@ -2819,6 +2972,7 @@ export class NativePdf {
         this.paintedRanges = [];
         this.appearance?.dispose();
         this.closeAppearance?.();
+        this.endRun();
         this.stopArea?.();
         this.areaAction?.remove();
         this.areaAction = null;

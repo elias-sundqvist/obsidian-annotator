@@ -43,19 +43,29 @@ export function resolvePdfAnnotation(annotation: Annotation, pages: TextPage[], 
     }
     const quote = annotationQuote(annotation),
         position = annotation.target?.[0]?.selector?.find(selector => selector.type === 'TextPositionSelector');
-    return quote
-        ? resolveDocument(
-              pages,
-              quote,
-              typeof position?.start === 'number' && typeof position.end === 'number'
-                  ? { start: position.start, end: position.end }
-                  : undefined
-          )
-        : annotation.references?.length
-          ? 'Reply (no passage highlight).'
-          : !annotation.target?.some(target => target.selector?.length)
-            ? 'Page note (no passage highlight).'
-            : 'No supported text quote selector.';
+    if (quote) {
+        const found = resolveDocument(
+            pages,
+            quote,
+            typeof position?.start === 'number' && typeof position.end === 'number'
+                ? { start: position.start, end: position.end }
+                : undefined
+        );
+        if (typeof found !== 'string' || !found.startsWith('Quote could not be located')) return found;
+        // The text around a passage can change while the passage does not: a scan whose words were read again, in
+        // another language or by a newer recogniser. The passage says which page it is on; where its own words are
+        // on that page exactly once, that is still its place. Anywhere else, and wherever they are there twice, it
+        // stays unplaced as before.
+        const named = (annotation as { nativePdf?: { page?: unknown } }).nativePdf?.page,
+            page = typeof named === 'number' ? pages.find(each => each.number === named) : undefined,
+            alone = page ? resolveDocument([page], { exact: quote.exact }) : found;
+        return typeof alone === 'string' ? found : alone;
+    }
+    return annotation.references?.length
+        ? 'Reply (no passage highlight).'
+        : !annotation.target?.some(target => target.selector?.length)
+          ? 'Page note (no passage highlight).'
+          : 'No supported text quote selector.';
 }
 /** A passage's place while the document is still being read: only what the rest of the document cannot change. */
 export function resolvePdfAnnotationEarly(annotation: Annotation, pages: TextPage[], fingerprint: string) {

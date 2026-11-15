@@ -4,7 +4,7 @@ import {JSDOM} from 'jsdom';
 import {createRequire} from 'node:module';
 const nodeRequire=createRequire(import.meta.url);
 const setup=new JSDOM('<body></body>',{pretendToBeVisual:true});globalThis.window=setup.window;globalThis.document=setup.window.document;
-const {Native,TFile,Platform,AnnotationView,FileView,MarkdownView,WorkspaceLeaf,VideoView,MarkdownRenderer,SnapshotHost,ReadingCopyModal}=await import('./.generated/plugin-boundary.mjs');
+const {Native,TFile,Platform,AnnotationView,FileView,MarkdownView,WorkspaceLeaf,VideoView,MarkdownRenderer,SnapshotHost,ReadingCopyModal,scanIntroduction,chosenPages,scanStanding}=await import('./.generated/plugin-boundary.mjs');
 setup.window.close();
 function host(){
  const dom=new JSDOM('<body></body>',{pretendToBeVisual:true});globalThis.window=dom.window;globalThis.document=dom.window.document;
@@ -1135,4 +1135,24 @@ test('a source that was deleted and is there again under its name can be annotat
  // A file of another name coming into the vault changes nothing for it.
  h.events.get('vault:create')(h.add('Other.pdf'));assert.equal(h.plugin.notes.get(pdf.path).error,undefined);
  }finally{h.dispose();}
+});
+test('the recogniser\'s dialog says what it will do, which pages a choice comes to, and when its button may be pressed',()=>{
+ const languages=[{code:'eng',name:'English'},{code:'swe',name:'Swedish'}],fetch={lines:['The recogniser (1.8 MB)','Swedish (2.5 MB)'],hosts:['github.com'],total:'4.3 MB'};
+ const question={what:'pages',copy:'Scan (searchable).pdf',current:3,without:[1,2,3,7],little:[5],languages,needs:code=>code==='swe'?fetch:null,kept:code=>code==='eng'?2:0,phone:false};
+ assert.match(scanIntroduction(question),/saved in a copy, Scan \(searchable\)\.pdf, beside the PDF; the PDF itself is not changed\.$/);
+ assert.match(scanIntroduction({...question,copy:null}),/This PDF is a searchable copy already: the words are added to it\.$/);
+ assert.match(scanIntroduction({what:'again',copy:null,without:[1,2],before:'English'}),/^Reads the 2 pages of this copy that were read in English again/);assert.match(scanIntroduction({what:'again',copy:null,without:[4],before:'English'}),/the 1 page of this copy that was read/);
+ assert.match(scanIntroduction({what:'area',copy:null,without:[4]}),/^Reads the words in the marked area/);
+ // Which pages a choice comes to: the one in view, all on offer, or those in a range given either way round.
+ assert.deepEqual(chosenPages([1,2,3,7],'this',3,0,0),[3]);assert.deepEqual(chosenPages([1,2,3,7],'this',4,0,0),[]);assert.deepEqual(chosenPages([1,2,3,7],'all',3,0,0),[1,2,3,7]);assert.deepEqual(chosenPages([1,2,3,7],'range',3,2,7),[2,3,7]);assert.deepEqual(chosenPages([1,2,3,7],'range',3,7,2),[2,3,7]);assert.deepEqual(chosenPages([1,2,3,7],'range',3,4,6),[]);
+ // Nothing to fetch: it says so, and pages read before the app was closed are named.
+ assert.deepEqual(scanStanding(question,'eng',[1,2,3,7],false),{needs:'Everything it needs is on this device.',caution:'2 pages read before the app was last closed are kept and will not be read again.',button:'Recognise',ready:true});
+ // Something to fetch: each file, the total and the host, and a button that says it downloads.
+ assert.deepEqual(scanStanding(question,'swe',[1],false),{needs:'Needs, once: The recogniser (1.8 MB) and Swedish (2.5 MB) (4.3 MB in all), from github.com. Kept in the plugin\u2019s folder and checked before every use.'.replace('\u2019',"'"),caution:'',button:'Download and recognise',ready:true});
+ // No page chosen: the button cannot be pressed, and why.
+ assert.deepEqual([scanStanding(question,'eng',[],true).caution,scanStanding(question,'eng',[],true).ready],['No page to read lies in that range.',false]);assert.equal(scanStanding(question,'eng',[],false).caution,'There is no page to read.');assert.equal(scanStanding(question,'',[1],false).ready,false);
+ // A phone is warned before a long run.
+ assert.match(scanStanding({...question,phone:true,kept:()=>0},'eng',[1,2,3,4,5,6],false).caution,/^Reading 6 pages takes a phone a long while/);assert.equal(scanStanding({...question,phone:true,kept:()=>0},'eng',[1,2],false).caution,'');
+ // Reading again in the language it was read in is no reading again.
+ const again={...question,what:'again',copy:null,before:'English'};assert.deepEqual([scanStanding(again,'eng',[1],false).ready,scanStanding(again,'eng',[1],false).caution],[false,'The pages were read in English already.']);assert.deepEqual([scanStanding(again,'swe',[1],false).ready,scanStanding(again,'swe',[1],false).button],[true,'Download and recognise again']);
 });

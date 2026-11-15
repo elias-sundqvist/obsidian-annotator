@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { test } from 'node:test';
-import { create, update, remove, readAll, replaceFragment, readSome } from './.generated/codec.mjs';
+import { create, update, remove, readAll, replaceFragment, readSome, keepAreaWords } from './.generated/codec.mjs';
 const payload = { id: 'native1', text: '**saved**', tags: [], nativePdf: { version: 1, page: 2, units: 'document-utf16' },
     target: [{ source: 'paper.pdf', selector: [{ type: 'TextQuoteSelector', exact: '📝 exact', prefix: 'before ', suffix: ' after' }, { type: 'TextPositionSelector', start: 3, end: 11 }] }], custom: { keep: [null, 'extension'] } };
 
@@ -150,4 +150,26 @@ test('a comment with blank lines, a list and a trailing blank line is kept as wr
     // The original plugin reads the same comments.
     const legacy = await import('./.generated/legacy.mjs');
     assert.deepEqual(legacy.loadAnnotationsAtUriFromFileText(null, note).rows.map(each => each.text), comments);
+});
+test('a marked area is given the words it says: only that one value changes, in the area and in the note around it', () => {
+    const selector = value => [{ type: 'FragmentSelector', conformsTo: 'http://www.w3.org/TR/media-frags/', value }];
+    const area = { id: 'area1', text: '![[Scan p3 area.png]]\n\nThe table.', tags: ['data'], uri: 'urn:x-pdf:f', created: '2026-11-14T10:00:00.000Z', updated: '2026-11-14T10:00:00.000Z', target: [{ source: 'urn:x-pdf:f', selector: selector('page=3&xywh=percent:10,20,30,40') }], nativePdf: { version: 1, page: 3 } };
+    const quote = { id: 'quote1', text: 'A note', tags: [], uri: 'urn:x-pdf:f', target: [{ source: 'urn:x-pdf:f', selector: [{ type: 'TextQuoteSelector', exact: 'passage' }] }] };
+    const bare = { ...area, id: 'area2', nativePdf: undefined, target: [{ source: 'urn:x-pdf:f', selector: selector('page=4&xywh=percent:1,2,3,4') }] }; delete bare.nativePdf;
+    const source = create(create(create('Prose before\n', quote), area), bare) + 'Prose after\n';
+    const kept = keepAreaWords(source, 'area1', '  Table 1:\n Results   on the test set ');
+    const rows = readAll(kept), before = readAll(source);
+    assert.deepEqual(rows.find(row => row.id === 'area1').nativePdf, { version: 1, page: 3, words: 'Table 1: Results on the test set' }, 'one piece of text, a space between its words');
+    // Everything else of the area, and every other annotation, reads back as it was; the prose around them is untouched.
+    assert.deepEqual({ ...rows.find(row => row.id === 'area1'), nativePdf: undefined }, { ...before.find(row => row.id === 'area1'), nativePdf: undefined });
+    assert.deepEqual(rows.filter(row => row.id !== 'area1'), before.filter(row => row.id !== 'area1'));
+    assert.ok(kept.startsWith('Prose before\n') && kept.endsWith('Prose after\n'));
+    // Read again, the words are replaced, not added to; an area that had no details of the reader's own gets them.
+    assert.equal(readAll(keepAreaWords(kept, 'area1', 'Other words')).find(row => row.id === 'area1').nativePdf.words, 'Other words');
+    assert.deepEqual(readAll(keepAreaWords(source, 'area2', 'Said')).find(row => row.id === 'area2').nativePdf, { version: 1, words: 'Said' });
+    assert.equal(keepAreaWords(source, 'area1', 'x'.repeat(5000)).length < source.length + 4200, true, 'no more than an area\'s words may be');
+    // Only an area, only words, only an annotation that is there.
+    assert.throws(() => keepAreaWords(source, 'quote1', 'words'), /Only a marked area/); assert.throws(() => keepAreaWords(source, 'area1', '  \n '), /no words to keep/); assert.throws(() => keepAreaWords(source, 'gone', 'words'), /removed externally/);
+    // Words from a page are words, not Markdown: a note that holds them is still the note it was to a reader of it.
+    const odd = keepAreaWords(source, 'area1', '``` %% ]] #tag {{x}} \\ "quoted"'); assert.equal(readAll(odd).find(row => row.id === 'area1').nativePdf.words, '``` %% ]] #tag {{x}} \\ "quoted"'); assert.equal(readAll(odd).length, 3);
 });

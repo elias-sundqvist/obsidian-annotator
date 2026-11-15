@@ -106,7 +106,7 @@ export class Vault extends Events {
         super(); const root = new TFolder(this, '/'); root.name = ''; this.root = root; this.files.set('/', root);
         const vault = this;
         this.adapter = {
-            exists: async path => vault.files.has(path) || vault.data.has(path) || (await fetch(`/_vault/${encodePath(path)}`).then(r => r.ok, () => false)),
+            exists: async path => vault.files.has(path) || vault.data.has(path) || (await fetch(`/_vault/${encodePath(path)}`, { method: 'HEAD' }).then(r => r.ok, () => false)),
             read: async path => { if (vault.data.has(path)) { const v = vault.data.get(path); return typeof v === 'string' ? v : new TextDecoder().decode(v); } const r = await fetch(`/_vault/${encodePath(path)}`); if (!r.ok) throw new Error(`ENOENT: ${path}`); return r.text(); },
             readBinary: async path => { const r = await fetch(`/_vault/${encodePath(path)}`); if (!r.ok) throw new Error(`ENOENT: ${path}`); return r.arrayBuffer(); },
             write: async (path, text) => { vault.data.set(path, text); post({ type: 'write', path, text }); },

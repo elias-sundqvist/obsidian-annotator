@@ -12,6 +12,7 @@ import {
     requote,
     replaceFragment,
     replaceStoredString,
+    keepAreaWords,
     type Annotation
 } from './codec';
 import { importHypothesis, exportHypothesis } from './exchange';
@@ -73,6 +74,8 @@ export const logic = {
     requote,
     replaceFragment,
     replaceStoredString,
+    /** Give a marked area the words it says. */
+    keepAreaWords,
     createMany,
     renameTag,
     /** Hypothesis JSON in and out of a note. */

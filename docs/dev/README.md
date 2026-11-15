@@ -30,6 +30,10 @@ Where to start:
 - [CITATIONS_DESIGN.md](CITATIONS_DESIGN.md) and
   [CITATIONS_RESULTS.md](CITATIONS_RESULTS.md): the works cited on the PDF
   page in view; the design, and what a survey of 36 PDFs made of it.
+- [SCAN_TEXT_DESIGN.md](SCAN_TEXT_DESIGN.md): recognising the text of
+  scanned PDFs: the design, what was built on it and where it was tried.
+  [RECOGNITION_RELEASE.md](RECOGNITION_RELEASE.md): the files a release
+  must put up for it, and how.
 - [RELEASE_EVIDENCE_MATRIX.md](RELEASE_EVIDENCE_MATRIX.md) and
   [PARITY.md](PARITY.md): what was checked, version by version.
 

@@ -259,6 +259,36 @@ What stays in TypeScript: turning the pen's fractions and pressure into whole
 numbers, the curve that rounds a fast hand's corners, and the SVG text. Those
 are arithmetic on fractions and string building, and are tested, not proved.
 
+## Words recognised on a scanned page
+
+`scan_text.bend` holds the rules for which of a recogniser's words are kept
+when a scanned page is given a searchable copy; `src/scan-words.ts` only
+turns the picture's pixels into page units and puts the kept words back into
+their lines. A word's box is made by `Area.fit`, so the laws of regions hold
+for it too.
+
+- `scan_sift_sound`: every word kept is one the recogniser was sure enough
+  of, with a box that may be drawn: on a page, with some extent, nothing past
+  the edge.
+- `scan_sift_either_corner`: a word's corners may come in either order.
+- `scan_sift_append`, `scan_apart_append`: each word is judged on its own and
+  the kept words stay in their order. This is also what lets a long page be
+  sifted a stretch at a time.
+- `scan_first_capped`, `scan_first_sound`: no more words are kept than the
+  most allowed, and they are still sound.
+- `scan_apart_clear`: no kept word has its middle on text the page already
+  has. `scan_apart_nothing`: a page with no text of its own keeps every word.
+  `scan_apart_once`: leaving out twice is leaving out once.
+  `scan_apart_sound`: what was sound before is sound after.
+- `scan_covers_centre`: a word in the middle of a box lies on it, so the test
+  is not one that nothing passes.
+
+What stays in TypeScript: the positions written into the PDF
+(`src/pdf-searchable.ts`). They are fractions in the PDF's own units, under
+the page's box and turn, and are tested, not proved: by reading the written
+words back from the bytes, and by two other PDF readers (see
+`test/support/searchable-copy-check.mjs`).
+
 ## How far through a book
 
 `book.bend`: a book is its chapters' lengths, a place is a chapter and how far
