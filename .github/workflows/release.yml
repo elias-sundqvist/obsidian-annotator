@@ -3,10 +3,13 @@ name: Release
 # A pushed tag builds the plugin and publishes a release with the three files
 # Obsidian installs (main.js, manifest.json, styles.css), the licences of what
 # is bundled, and a zip of them all. The tag must be the manifest's version.
+# Only version tags (0.3.2) run it: a release of other files, such as the
+# recogniser's under `recognition-1`, is not a version of the plugin.
 on:
   push:
     tags:
-      - '*'
+      - '[0-9]+.[0-9]+.[0-9]+'
+      - '[0-9]+.[0-9]+.[0-9]+-*'
 
 permissions:
   contents: write
