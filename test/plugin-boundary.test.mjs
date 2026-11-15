@@ -1119,7 +1119,9 @@ test('every match of a phrase in a PDF becomes a highlight in one write, across 
   assert.equal([...h.files.keys()].some(path=>path.endsWith('.md')),false);
   // One highlight made first, to see that nothing else is touched.
   assert.equal((await h.plugin.highlightMatches(key,{query:'studied',options:{},ink:'yellow',tags:[],note:''})).length,1);
-  const note=h.plugin.notes.get(key).note,first=h.contents.get(note.path),firstRecords=h.plugin.notes.get(key).records.map(row=>row.id);
+  // The note ends right after its last annotation, as one written by hand or by an older version does: Undo must give back that, not a blank line more.
+  const note=h.plugin.notes.get(key).note;h.contents.set(note.path,h.contents.get(note.path).replace(/\n+$/,'\n'));await h.plugin.loadNote(key);
+  const first=h.contents.get(note.path),firstRecords=h.plugin.notes.get(key).records.map(row=>row.id);assert.ok(!first.endsWith('\n\n'));
   let writes=0;const process=h.app.vault.process;h.app.vault.process=async(...args)=>{writes++;return process(...args);};
   const since=Notice.messages.length,made=await h.plugin.highlightMatches(key,{query:'  machine translation ',options:{},ink:'blue',tags:['method','MT'],note:'Coded as MT.'});
   assert.equal(made.length,2);assert.equal(writes,1,'all of them in one write');

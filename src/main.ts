@@ -4461,10 +4461,13 @@ export default class AnnotatorPlugin extends Plugin {
                     ink !== DEFAULT_INK ? { annotation: { ...row, tags }, ink } : { annotation: { ...row, tags } }
                 );
             const note = await this.ensureNote(key);
-            await this.rewrite(note, async text => {
+            // The note as it was, kept for Undo: while nothing else has changed it, Undo puts back exactly that.
+            let before = '';
+            const after = await this.rewrite(note, async text => {
                 if (this.stopped) throw new Error('The reader was closed before the highlights were saved.');
                 if (!this.noteMatchesSource(note, key))
                     throw new Error('The annotation note target changed; nothing was highlighted.');
+                before = text;
                 return this.codec.createMany(text, rows, { ...this.markdown });
             });
             made = rows.map(row => row.annotation.id);
@@ -4488,7 +4491,9 @@ export default class AnnotatorPlugin extends Plugin {
             const notice = new Notice(message, 15000) as Notice & { hide?(): void };
             undo.onclick = () => {
                 notice.hide?.();
-                void this.undoMatches(key, ids, { text: request.note, tags, ink }).catch(error => this.fail(error));
+                void this.undoMatches(key, ids, { text: request.note, tags, ink }, { before, after }).catch(error =>
+                    this.fail(error)
+                );
             };
         } catch (error) {
             this.fail(error);
@@ -4504,7 +4509,17 @@ export default class AnnotatorPlugin extends Plugin {
      * that has been worked on since (its note, tags or ink changed, it was answered, or it is open for writing) is
      * the reader's own by now and is kept; the notice says how many were.
      */
-    async undoMatches(key: string, ids: readonly string[], as: { text: string; tags: string[]; ink: Ink }) {
+    /**
+     * Take back the highlights one "Highlight every match" made. While the note is still exactly as that step left
+     * it, it is put back exactly as it was before (the separating line end the write added goes too). Otherwise
+     * each of those highlights is removed, unless it has been changed, answered or opened since.
+     */
+    async undoMatches(
+        key: string,
+        ids: readonly string[],
+        as: { text: string; tags: string[]; ink: Ink },
+        exact?: { before: string; after: string }
+    ) {
         if (this.busy) throw new Error('An annotation operation is already running.');
         this.busy = true;
         let removed = 0,
@@ -4518,6 +4533,11 @@ export default class AnnotatorPlugin extends Plugin {
             await this.rewrite(note, async source => {
                 if (this.stopped) throw new Error('Plugin was unloaded before the highlights were removed.');
                 if (!this.noteMatchesSource(note, key)) throw new Error('The annotation note target changed.');
+                if (exact && source === exact.after && !(open && ids.includes(open))) {
+                    gone = [...ids];
+                    kept = 0;
+                    return exact.before;
+                }
                 const rows = await this.codec.readAll(source),
                     answered = new Set(rows.flatMap(row => row.references || []));
                 gone = [];
