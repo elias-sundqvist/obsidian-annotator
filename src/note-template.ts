@@ -14,8 +14,10 @@ export interface NewNote {
     /** Today, as YYYY-MM-DD. */ date: string;
     heading?: string;
     template?: string | null;
+    /** For a note that holds some of a PDF's pages: its `annotation-pages`, as written ("10-100"). */ pages?: string;
 }
-const property = (target: string) => `annotation-target: ${JSON.stringify(target)}`;
+const property = (target: string, pages?: string) =>
+    `annotation-target: ${JSON.stringify(target)}${pages ? `\nannotation-pages: ${JSON.stringify(pages)}` : ''}`;
 export function newNoteText(note: NewNote): string {
     const fill = (text: string) =>
         text.replace(
@@ -33,7 +35,7 @@ export function newNoteText(note: NewNote): string {
             const lines = found[1].split('\n'),
                 kept: string[] = [];
             for (let i = 0; i < lines.length; i++) {
-                if (/^annotation-target\s*:/.test(lines[i])) {
+                if ((note.pages ? /^annotation-(?:target|pages)\s*:/ : /^annotation-target\s*:/).test(lines[i])) {
                     while (i + 1 < lines.length && /^\s+\S/.test(lines[i + 1])) i++;
                     continue;
                 }
@@ -41,11 +43,11 @@ export function newNoteText(note: NewNote): string {
             }
             const body = fill(template.slice(found[0].length)),
                 head = fill(kept.join('\n')).replace(/\n+$/, '');
-            return `---\n${property(note.target)}${head.trim() ? `\n${head}` : ''}\n---\n${body.startsWith('\n') ? '' : '\n'}${body}${body.endsWith('\n') ? '' : '\n'}`;
+            return `---\n${property(note.target, note.pages)}${head.trim() ? `\n${head}` : ''}\n---\n${body.startsWith('\n') ? '' : '\n'}${body}${body.endsWith('\n') ? '' : '\n'}`;
         }
         const body = fill(template);
-        return `---\n${property(note.target)}\n---\n\n${body.replace(/^\n+/, '')}${body.endsWith('\n') ? '' : '\n'}`;
+        return `---\n${property(note.target, note.pages)}\n---\n\n${body.replace(/^\n+/, '')}${body.endsWith('\n') ? '' : '\n'}`;
     }
     const heading = (note.heading ?? DEFAULT_NOTE_HEADING).replace(/\r?\n/g, ' ').trim();
-    return `---\n${property(note.target)}\n---\n\n${heading ? `${heading}\n` : ''}`;
+    return `---\n${property(note.target, note.pages)}\n---\n\n${heading ? `${heading}\n` : ''}`;
 }

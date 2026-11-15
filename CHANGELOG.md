@@ -127,6 +127,16 @@ What changed for someone using Annotator. How to use each thing is in
   zipped one, which Obsidian's file list hides.
 - The reader's labels, two settings (**Book layout**, **Book text size**) and
   a command say "book" where they meant any book rather than only EPUB.
+- **A note for each chapter of a PDF.** Annotation notes that name the same
+  PDF can each hold a range of its pages, given as the property
+  `annotation-pages` (`10-100`, or `200-` to the end). The pages show every
+  note's annotations; the sidebar shows the note of the page being read and
+  follows you from one to the next, and what you make on a page goes into
+  its note. **New annotation note for pages…** makes one, named after the
+  PDF's own chapter there. Notes whose pages overlap are named and nothing
+  is written to them until they are put right; a PDF with one note and no
+  `annotation-pages` works exactly as before. Asked for by someone working
+  through a textbook.
 
 ## 0.3.1 (2026-11-13)
 

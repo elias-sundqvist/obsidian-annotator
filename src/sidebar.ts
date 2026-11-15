@@ -24,6 +24,7 @@ import { INKS, inkLabel, inkOf, type Ink } from './ink';
 import { MARK_STYLES, STYLE_NAMES, styleIcon, styleOf } from './mark-style';
 import { createCommentEditor, type CommentEditor } from './rich-editor';
 import { displayTitle } from './library';
+import { describePages } from './page-ranges';
 // @ts-expect-error The proofs' JavaScript wrappers carry no type declarations.
 import { arrange, tabs as partitionTabs } from '../proofs/reader.mjs';
 
@@ -325,7 +326,7 @@ export class AnnotationView extends ItemView {
 
         const plugin = this.plugin,
             file = plugin.currentFile,
-            state = file ? plugin.notes.get(file) : undefined,
+            state = plugin.shownNotes(file),
             records = state?.records || [];
         const notePath = state?.note?.path || '';
         let host: SourceHost | undefined;
@@ -431,6 +432,15 @@ export class AnnotationView extends ItemView {
         name.onclick = () => {
             if (current(name) && file) void plugin.openCollectionNote(file).catch(error => new Notice(String(error)));
         };
+        // A PDF whose notes each hold some of its pages: which pages the note shown holds, or that the page is in none.
+        const pages = state?.pages;
+        if (pages && file) {
+            const said = 'range' in pages ? describePages(pages.range) : `page ${pages.uncovered}`;
+            title.createDiv({
+                cls: 'annotator-head-pages',
+                text: `${said.charAt(0).toUpperCase()}${said.slice(1)} of ${sourceName(file)}${'range' in pages ? '' : ': in no annotation note'}`
+            });
+        }
         const tools = titleRow.createDiv({ cls: 'annotator-head-tools' });
         this.actionButton(
             tools,
@@ -498,6 +508,15 @@ export class AnnotationView extends ItemView {
                         .setIcon('badge-info')
                         .onClick(() => {
                             void plugin.addPdfDetails(file).catch(error => new Notice(String(error)));
+                        })
+                );
+            if (file && plugin.canExportPdf(file))
+                menu.addItem(item =>
+                    item
+                        .setTitle('New annotation note for pages…')
+                        .setIcon('file-plus')
+                        .onClick(() => {
+                            void plugin.newRangeNote(file).catch(error => new Notice(String(error)));
                         })
                 );
             if (file && plugin.canExportPdf(file))
@@ -758,6 +777,18 @@ export class AnnotationView extends ItemView {
                 if (!current(take)) return;
                 take.disabled = true;
                 void plugin.importPdfAnnotations(file).catch(error => new Notice(String(error)));
+            };
+        }
+        // A page in none of the PDF's notes: nothing can be added on it, and that is said with the way to give it a note.
+        if (pages && 'uncovered' in pages && file && !state?.error) {
+            const outside = this.contentEl.createDiv({
+                cls: 'annotator-notice annotator-uncovered',
+                attr: { role: 'status' }
+            });
+            outside.createEl('span', { text: pages.message });
+            const make = outside.createEl('button', { text: 'New note for pages…', attr: { type: 'button' } });
+            make.onclick = () => {
+                if (current(make)) void plugin.newRangeNote(file).catch(error => new Notice(String(error)));
             };
         }
         // A damaged block does not hide the rest: what can be read is listed below, and each problem leads to its line in the note.

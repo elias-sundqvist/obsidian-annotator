@@ -38,8 +38,9 @@ The rest of this page says what you can do and how.
 ## Where annotations live
 
 Each source has one annotation note: a Markdown note with an
-`annotation-target` property that names the source. Open the note, or the
-source, and the reader shows both. The note is yours to move, rename and edit;
+`annotation-target` property that names the source (a PDF can have one
+[for each chapter](#a-note-for-each-chapter-of-a-pdf)). Open the note, or
+the source, and the reader shows both. The note is yours to move, rename and edit;
 the sidebar's menu has **Open annotation note**.
 
 In Live Preview an annotation reads as its passage, its link, your note and
@@ -83,6 +84,59 @@ If your notes already name their source in another property (`source`, `pdf`,
 property**: a note without `annotation-target` is then read by it. New
 annotation notes are still written with `annotation-target`, and it wins
 where a note has both.
+
+### A note for each chapter of a PDF
+
+A textbook can have a note for each chapter instead of one for the whole
+book, without cutting the PDF into files. Each note names the PDF as usual
+and says which pages it holds in a second property:
+
+```yaml
+annotation-target: "[[Physics.pdf]]"
+annotation-pages: 10-100
+```
+
+`annotation-pages` is a page (`7`), two pages joined by a hyphen
+(`10-100`, both included), or a first page and a hyphen for the pages to
+the end (`200-`). Pages are counted from 1, as the PDF view numbers them,
+whatever the book prints on them. The target is left as it is, so older
+versions of Annotator, Bases and other tools still read each note as a note
+about that PDF.
+
+- The pages show the highlights, areas and drawings of every note. The
+  sidebar shows the note of the page being read, with its pages under its
+  name, and moves to the next note as you read into its pages; while you
+  write or edit an annotation it stays with that annotation's note.
+- What you make on a page (a highlight, a note about the page, an area, a
+  drawing) goes into the note that holds that page; a reply goes where what
+  it answers is; an edit, a recolouring or a deletion is made in the note
+  that holds the annotation, whichever page you are on.
+- A page that no note holds can be read but not annotated: the sidebar says
+  so and offers **New note for pages…**. Several things made at once
+  (**Highlight every match…**, taking in a PDF's own annotations or links to
+  its passages) leave out those on such pages and say how many.
+- **New annotation note for pages…** (command palette, or the sidebar's
+  menu) asks for the pages, offering the free pages around the one you are
+  reading, or the chapter there where the PDF has an outline, and a name:
+  the outline's title for those pages ("Physics – Chapter 3 Heat") or the
+  pages ("Physics (pages 10-100)"). The note is made beside the PDF, from
+  your template if you have one.
+- Notes that cannot share the PDF are named in the sidebar, as several
+  notes without pages are, and nothing is written to any of them until
+  they are put right: two notes that hold the same page, a note without
+  `annotation-pages` beside notes that have it, pages that cannot be read
+  (`ten-twenty`), or one annotation in two notes. To split a PDF that
+  already has a note, give that note the pages it holds first.
+- Opening a chapter note (or the library, or search) opens the PDF at the
+  note's first page; a link to an annotation (`[[Chapter 3#^id]]`) opens
+  that annotation, as always. Links copied from a card name the note that
+  holds it.
+- **Copy all as Markdown**, **Export to a summary note**, **Export as
+  individual notes + Base** and Hypothesis JSON are of the note shown: the
+  chapter you are in. **Export PDF with annotations** writes every note's
+  annotations into the one copy of the PDF. Renaming a tag renames it in
+  every note of the PDF. With **Keep reading progress in the note** on,
+  where you left is written to the note that holds that page.
 
 ### The note is the source's property sheet
 
@@ -835,6 +889,13 @@ and the PDF export is read back with two independent PDF readers. See
   the copy's words out of order; Obsidian does not.
 - In a PDF embedded in a note or placed on a Canvas, highlights are shown but
   not made: open the PDF in a tab to annotate it.
+- `annotation-pages` is for PDFs, and is read from a note's properties (not
+  from a Dataview field in its text). Hypothesis JSON is imported into the
+  note of the page being read. An annotation does not move to another note
+  when its note's pages are changed: it stays where it is, shown on its page.
+  Annotator 0.3.1 and earlier open a chapter note's PDF with that note's
+  annotations only, and say "Multiple annotation notes target this source"
+  for the PDF opened by itself.
 - Citations are listed for PDFs only, and matching a citation to its
   reference is reading, not knowing: raised numbers need the PDF's links,
   and a reference list set in an unusual way is refused rather than guessed.

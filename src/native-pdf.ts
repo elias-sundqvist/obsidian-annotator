@@ -7,6 +7,13 @@ import { areaOf, areaSelector, fitArea, moveArea, resizeArea, type AreaWay, type
 import { planImport, type Imported } from './pdf-import';
 import type { PdfFound } from './pdf-read';
 import { pdfDetails, type PdfDetails } from './pdf-details';
+import type { OutlineEntry } from './page-ranges';
+/** An entry of the outline as the PDF library gives it. */
+interface OutlineItem {
+    title?: unknown;
+    dest?: unknown;
+    items?: OutlineItem[];
+}
 import { planExport, type ExportPlan, type PdfPageGeometry, type PdfTextItem } from './pdf-export';
 import { showing } from './rest';
 import {
@@ -259,11 +266,14 @@ export class NativePdf {
         view.contentEl.addEventListener('click', this.linkListener, true);
         view.contentEl.addEventListener('pointerup', this.selectionListener);
         view.contentEl.addEventListener('keyup', this.selectionListener);
+        // The page being read is noticed as the PDF scrolls, and on the timer for moves that do not scroll it.
+        view.contentEl.addEventListener('scroll', this.pageListener, true);
         // Nothing about a PDF nobody can see needs noticing until it is seen again.
         this.timer = setInterval(() => {
             if (showing(this.view.contentEl)) {
                 this.checkDocument();
                 this.whereabouts();
+                this.pageListener();
             }
         }, 750);
         this.checkDocument();
@@ -1021,6 +1031,72 @@ export class NativePdf {
         const page = nativeViewer(this.view)?.currentPageNumber;
         return typeof page === 'number' && Number.isSafeInteger(page) && page >= 1 ? page : null;
     }
+    /** Told when the page being read changes. */
+    onPage: ((page: number) => void) | null = null;
+    private pageSeen: number | null = null;
+    private pageListener = () => {
+        if (this.disposed) return;
+        const page = this.currentPage();
+        if (page === this.pageSeen) return;
+        this.pageSeen = page;
+        if (page) this.onPage?.(page);
+    };
+    /** Go to a page: at once if the PDF is open (Back returns from it), else as soon as its pages are there. */
+    showPage(page: number) {
+        const viewer = nativeViewer(this.view);
+        if (viewer?.pdfDocument && this.view.contentEl.querySelector('.page[data-page-number] .textLayer')) {
+            if (viewer.currentPageNumber !== page) this.goTo(page, null, null);
+            return;
+        }
+        this.resumePage = { page, pages: 0 };
+        this.schedule();
+    }
+    /**
+     * The PDF's outline (its bookmarks), each entry with the page it leads to and how deep it is. Entries whose place
+     * cannot be found are left out; a PDF without an outline has none. Read when asked, at most a few levels deep.
+     */
+    async outline(): Promise<OutlineEntry[]> {
+        const doc = nativeViewer(this.view)?.pdfDocument as unknown as
+            | {
+                  getOutline?(): Promise<OutlineItem[] | null>;
+                  getDestination?(name: string): Promise<unknown[] | null>;
+                  getPageIndex?(ref: unknown): Promise<number>;
+              }
+            | undefined;
+        if (!doc || typeof doc.getOutline !== 'function') return [];
+        const out: OutlineEntry[] = [];
+        const pageOf = async (dest: unknown): Promise<number | null> => {
+            try {
+                const array =
+                    typeof dest === 'string' ? await doc.getDestination?.(dest) : Array.isArray(dest) ? dest : null;
+                const target = array?.[0];
+                if (typeof target === 'number') return target + 1;
+                if (target && typeof doc.getPageIndex === 'function') return (await doc.getPageIndex(target)) + 1;
+            } catch {
+                /* An entry that leads nowhere is left out. */
+            }
+            return null;
+        };
+        const walk = async (items: OutlineItem[] | null | undefined, depth: number) => {
+            for (const item of items || []) {
+                if (out.length >= 500) return;
+                const page = await pageOf(item.dest);
+                if (page && typeof item.title === 'string') out.push({ title: item.title, page, depth });
+                if (depth < 2) await walk(item.items, depth + 1);
+            }
+        };
+        try {
+            await walk(await doc.getOutline(), 0);
+        } catch {
+            return out;
+        }
+        return out;
+    }
+    /** How many pages the PDF has, once it is open. */
+    pageCount(): number | null {
+        const count = nativeViewer(this.view)?.pdfDocument?.numPages;
+        return typeof count === 'number' && count > 0 ? count : null;
+    }
     // ── Citations ───────────────────────────────────────────────────────────
     // Nothing below runs unless the Citations view asks: no page is read and no link looked at for a PDF whose citations nobody looks at.
     private cited: { doc: PdfDocument; reader: PdfCitations } | null = null;
@@ -1442,7 +1518,9 @@ export class NativePdf {
             if (viewer && pages && this.view.contentEl.querySelector('.page[data-page-number] .textLayer')) {
                 const { page, pages: then } = this.resumePage;
                 this.resumePage = null;
-                if (then === pages && viewer.currentPageNumber !== page) viewer.currentPageNumber = page;
+                // A page asked for without a length (a note's first page) is gone to whatever the length.
+                if ((then === pages || (then === 0 && page <= pages)) && viewer.currentPageNumber !== page)
+                    viewer.currentPageNumber = page;
             }
         }
         // Three passes, so that the browser lays the pages out once and not once for every highlight: first every
@@ -3198,6 +3276,7 @@ export class NativePdf {
         this.view.contentEl.removeEventListener('pointerup', this.selectionListener);
         this.view.contentEl.removeEventListener('click', this.linkListener, true);
         this.view.contentEl.removeEventListener('keyup', this.selectionListener);
+        this.view.contentEl.removeEventListener('scroll', this.pageListener, true);
         this.removeMarks();
     }
 }

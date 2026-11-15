@@ -175,6 +175,11 @@ export class CitationsView extends ItemView {
         if (this.page && Date.now() - this.waiting.since < 250) return;
         void this.readPage(page);
     }
+    /** The source's annotation note: of a PDF whose notes each hold some of its pages, the note of the page being read. */
+    private sourceNote(source: string): TFile | null {
+        const state = this.plugin.notes.get(source);
+        return state?.note || (state?.parts ? this.plugin.shownNote(source) : null);
+    }
     private reset() {
         this.serial++;
         this.reader = null;
@@ -736,7 +741,7 @@ export class CitationsView extends ItemView {
             });
         field('Note name', form.name, value => (form.name = value));
         const source = this.source,
-            hasNote = !!(source && this.plugin.notes.get(source)?.note),
+            hasNote = !!(source && this.sourceNote(source)),
             pdf = this.host?.view.file;
         if (source && !hasNote) {
             const row = box.createEl('label', { cls: 'annotator-citation-check' });
@@ -800,7 +805,7 @@ export class CitationsView extends ItemView {
                     `A note named “${name}” is already there. Nothing was written; give this one another name.`
                 );
             // What the note links back to: the source's annotation note, made only if its box is ticked; else the PDF itself.
-            let target: TFile | null = source ? this.plugin.notes.get(source)?.note || null : null;
+            let target: TFile | null = source ? this.sourceNote(source) : null;
             if (!target && source && form.makeNote) target = await this.plugin.annotationNote(source);
             const pdf = this.host?.view.file;
             if (!target && pdf instanceof TFile) target = pdf;
@@ -832,7 +837,7 @@ export class CitationsView extends ItemView {
             source = this.source;
         if (!(note instanceof TFile) || !source) return;
         const pdf = this.host?.view.file;
-        const target = this.plugin.notes.get(source)?.note || (pdf instanceof TFile ? pdf : null);
+        const target = this.sourceNote(source) || (pdf instanceof TFile ? pdf : null);
         if (!target) throw new Error('This source has no note or file in the vault to link to.');
         const has = this.app.metadataCache.getFileCache(note)?.frontmatter?.['cited-by'] as unknown;
         const listed: string[] = Array.isArray(has)

@@ -134,6 +134,24 @@ import { noteFolding, refold } from './note-folding';
 import { appLink, calibreFile, followedLinks, zoteroFile } from './app-links';
 import { rectLink, selectionLink, type RectLink, type SelectionLink } from './selection-links';
 import { MATCH_LIMIT, matchWords, type MatchOptions, type MatchSource } from './every-match';
+import {
+    PAGES_PROPERTY,
+    describePages,
+    freePagesAround,
+    outlineEntryFor,
+    outlineRangeFor,
+    partForPage,
+    planNotes,
+    rangeNoteName,
+    rangeProblem,
+    readPageRange,
+    storedPage,
+    uncoveredMessage,
+    writePageRange,
+    type OutlineEntry,
+    type PageRange
+} from './page-ranges';
+import { PageRangeModal } from './page-range-dialog';
 import { EveryMatchModal, type MatchCount, type MatchRequest } from './every-match-dialog';
 import type { EditorView } from '@codemirror/view';
 import { LiveWebHost, type GuestElement, type WebFigureCapture } from './live-web';
@@ -191,6 +209,30 @@ interface NoteState {
         string,
         string
     >;
+    /**
+     * For a PDF whose annotation notes each hold a range of its pages (`annotation-pages`): each note with its pages and
+     * what it holds, in the order of their pages. `note` is then null, and `records`, `problems` and `quotes` are all
+     * the notes' together, so the pages show every note's annotations.
+     */
+    parts?: NotePart[];
+}
+/** One annotation note of a PDF whose notes hold page ranges: its pages, and what it holds. */
+interface NotePart {
+    note: TFile;
+    range: PageRange;
+    records: Annotation[];
+    problems?: NoteProblem[];
+    quotes?: Map<string, string>;
+}
+/** What the sidebar shows of a source: its note's annotations, or for a PDF whose notes hold page ranges, those of the note of the page being read. */
+export interface ShownNotes {
+    note: TFile | null;
+    records: Annotation[];
+    error?: string;
+    problems?: NoteProblem[];
+    quotes?: Map<string, string>;
+    /** For a PDF whose notes hold page ranges: the pages of the note shown, or the page that is in no note. */
+    pages?: { range: PageRange; of: number } | { uncovered: number; message: string };
 }
 interface RemoteCandidate {
     url: string;
@@ -915,6 +957,13 @@ export default class AnnotatorPlugin extends Plugin {
             }
         });
         this.addCommand({
+            id: 'new-page-range-note',
+            name: 'New annotation note for pages…',
+            callback: () => {
+                void this.newRangeNote().catch(error => this.fail(error));
+            }
+        });
+        this.addCommand({
             id: 'import-pdf-annotations',
             name: 'Take in the annotations this PDF already holds',
             callback: () => {
@@ -1172,7 +1221,7 @@ export default class AnnotatorPlugin extends Plugin {
                     void this.openPlainNote(video.file, video.leaf).catch(error => this.fail(error));
                     return;
                 }
-                const note = this.currentFile && this.notes.get(this.currentFile)?.note;
+                const note = this.shownNote(this.currentFile);
                 const active = this.app.workspace.getActiveFile();
                 if (active?.extension === 'md' && this.targetKey(active)) this.openMarkdownNote(active, true);
                 else if (note) {
@@ -1251,12 +1300,18 @@ export default class AnnotatorPlugin extends Plugin {
             this.app.vault.on('modify', file => {
                 for (const binding of this.bindings.values()) binding.host.sourceChanged?.(file.path);
                 for (const [key, state] of this.notes)
-                    if (state.note?.path === file.path || key === file.path) void this.loadNote(key);
+                    if (this.notesOf(state).some(note => note.path === file.path) || key === file.path)
+                        void this.loadNote(key);
             })
         );
         this.registerEvent(
             this.app.vault.on('delete', file => {
-                for (const [pdf, state] of this.notes)
+                for (const [pdf, state] of this.notes) {
+                    // One of the notes of a PDF whose notes hold page ranges is gone: the others are read again, as they now share it.
+                    if (state.parts?.some(part => part.note.path === file.path) && pdf !== file.path) {
+                        void this.loadNote(pdf);
+                        continue;
+                    }
                     if (
                         state.note?.path === file.path ||
                         collectionSource(pdf) === file.path ||
@@ -1280,6 +1335,7 @@ export default class AnnotatorPlugin extends Plugin {
                         });
                         this.updateHosts(pdf);
                     }
+                }
                 this.refresh();
             })
         );
@@ -1343,11 +1399,18 @@ export default class AnnotatorPlugin extends Plugin {
             this.app.metadataCache.on('changed', file => {
                 this.retryPendingMarkdown(file);
                 this.markAnnotationNotes();
+                // A note that says pages of a PDF, or one of the notes of a PDF whose notes hold page ranges (or that could
+                // not share it): the PDF's notes are read again, as they may share it differently now.
+                const paged = !!this.pagesOf(file),
+                    names = (pdf: string) =>
+                        !collectionContext(pdf) && /\.pdf$/i.test(pdf) && this.noteMatchesSource(file, pdf);
                 for (const [pdf, state] of this.notes)
                     if (
                         this.associations[pdf] === file.path ||
                         state.note?.path === file.path ||
-                        (!state.note && !state.error)
+                        (!state.note && !state.error && !state.parts) ||
+                        !!state.parts?.some(part => part.note === file) ||
+                        ((!!state.parts || !!state.error || paged) && names(pdf))
                     )
                         void this.loadNote(pdf);
             })
@@ -1468,7 +1531,11 @@ export default class AnnotatorPlugin extends Plugin {
         const source = this.baseSourceKey(view);
         if (!source) return null;
         const selected = this.leafCollections.get(view.leaf);
-        return selected?.source === source ? collectionKey(source, selected.note) : source;
+        if (selected?.source !== source) return source;
+        // A note that holds some of a PDF's pages is never a pane's own: the pane shows every note of the PDF, each on its pages.
+        const chosen = this.app.vault.getAbstractFileByPath(selected.note);
+        if (chosen instanceof TFile && this.pagesOf(chosen) && /\.pdf$/i.test(source)) return source;
+        return collectionKey(source, selected.note);
     }
     /**
      * A file Obsidian opened from outside the vault (it can, since 1.14.4). Its path is a `file:` address, and
@@ -1619,8 +1686,10 @@ export default class AnnotatorPlugin extends Plugin {
         // Asked only once there is a reader to tell: the place is given out once.
         const readers = [...this.bindings.values()].filter(binding => binding.file === key && binding.host.resume);
         if (!readers.length) return;
-        const where = this.progressElsewhere(this.notes.get(key)?.note),
-            progress = where ? readProgress(where) : null;
+        // Of a PDF whose notes hold page ranges, each note keeps where its pages were left: the one that says something new is gone to.
+        let where: string | null = null;
+        for (const note of this.notesOf(this.notes.get(key))) where = this.progressElsewhere(note) || where;
+        const progress = where ? readProgress(where) : null;
         if (progress)
             for (const binding of readers) {
                 try {
@@ -1638,7 +1707,10 @@ export default class AnnotatorPlugin extends Plugin {
         } catch {
             where = '';
         }
-        const note = this.notes.get(key)?.note;
+        // Of a PDF whose notes hold page ranges, it is written to the note of the page that was left.
+        const state = this.notes.get(key),
+            left = state?.parts ? Number(/^(\d+)\//.exec(where)?.[1]) : 0,
+            note = state?.parts ? (left ? partForPage(state.parts, left)?.note : null) : state?.note;
         if (!where || !note || this.damaged(key)) return;
         void this.writeProgress(note, where);
     }
@@ -1771,6 +1843,7 @@ export default class AnnotatorPlugin extends Plugin {
                     pdf.onDrawingChange = (annotation, drawing, ink) => {
                         void this.changeDrawing(key, annotation, drawing, ink);
                     };
+                    pdf.onPage = () => this.pageMoved(key);
                 }
                 if (!this.collectionStateCleanups.has(view))
                     this.collectionStateCleanups.set(
@@ -1855,7 +1928,7 @@ export default class AnnotatorPlugin extends Plugin {
         if (this.outsideVault(file)) return;
         const key = file.path;
         // Only a PDF that has an annotation note costs anything here: no note, no painter.
-        if (!this.notes.get(key)?.note && !this.associations[key]) {
+        if (!this.notes.get(key)?.note && !this.notes.get(key)?.parts && !this.associations[key]) {
             const noted = this.app.vault.getMarkdownFiles().some(note => this.noteMatchesSource(note, key));
             if (!noted) return;
         }
@@ -2087,7 +2160,7 @@ export default class AnnotatorPlugin extends Plugin {
      */
     private async noteSettles(note: TFile, key: string): Promise<boolean> {
         // Only a note this source was already reading from can be "being re-indexed"; anything else is judged as it stands.
-        const known = this.notes.get(key)?.note === note;
+        const known = this.notesOf(this.notes.get(key)).includes(note);
         for (let waited = 0; ; waited += 40) {
             if (this.noteMatchesSource(note, key)) return true;
             if (!known || waited >= 2000 || this.stopped || this.app.vault.getAbstractFileByPath(note.path) !== note)
@@ -2120,6 +2193,11 @@ export default class AnnotatorPlugin extends Plugin {
     }
     private async readNote(pdf: string, generation: number) {
         try {
+            // A PDF whose notes hold ranges of its pages is read from all of them; anything else as it always was.
+            if (this.pagedNotes(pdf).length) {
+                await this.readParts(pdf, generation);
+                return;
+            }
             let note: TFile | null = null;
             let associated: string | undefined = collectionContext(pdf)?.note || this.associations[pdf];
             // The note this source was tied to is gone: deleted or renamed while the reader was not running, or by a
@@ -2185,11 +2263,232 @@ export default class AnnotatorPlugin extends Plugin {
             this.refresh();
         }
     }
+    /** Pages a note made this session holds, until the host has indexed it and its property can be read. */
+    private madeRanges = new WeakMap<TFile, PageRange>();
+    /** What a note's `annotation-pages` says: a range, why it is not one, or null when it says nothing. */
+    private pagesOf(note: TFile): { range: PageRange } | { error: string } | null {
+        const frontmatter = this.app.metadataCache.getFileCache(note)?.frontmatter as
+            Record<string, unknown> | undefined;
+        if (!frontmatter) {
+            const made = this.madeRanges.get(note);
+            return made ? { range: made } : null;
+        }
+        const value = frontmatter[PAGES_PROPERTY];
+        // A property added and not yet filled in says nothing.
+        if (value === undefined || value === null || (typeof value === 'string' && !value.trim())) return null;
+        return readPageRange(value);
+    }
+    /** The notes that hold a range of this PDF's pages, or try to. None for anything that is not a PDF, or for a note chosen for its pane. */
+    private pagedNotes(key: string): TFile[] {
+        if (collectionContext(key) || !/\.pdf$/i.test(key)) return [];
+        return this.app.vault
+            .getMarkdownFiles()
+            .filter(note => !!this.pagesOf(note) && this.noteMatchesSource(note, key));
+    }
+    /**
+     * Read a PDF whose annotation notes each hold a range of its pages: every note that names it, each for its pages.
+     * Notes that cannot share it (two that hold one page, one without pages beside them, pages that cannot be read)
+     * are an error that says which and why, and nothing is written to any of them until it is put right.
+     */
+    private async readParts(pdf: string, generation: number) {
+        const named = this.app.vault.getMarkdownFiles().filter(note => this.noteMatchesSource(note, pdf));
+        const plan = planNotes(
+            named.map(note => {
+                const said = this.pagesOf(note);
+                return {
+                    note,
+                    name: note.basename,
+                    range: said && 'range' in said ? said.range : null,
+                    ...(said && 'error' in said ? { error: said.error } : {})
+                };
+            })
+        );
+        if (plan.kind === 'conflict') throw new Error(plan.message);
+        if (plan.kind === 'single') throw new Error('The annotation notes of this PDF changed while loading.');
+        const parts: NotePart[] = [];
+        for (const { note, range } of plan.parts) {
+            const { records, problems, quotes } = await this.logic.call('readSome', await this.app.vault.read(note));
+            parts.push({
+                note,
+                range,
+                records,
+                ...(problems.length ? { problems } : {}),
+                ...(quotes?.length ? { quotes: new Map(quotes) } : {})
+            });
+        }
+        if (this.stopped || this.versions.get(pdf) !== generation) return;
+        for (const { note } of parts)
+            if (
+                this.app.vault.getAbstractFileByPath(note.path) !== note ||
+                (!this.noteMatchesSource(note, pdf) && !(await this.noteSettles(note, pdf)))
+            )
+                throw new Error(
+                    'An annotation note of this PDF was replaced or its target changed while loading. Reopen it to reconnect.'
+                );
+        if (this.stopped || this.versions.get(pdf) !== generation) return;
+        // An annotation is in one note: one copied into another would be two places for one thing.
+        const holder = new Map<string, TFile>();
+        for (const part of parts)
+            for (const row of part.records) {
+                const other = holder.get(row.id);
+                if (other && other !== part.note)
+                    throw new Error(
+                        `The annotation ^${row.id} is in both ${other.basename} and ${part.note.basename}. An annotation can be in one note only: delete one of the two. Nothing is written to them until then.`
+                    );
+                holder.set(row.id, part.note);
+            }
+        const problems = parts.flatMap(part => part.problems || []),
+            quotes = new Map<string, string>();
+        for (const part of parts) for (const [id, quote] of part.quotes || []) quotes.set(id, quote);
+        this.notes.set(pdf, {
+            note: null,
+            records: parts.flatMap(part => part.records),
+            ...(problems.length ? { problems } : {}),
+            ...(quotes.size ? { quotes } : {}),
+            parts
+        });
+        this.updateHosts(pdf);
+        this.resumeElsewhere(pdf);
+        this.refresh();
+    }
+    /** The notes a source's annotations are read from: its one note, or each note of a PDF whose notes hold page ranges. */
+    private notesOf(state: NoteState | undefined): TFile[] {
+        return state?.parts ? state.parts.map(part => part.note) : state?.note ? [state.note] : [];
+    }
+    /** The note that holds an annotation: the source's note, or the one of its notes that has it. */
+    private noteHolding(file: string, id: string): TFile | null {
+        const state = this.notes.get(file);
+        if (!state?.parts) return state?.note || null;
+        return state.parts.find(part => part.records.some(row => row.id === id))?.note || null;
+    }
+    /** The page being read in the reader of a source, when it is a PDF. */
+    private readerPage(file: string): number | null {
+        const host: unknown = this.bindingFor(file)?.host;
+        try {
+            return host instanceof NativePdf ? host.currentPage() : null;
+        } catch {
+            return null;
+        }
+    }
+    /**
+     * The part of a PDF whose notes hold page ranges that the sidebar is about: the one that holds what is being
+     * worked on (the annotation edited or answered, the passage selected, the page a note was begun on), or else the
+     * one that holds the page being read. Null, with the page, when that page is in no note.
+     */
+    private shownPart(file: string, state: NoteState): { part: NotePart | null; page: number | null } {
+        const parts = state.parts || [],
+            holding = (id: string) => parts.find(part => part.records.some(row => row.id === id)) || null;
+        if (this.editing?.file === file) {
+            const part = holding(this.editing.annotation.id);
+            if (part) return { part, page: null };
+        }
+        if (this.draft?.file === file) {
+            if (this.draft.parent) {
+                const part = holding(this.draft.parent.id);
+                if (part) return { part, page: null };
+            } else if (this.draft.page) return { part: partForPage(parts, this.draft.page), page: this.draft.page };
+        }
+        const selected = this.selection?.file === file ? (this.selection as { page?: unknown }).page : undefined;
+        if (typeof selected === 'number' && selected >= 1)
+            return { part: partForPage(parts, selected), page: selected };
+        const page = this.readerPage(file);
+        // Before the PDF says where it is, its first note is shown.
+        if (!page) return { part: parts[0] || null, page: null };
+        return { part: partForPage(parts, page), page };
+    }
+    /** What the sidebar shows of a source. For a PDF whose notes hold page ranges, the note of the page (or of what is being worked on), with its pages. */
+    shownNotes(file: string | null): ShownNotes | undefined {
+        const state = file ? this.notes.get(file) : undefined;
+        if (!file || !state?.parts) return state;
+        const { part, page } = this.shownPart(file, state);
+        if (!part)
+            return {
+                note: null,
+                records: [],
+                ...(state.error ? { error: state.error } : {}),
+                pages: { uncovered: page || 1, message: uncoveredMessage(page || 1, this.namedParts(state.parts)) }
+            };
+        return {
+            note: part.note,
+            records: part.records,
+            ...(state.error ? { error: state.error } : {}),
+            ...(part.problems ? { problems: part.problems } : {}),
+            ...(part.quotes ? { quotes: part.quotes } : {}),
+            pages: { range: part.range, of: state.parts.length }
+        };
+    }
+    /** The note the sidebar is about: the source's note, or the note of the page being read. */
+    shownNote(file: string | null): TFile | null {
+        return this.shownNotes(file)?.note || null;
+    }
+    private namedParts(parts: readonly NotePart[]) {
+        return parts.map(part => ({ name: part.note.basename, range: part.range }));
+    }
+    /**
+     * Which note each new annotation goes into. A source has one note (made if it has none); a PDF whose notes hold page
+     * ranges has the note whose range holds the page an annotation is on. A reply goes where what it answers is. What is
+     * on a page no note holds goes nowhere: it is given back as `outside`, for the caller to count or refuse.
+     */
+    private async notesForNew<T>(
+        file: string,
+        rows: readonly T[],
+        pageOf: (row: T) => number | null,
+        idOf: (row: T) => string = () => '',
+        answers: (row: T) => readonly string[] = () => []
+    ): Promise<{ groups: { note: TFile; rows: T[] }[]; outside: T[] }> {
+        let state = this.notes.get(file);
+        if (!state) {
+            await this.loadNote(file);
+            state = this.notes.get(file);
+        }
+        if (!state?.parts)
+            return { groups: rows.length ? [{ note: await this.ensureNote(file), rows: [...rows] }] : [], outside: [] };
+        if (state.error) throw new Error(state.error);
+        const groups = new Map<TFile, T[]>(),
+            outside: T[] = [],
+            placed = new Map<string, TFile>();
+        for (const row of rows) {
+            const answered = answers(row),
+                parent = answered.length ? answered[answered.length - 1] : '';
+            let note: TFile | null = parent ? placed.get(parent) || this.noteHolding(file, parent) : null;
+            if (!parent) {
+                const page = pageOf(row);
+                note = page ? partForPage(state.parts, page)?.note || null : null;
+            }
+            if (!note) {
+                outside.push(row);
+                continue;
+            }
+            const id = idOf(row);
+            if (id) placed.set(id, note);
+            const list = groups.get(note) || [];
+            list.push(row);
+            groups.set(note, list);
+        }
+        return { groups: [...groups].map(([note, list]) => ({ note, rows: list })), outside };
+    }
+    /** Which note the sidebar last showed of each PDF whose notes hold page ranges, so that it is drawn again only when that changes. */
+    private shownParts = new Map<string, string>();
+    /** The page being read changed: of a PDF whose notes hold page ranges, the sidebar follows it into another note's pages. */
+    private pageMoved(key: string) {
+        if (this.stopped || this.currentFile !== key || !this.notes.get(key)?.parts) return;
+        const shown = this.shownNotes(key),
+            pages = shown?.pages,
+            now = !pages ? '' : 'range' in pages ? shown?.note?.path || '' : `page ${pages.uncovered}`;
+        if (this.shownParts.get(key) === now) return;
+        this.shownParts.set(key, now);
+        this.refresh();
+    }
     private updateHosts(pdf: string) {
         for (const binding of this.bindings.values())
             if (binding.file === pdf) binding.host.setAnnotations(this.notes.get(pdf)?.records || []);
     }
-    private async ensureNote(pdf: string): Promise<TFile> {
+    /**
+     * The note a new annotation of a source goes into, made if the source has none. For a PDF whose notes hold page
+     * ranges it is the note whose range holds the page (the page being read, unless another is given); a page no note
+     * holds has none, and that is said.
+     */
+    private async ensureNote(pdf: string, page?: number | null): Promise<TFile> {
         // Whatever led here, a note is never made beside a file that is not in the vault.
         if (this.outsideVault({ path: collectionSource(pdf) }))
             throw new Error('This file is outside your vault. Move or copy it into the vault to annotate it.');
@@ -2199,6 +2498,13 @@ export default class AnnotatorPlugin extends Plugin {
             state = this.notes.get(pdf);
         }
         if (state?.error) throw new Error(state.error);
+        if (state?.parts) {
+            const at = page ?? this.readerPage(pdf);
+            if (!at) throw new Error('Wait for the PDF to open: its notes each hold some of its pages.');
+            const part = partForPage(state.parts, at);
+            if (!part) throw new Error(uncoveredMessage(at, this.namedParts(state.parts)));
+            return part.note;
+        }
         if (state?.note) return state.note;
         if (this.stopped) throw new Error('Plugin unloaded before creating an annotation note.');
         const path = pdf.startsWith('web:') ? `Web annotations ${uuid().slice(0, 8)}.md` : `${pdf}.annotations.md`;
@@ -2213,8 +2519,11 @@ export default class AnnotatorPlugin extends Plugin {
         this.notes.set(pdf, { note, records: [] });
         return note;
     }
-    /** A new note starts from the reader's template note where one is set and can be read, else from the chosen heading. */
-    private async newNoteContent(target: string, title: string): Promise<string> {
+    /**
+     * A new note starts from the reader's template note where one is set and can be read, else from the chosen
+     * heading. A note for some pages of a PDF says them beside its target.
+     */
+    private async newNoteContent(target: string, title: string, pages?: string): Promise<string> {
         const date = new Date().toISOString().slice(0, 10);
         let template: string | null = null;
         if (this.display.noteTemplate.trim()) {
@@ -2236,7 +2545,8 @@ export default class AnnotatorPlugin extends Plugin {
                     8000
                 );
         }
-        let text = newNoteText({ target, title, date, heading: this.display.noteHeading, template });
+        const given = pages ? { pages } : {};
+        let text = newNoteText({ target, title, date, heading: this.display.noteHeading, template, ...given });
         // What annotations are appended to must read as a note without annotations; a template that does not is not used.
         try {
             if ((await this.codec.readAll(text)).length) throw new Error('The template already holds annotations.');
@@ -2245,9 +2555,109 @@ export default class AnnotatorPlugin extends Plugin {
                 'The template for new annotation notes cannot be used as it is; the note starts with its heading instead.',
                 8000
             );
-            text = newNoteText({ target, title, date, heading: this.display.noteHeading });
+            text = newNoteText({ target, title, date, heading: this.display.noteHeading, ...given });
         }
         return text;
+    }
+    /**
+     * "New annotation note for pages…": a note for some of the open PDF's pages, a chapter of a textbook. The dialog
+     * offers the free pages around the page being read (the chapter there, where the PDF's outline has chapters) and a
+     * name (the outline's entry for those pages, or the pages). Nothing is written until it is confirmed.
+     */
+    async newRangeNote(key: string | null = this.currentFile) {
+        const host: unknown = key ? this.bindingFor(key)?.host : undefined,
+            source = host instanceof NativePdf ? host.view.file : null;
+        if (!key || !(host instanceof NativePdf) || !(source instanceof TFile) || !/^pdf$/i.test(source.extension)) {
+            new Notice('Open a PDF to make an annotation note for some of its pages.');
+            return;
+        }
+        const pdf = collectionSource(key);
+        if (this.outsideVault(source)) {
+            new Notice('This file is outside your vault. Move or copy it into the vault to annotate it.');
+            return;
+        }
+        let state = this.notes.get(pdf);
+        if (!state || pdf !== key) {
+            await this.loadNote(pdf);
+            state = this.notes.get(pdf);
+        }
+        const standing = this.rangeStanding(state);
+        if (standing) {
+            new Notice(standing, 12000);
+            return;
+        }
+        const parts = state?.parts || [],
+            page = host.currentPage() || 1,
+            count = host.pageCount();
+        let outline: OutlineEntry[] = [];
+        try {
+            outline = await host.outline();
+        } catch {
+            outline = [];
+        }
+        const free = freePagesAround(parts, page, count),
+            initial = free ? outlineRangeFor(outline, page, free) || free : null;
+        new PageRangeModal(this.app, {
+            source: source.path.slice(source.path.lastIndexOf('/') + 1),
+            initial,
+            check: text => {
+                const read = readPageRange(text);
+                if ('error' in read) return read;
+                const problem = rangeProblem(read.range, this.namedParts(parts), count);
+                return problem
+                    ? { error: problem }
+                    : {
+                          range: read.range,
+                          name: rangeNoteName(
+                              source.path.slice(source.path.lastIndexOf('/') + 1),
+                              outlineEntryFor(outline, read.range)?.title || null,
+                              read.range
+                          )
+                      };
+            },
+            create: (range, name) => {
+                void this.makeRangeNote(pdf, source, range, name).catch(error => this.fail(error));
+            }
+        }).open();
+    }
+    /** Why a note for some pages cannot be made beside the notes a PDF has, or null when it can. */
+    private rangeStanding(state: NoteState | undefined): string | null {
+        if (state?.error) return `${state.error.replace(/^Annotations unavailable: (?:Error: )?/, '')}`;
+        if (state?.note)
+            return `${state.note.basename} holds this PDF's annotations without annotation-pages. Give it annotation-pages for the pages it holds first; notes for the other pages can be made then.`;
+        return null;
+    }
+    /** Write a note for some pages of a PDF, after looking again at the notes the PDF has now. */
+    async makeRangeNote(pdf: string, source: TFile, range: PageRange, name: string): Promise<TFile> {
+        const clean = name
+            .replace(/[\\/:*?"<>|#^[\]]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        if (!clean) throw new Error('Give the note a name.');
+        const folder = source.path.slice(0, source.path.lastIndexOf('/') + 1),
+            path = `${folder}${clean}.md`;
+        if (this.app.vault.getAbstractFileByPath(path))
+            throw new Error(
+                `A note named “${clean}” is already there. Nothing was written; give this one another name.`
+            );
+        await this.loadNote(pdf);
+        const state = this.notes.get(pdf),
+            standing = this.rangeStanding(state);
+        if (standing) throw new Error(standing);
+        const host = this.pdfFor(pdf),
+            problem = rangeProblem(range, this.namedParts(state?.parts || []), host?.pageCount() ?? null);
+        if (problem) throw new Error(`${problem} Nothing was written.`);
+        if (this.stopped) throw new Error('Plugin unloaded before creating an annotation note.');
+        const note = await this.app.vault.create(path, await this.newNoteContent(pdf, clean, writePageRange(range)));
+        // Until the host has indexed it, what it is about and which pages it holds are what was written into it.
+        this.madeNotes.set(note, pdf);
+        this.madeRanges.set(note, range);
+        await this.loadNote(pdf);
+        new Notice(`${clean} made for ${describePages(range)} of ${source.basename}.`);
+        const at = host?.currentPage();
+        if (host && (!at || !partForPage([{ range }], at))) host.showPage(range.first);
+        this.refresh();
+        return note;
     }
     async captureLast(action: SelectionAction = 'annotate', ink?: Ink) {
         const active = this.app.workspace.getMostRecentLeaf()?.view;
@@ -2338,7 +2748,12 @@ export default class AnnotatorPlugin extends Plugin {
     }
     /** A source's annotation note, made if it has none (as "Add the PDF's details" makes it). */
     annotationNote(source: string): Promise<TFile> {
-        return this.ensureNote(source);
+        return this.ensureNote(source, this.shownPage(source));
+    }
+    /** The page the sidebar is about, for a PDF whose notes hold page ranges: the first page of the note shown, or the page in no note. */
+    private shownPage(file: string): number | null {
+        const pages = this.shownNotes(file)?.pages;
+        return !pages ? null : 'range' in pages ? pages.range.first : pages.uncovered;
     }
     /** The Citations view, in a part of the right sidebar of its own (under the annotations), so both show while reading. */
     async openCitations(): Promise<CitationsView | null> {
@@ -2696,7 +3111,7 @@ export default class AnnotatorPlugin extends Plugin {
         if (this.busy || style === styleOf(annotation) || this.damaged(file)) return;
         this.busy = true;
         try {
-            const note = this.notes.get(file)?.note;
+            const note = this.noteHolding(file, annotation.id);
             if (!note) throw new Error('Annotation note is unavailable.');
             await this.rewrite(note, async source => {
                 if (this.stopped) throw new Error('Plugin was unloaded before the style was changed.');
@@ -2760,7 +3175,7 @@ export default class AnnotatorPlugin extends Plugin {
         if (text === null && !this.ownQuote(file, annotation)) return;
         this.busy = true;
         try {
-            const note = this.notes.get(file)?.note;
+            const note = this.noteHolding(file, annotation.id);
             if (!note) throw new Error('Annotation note is unavailable.');
             await this.rewrite(note, async source => {
                 if (this.stopped) throw new Error('Plugin was unloaded before the quote was written.');
@@ -2781,7 +3196,7 @@ export default class AnnotatorPlugin extends Plugin {
         if (this.busy || ink === inkOf(annotation) || this.damaged(file)) return;
         this.busy = true;
         try {
-            const note = this.notes.get(file)?.note;
+            const note = this.noteHolding(file, annotation.id);
             if (!note) throw new Error('Annotation note is unavailable.');
             await this.rewrite(note, async source => {
                 if (this.stopped) throw new Error('Plugin was unloaded before recolouring.');
@@ -2816,7 +3231,7 @@ export default class AnnotatorPlugin extends Plugin {
             return;
         this.busy = true;
         try {
-            const note = this.notes.get(file)?.note;
+            const note = this.noteHolding(file, annotation.id);
             if (!note) throw new Error('Annotation note is unavailable.');
             const reader: unknown = this.bindingFor(file)?.host,
                 had = areaWords(annotation),
@@ -2911,7 +3326,7 @@ export default class AnnotatorPlugin extends Plugin {
             written: string | null = null;
         try {
             const identity = host.identity(),
-                note = await this.ensureNote(file),
+                note = await this.ensureNote(file, area.page),
                 id = uuid().replaceAll('-', ''),
                 now = new Date().toISOString();
             let picture = '';
@@ -3117,7 +3532,7 @@ export default class AnnotatorPlugin extends Plugin {
         }
         this.busy = true;
         try {
-            const note = this.notes.get(file)?.note;
+            const note = this.noteHolding(file, annotation.id);
             if (!note) throw new Error('Annotation note is unavailable.');
             await this.rewrite(note, async source => {
                 if (this.stopped) throw new Error('Plugin was unloaded before the drawing was changed.');
@@ -3171,7 +3586,6 @@ export default class AnnotatorPlugin extends Plugin {
         let last = '';
         try {
             const identity = host.identity(),
-                note = await this.ensureNote(file),
                 now = new Date().toISOString();
             const rows = drawings.map(({ drawing, ink }) => ({
                 ink,
@@ -3186,16 +3600,27 @@ export default class AnnotatorPlugin extends Plugin {
                     nativePdf: { version: 1, page: drawing.page }
                 } as Annotation
             }));
-            await this.rewrite(note, async source => {
-                if (this.stopped) throw new Error('The reader was closed before the drawing was saved.');
-                if (!this.noteMatchesSource(note, file))
-                    throw new Error('The annotation note target changed; the drawing was not saved.');
-                return this.codec.createMany(
-                    source,
-                    rows.map(({ annotation, ink }) => (ink !== DEFAULT_INK ? { annotation, ink } : { annotation })),
-                    { ...this.markdown }
+            // Each drawing goes into the note of its page; one on a page no note holds keeps them all from being saved.
+            const { groups, outside } = await this.notesForNew(file, rows, row => storedPage(row.annotation));
+            if (outside.length) {
+                const state = this.notes.get(file);
+                throw new Error(
+                    uncoveredMessage(storedPage(outside[0].annotation) || 1, this.namedParts(state?.parts || []))
                 );
-            });
+            }
+            for (const { note, rows: these } of groups)
+                await this.rewrite(note, async source => {
+                    if (this.stopped) throw new Error('The reader was closed before the drawing was saved.');
+                    if (!this.noteMatchesSource(note, file))
+                        throw new Error('The annotation note target changed; the drawing was not saved.');
+                    return this.codec.createMany(
+                        source,
+                        these.map(({ annotation, ink }) =>
+                            ink !== DEFAULT_INK ? { annotation, ink } : { annotation }
+                        ),
+                        { ...this.markdown }
+                    );
+                });
             await this.loadNote(file);
             last = rows[rows.length - 1].annotation.id;
         } catch (error) {
@@ -3312,9 +3737,16 @@ export default class AnnotatorPlugin extends Plugin {
                 throw new Error('Source changed; select the passage again.');
             if (this.stopped || (selected && !this.hostFor(file, selected || undefined)?.isCurrent(selected)))
                 throw new Error('Source context changed; select the passage again.');
-            if (editing && !this.notes.get(file)?.note)
+            // Of a PDF whose notes hold page ranges, an edit or a reply is written where its annotation is, and anything
+            // new into the note of its page.
+            const parts = this.notes.get(file)?.parts,
+                held = editing ? editing.annotation.id : draft?.parent?.id;
+            if (editing && !(parts ? this.noteHolding(file, editing.annotation.id) : this.notes.get(file)?.note))
                 throw new Error('The original annotation collection is unavailable; your draft is retained.');
-            const note = await this.ensureNote(file);
+            const holding = parts && held ? this.noteHolding(file, held) : null;
+            if (parts && held && !holding)
+                throw new Error('The annotation answered is no longer in a note; your draft is retained.');
+            const note = holding || (await this.ensureNote(file, storedPage(annotation) ?? draft?.page));
             await this.rewrite(note, async source => {
                 if (this.stopped || (selected && !this.hostFor(file, selected || undefined)?.isCurrent(selected)))
                     throw new Error('Source context changed before saving.');
@@ -3378,7 +3810,7 @@ export default class AnnotatorPlugin extends Plugin {
         const editing = this.editing,
             serial = this.draftSerial;
         try {
-            const note = this.notes.get(editing.file)?.note;
+            const note = this.noteHolding(editing.file, editing.annotation.id);
             if (!note) throw new Error('Annotation note is unavailable.');
             // An area's picture is deleted with it when it is that area's alone. Its bytes are kept for the Undo.
             const picture = this.ownPicture(editing.file, editing.annotation);
@@ -3418,7 +3850,7 @@ export default class AnnotatorPlugin extends Plugin {
                 }
             }
             await this.loadNote(editing.file);
-            this.offerUndo(editing.file, editing.annotation, kept);
+            this.offerUndo(editing.file, editing.annotation, kept, note);
         } catch (error) {
             this.fail(error);
         } finally {
@@ -3430,7 +3862,8 @@ export default class AnnotatorPlugin extends Plugin {
     private offerUndo(
         file: string,
         annotation: Annotation,
-        picture: { path: string; bytes: ArrayBuffer } | null = null
+        picture: { path: string; bytes: ArrayBuffer } | null = null,
+        note?: TFile
     ) {
         const document = this.app.workspace.containerEl.ownerDocument,
             message = document.createDocumentFragment();
@@ -3441,7 +3874,7 @@ export default class AnnotatorPlugin extends Plugin {
         const notice = new Notice(message, 8000) as Notice & { hide?(): void };
         undo.onclick = () => {
             notice.hide?.();
-            void this.restoreDeleted(file, annotation, picture).catch(error => this.fail(error));
+            void this.restoreDeleted(file, annotation, picture, note).catch(error => this.fail(error));
         };
     }
     /**
@@ -3451,8 +3884,8 @@ export default class AnnotatorPlugin extends Plugin {
     private ownPicture(file: string, annotation: Annotation): TFile | null {
         const link = regionNote(annotation) ? leadingImage(annotation.text) : null,
             state = this.notes.get(file),
-            note = state?.note;
-        if (!link || !note) return null;
+            note = this.noteHolding(file, annotation.id);
+        if (!link || !note || !state) return null;
         const picture = this.app.metadataCache.getFirstLinkpathDest?.(link, note.path);
         if (!(picture instanceof TFile) || !/^(png|jpe?g|webp|gif|svg)$/i.test(picture.extension)) return null;
         if (state.records.some(row => row.id !== annotation.id && (row.text || '').includes(link))) return null;
@@ -3497,7 +3930,7 @@ export default class AnnotatorPlugin extends Plugin {
     /** The picture an area note leads with, if it is a file in the vault. */
     private pictureFile(file: string, annotation: Annotation): TFile | null {
         const link = leadingImage(annotation.text),
-            note = this.notes.get(file)?.note;
+            note = this.noteHolding(file, annotation.id);
         const picture = link && note ? this.app.metadataCache.getFirstLinkpathDest?.(link, note.path) : null;
         return picture instanceof TFile ? picture : null;
     }
@@ -3588,16 +4021,22 @@ export default class AnnotatorPlugin extends Plugin {
         if (typeof manager?.trashFile === 'function') await manager.trashFile(file);
         else await this.app.vault.trash(file, false);
     }
-    /** Put a just-deleted annotation back, with its comment, tags, colour and anchors. It returns to the end of the note. */
+    /**
+     * Put a just-deleted annotation back, with its comment, tags, colour and anchors. It returns to the end of the note
+     * it was deleted from (of a PDF whose notes hold page ranges, the one it was in, while that note still holds pages
+     * of the PDF).
+     */
     async restoreDeleted(
         file: string,
         annotation: Annotation,
-        picture: { path: string; bytes: ArrayBuffer } | null = null
+        picture: { path: string; bytes: ArrayBuffer } | null = null,
+        from?: TFile
     ) {
         if (this.busy) throw new Error('An annotation operation is already running.');
         this.busy = true;
         try {
-            const note = this.notes.get(file)?.note;
+            const state = this.notes.get(file),
+                note = state?.parts ? state.parts.find(part => part.note === from)?.note : state?.note;
             if (!note) throw new Error('Annotation note is unavailable.');
             // The picture first: the restored note embeds it. If something else took its name meanwhile, that file is left alone.
             if (picture && !this.app.vault.getAbstractFileByPath(picture.path))
@@ -3627,14 +4066,19 @@ export default class AnnotatorPlugin extends Plugin {
         this.busy = true;
         let changed = 0;
         try {
-            const note = this.notes.get(file)?.note;
-            if (!note) throw new Error('Annotation note is unavailable.');
-            await this.rewrite(note, async source => {
-                if (this.stopped) throw new Error('Plugin was unloaded before renaming.');
-                const renamed = await this.codec.renameTag(source, from, next);
-                changed = renamed.changed;
-                return renamed.source;
-            });
+            // Every note of the source: of a PDF whose notes hold page ranges, each of them.
+            const notes = this.notesOf(this.notes.get(file));
+            if (!notes.length) throw new Error('Annotation note is unavailable.');
+            for (const note of notes) {
+                let here = 0;
+                await this.rewrite(note, async source => {
+                    if (this.stopped) throw new Error('Plugin was unloaded before renaming.');
+                    const renamed = await this.codec.renameTag(source, from, next);
+                    here = renamed.changed;
+                    return renamed.source;
+                });
+                changed += here;
+            }
             await this.loadNote(file);
             new Notice(
                 changed
@@ -3703,7 +4147,7 @@ export default class AnnotatorPlugin extends Plugin {
             session = this.activeDraftId,
             serial = this.draftSerial;
         if (!editing || !this.editMode) throw new Error('Open an annotation edit first.');
-        const note = this.notes.get(editing.file)?.note;
+        const note = this.noteHolding(editing.file, editing.annotation.id);
         if (!note) throw new Error('The original annotation collection is unavailable.');
         const current = (await this.codec.readAll(await this.app.vault.read(note))).find(
             row => row.id === editing.annotation.id
@@ -3833,7 +4277,7 @@ export default class AnnotatorPlugin extends Plugin {
             const raw = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
             if (this.stopped) throw new Error('Plugin unloaded before import.');
             await this.codec.importHypothesis('', raw); // Reject invalid files before creating a destination note.
-            const note = await this.ensureNote(file);
+            const note = await this.ensureNote(file, this.shownPage(file));
             await this.codec.importHypothesis(await this.app.vault.read(note), raw); // Validate before creating an archive.
             const digest = await crypto.subtle.digest('SHA-256', bytes);
             const hash = [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
@@ -3864,7 +4308,7 @@ export default class AnnotatorPlugin extends Plugin {
     }
     private async exportJson() {
         const file = this.currentFile,
-            note = file && this.notes.get(file)?.note;
+            note = this.shownNote(file);
         if (!note) throw new Error('Open a source with an annotation note first.');
         const raw = await this.codec.exportHypothesis(await this.app.vault.read(note));
         const path = `${note.path}.hypothesis-export-${uuid()}.json`;
@@ -3950,7 +4394,7 @@ export default class AnnotatorPlugin extends Plugin {
             mobile: Platform.isMobile,
             sheet: Platform.isPhone,
             session,
-            note: this.notes.get(file!)?.note || null,
+            note: this.editing ? this.noteHolding(file!, this.editing.annotation.id) : this.shownNote(file!),
             kind: region ? `Area · page ${region.page}` : figure ? 'Picture' : editing ? 'Edit note' : 'New note',
             quote,
             labels: this.inkLabels,
@@ -4069,7 +4513,7 @@ export default class AnnotatorPlugin extends Plugin {
         await this.persist();
     }
     async copyAnnotationLink(file: string, annotation: Annotation) {
-        const note = this.notes.get(file)?.note;
+        const note = this.noteHolding(file, annotation.id);
         if (!note) throw new Error('Annotation note is unavailable.');
         await navigator.clipboard.writeText(
             this.annotationLink(file, annotation) || annotationReference(note.path, annotation.id)
@@ -4087,7 +4531,7 @@ export default class AnnotatorPlugin extends Plugin {
     /** Open the Markdown note behind a collection, beside the reader rather than instead of it. */
     /** The annotation note opened as Markdown at a line (from 1), for putting a damaged block right by hand. */
     async openCollectionNoteAt(file: string, line: number) {
-        const note = this.notes.get(file)?.note;
+        const note = this.shownNote(file);
         if (!note) throw new Error('This source has no annotation note yet.');
         const leaf = this.app.workspace.getLeaf('tab');
         await this.openPlainNote(note, leaf);
@@ -4099,16 +4543,21 @@ export default class AnnotatorPlugin extends Plugin {
     }
     /** Whether the note has a block that cannot be read. Nothing is written into such a note: the checked operations refuse it, and this says so in plain words first. */
     private damaged(file: string | null): boolean {
-        const problems = file ? this.notes.get(file)?.problems : undefined;
+        const state = file ? this.notes.get(file) : undefined,
+            problems = state?.problems;
         if (!problems?.length) return false;
+        // Of a PDF whose notes hold page ranges, a damaged note stops changes to all of them, and is named.
+        const damaged = state?.parts?.find(part => part.problems?.length);
         new Notice(
-            `The annotation note has a damaged block (line ${problems[0].line}). Nothing was changed. Repair the note, then try again.`,
+            damaged
+                ? `The annotation note ${damaged.note.basename} has a damaged block (line ${damaged.problems![0].line}). Nothing was changed. Repair the note, then try again.`
+                : `The annotation note has a damaged block (line ${problems[0].line}). Nothing was changed. Repair the note, then try again.`,
             8000
         );
         return true;
     }
     async openCollectionNote(file: string) {
-        const note = this.notes.get(file)?.note;
+        const note = this.shownNote(file);
         if (!note) throw new Error('This source has no annotation note yet.');
         await this.openPlainNote(note, this.app.workspace.getLeaf('tab'));
     }
@@ -4131,14 +4580,13 @@ export default class AnnotatorPlugin extends Plugin {
         }
         return [...new Set([...used, ...vault])];
     }
-    private summaryContext(file: string): SummaryContext {
-        const state = this.notes.get(file),
-            host = this.hostFor(file),
+    private summaryContext(file: string, note: TFile | null = this.shownNote(file)): SummaryContext {
+        const host = this.hostFor(file),
             source = collectionSource(file);
         const location = (row: Annotation) => (host?.location ? host.location(row) : defaultLocation(row)) || null;
         const sourceFile = this.app.vault.getAbstractFileByPath(source);
         // What the note records about its source, for templates: a title property is what the source is called; authors and a year are given where they are recorded.
-        const recorded = (state?.note ? this.app.metadataCache.getFileCache(state.note)?.frontmatter : null) || {},
+        const recorded = (note ? this.app.metadataCache.getFileCache(note)?.frontmatter : null) || {},
             said = (value: unknown): string =>
                 Array.isArray(value)
                     ? value.map(said).filter(Boolean).join(', ')
@@ -4147,11 +4595,10 @@ export default class AnnotatorPlugin extends Plugin {
                       : '';
         return {
             title:
-                said(recorded.title) ||
-                (state?.note ? displayTitle(state.note.basename) : source.split('/').pop() || 'Annotations'),
+                said(recorded.title) || (note ? displayTitle(note.basename) : source.split('/').pop() || 'Annotations'),
             author: said(recorded.author ?? recorded.authors),
             year: said(recorded.year),
-            note: state?.note ? state.note.path.replace(/\.md$/i, '') : '',
+            note: note ? note.path.replace(/\.md$/i, '') : '',
             source:
                 sourceFile instanceof TFile
                     ? `[[${sourceFile.path}]]`
@@ -4176,14 +4623,18 @@ export default class AnnotatorPlugin extends Plugin {
         await this.copyText(
             annotationMarkdown(
                 thread,
-                { ...this.summaryContext(file), inkName: ink => inkLabel(ink as Ink, this.inkLabels) },
+                {
+                    ...this.summaryContext(file, this.noteHolding(file, annotation.id)),
+                    inkName: ink => inkLabel(ink as Ink, this.inkLabels)
+                },
                 this.summary
             ),
             'Annotation copied as Markdown.'
         );
     }
+    /** What is copied or exported as Markdown: the source's annotations, or of a PDF whose notes hold page ranges, those of the note shown. */
     private summaryText(file: string) {
-        const records = this.notes.get(file)?.records || [];
+        const records = this.shownNotes(file)?.records || [];
         if (!records.length) throw new Error('There are no annotations to export yet.');
         return summaryMarkdown(
             records,
@@ -4313,7 +4764,22 @@ export default class AnnotatorPlugin extends Plugin {
                 );
                 return;
             }
-            const note = await this.ensureNote(key);
+            // Each goes into the note of its page (a PDF has one, unless its notes hold page ranges); an answer goes with what it answers.
+            const { groups, outside } = await this.notesForNew(
+                key,
+                plan.rows,
+                row => storedPage(row.annotation),
+                row => row.annotation.id,
+                row => row.annotation.references || []
+            );
+            const unheld = outside.filter(row => !row.annotation.references?.length).length;
+            if (!groups.length) {
+                new Notice(
+                    `None of the PDF's ${unheld} annotations is on a page one of its annotation notes holds, so none was taken in.`,
+                    10000
+                );
+                return;
+            }
             // An area's picture is taken where its page is on screen to take it from; elsewhere the area is kept without one.
             const title =
                 (collectionSource(key).split('/').pop() || 'page')
@@ -4321,41 +4787,44 @@ export default class AnnotatorPlugin extends Plugin {
                     .replace(/[\\/:*?"<>|#^[\]]/g, ' ')
                     .trim()
                     .slice(0, 60) || 'page';
-            for (const row of plan.rows) {
-                if (row.from.kind !== 'area' || row.from.spot || row.annotation.references?.length) continue;
-                let image: Blob | null = null;
-                try {
-                    image = await host.areaPictureShown(row.from.area);
-                } catch {
-                    image = null;
+            for (const { note, rows } of groups)
+                for (const row of rows) {
+                    if (row.from.kind !== 'area' || row.from.spot || row.annotation.references?.length) continue;
+                    let image: Blob | null = null;
+                    try {
+                        image = await host.areaPictureShown(row.from.area);
+                    } catch {
+                        image = null;
+                    }
+                    if (!image) continue;
+                    const path = await this.attachmentPath(`${title} p${row.from.area.page} area.png`, note.path);
+                    await this.app.vault.createBinary(path, await image.arrayBuffer());
+                    written.push(path);
+                    row.annotation = {
+                        ...row.annotation,
+                        text: row.annotation.text ? `![[${path}]]\n\n${row.annotation.text}` : `![[${path}]]`
+                    };
                 }
-                if (!image) continue;
-                const path = await this.attachmentPath(`${title} p${row.from.area.page} area.png`, note.path);
-                await this.app.vault.createBinary(path, await image.arrayBuffer());
-                written.push(path);
-                row.annotation = {
-                    ...row.annotation,
-                    text: row.annotation.text ? `![[${path}]]\n\n${row.annotation.text}` : `![[${path}]]`
-                };
-            }
-            await this.rewrite(note, async source => {
-                if (this.stopped) throw new Error('The reader was closed before the annotations were saved.');
-                if (!this.noteMatchesSource(note, key))
-                    throw new Error('The annotation note target changed; nothing was taken in.');
-                return this.codec.createMany(
-                    source,
-                    plan.rows.map(({ annotation, ink }) =>
-                        ink !== DEFAULT_INK && !annotation.references?.length ? { annotation, ink } : { annotation }
-                    ),
-                    { ...this.markdown }
-                );
-            });
+            for (const { note, rows } of groups)
+                await this.rewrite(note, async source => {
+                    if (this.stopped) throw new Error('The reader was closed before the annotations were saved.');
+                    if (!this.noteMatchesSource(note, key))
+                        throw new Error('The annotation note target changed; nothing was taken in.');
+                    return this.codec.createMany(
+                        source,
+                        rows.map(({ annotation, ink }) =>
+                            ink !== DEFAULT_INK && !annotation.references?.length ? { annotation, ink } : { annotation }
+                        ),
+                        { ...this.markdown }
+                    );
+                });
             written.length = 0;
-            added = roots;
-            last = plan.rows[0].annotation.id;
+            const taken = roots - unheld;
+            added = taken;
+            last = groups[0].rows[0].annotation.id;
             await this.loadNote(key);
             new Notice(
-                `${roots} ${roots === 1 ? 'annotation' : 'annotations'} taken in from the PDF.${already ? ` ${already} ${already === 1 ? 'was' : 'were'} here already.` : ''}${left ? ` ${left} could not be placed.` : ''} The PDF file is unchanged.`,
+                `${taken} ${taken === 1 ? 'annotation' : 'annotations'} taken in from the PDF.${already ? ` ${already} ${already === 1 ? 'was' : 'were'} here already.` : ''}${left ? ` ${left} could not be placed.` : ''}${unheld ? ` ${unheld} on pages none of its annotation notes holds ${unheld === 1 ? 'was' : 'were'} left out.` : ''} The PDF file is unchanged.`,
                 10000
             );
         } catch (error) {
@@ -4401,7 +4870,7 @@ export default class AnnotatorPlugin extends Plugin {
         // Every link in the vault's notes that names this file and a selection, or a rectangle, on one of its pages.
         const found = new Map<string, { link: SelectionLink; notes: string[] }>(),
             boxes = new Map<string, { link: RectLink; notes: string[] }>(),
-            own = this.notes.get(key)?.note?.path;
+            own = new Set(this.notesOf(this.notes.get(key)).map(note => note.path));
         const keep = <T extends { key: string; path: string }>(
             into: Map<string, { link: T; notes: string[] }>,
             link: T | null,
@@ -4413,7 +4882,7 @@ export default class AnnotatorPlugin extends Plugin {
             into.set(link.key, entry);
         };
         for (const note of this.app.vault.getMarkdownFiles()) {
-            if (note.path === own) continue;
+            if (own.has(note.path)) continue;
             const cache = this.app.metadataCache.getFileCache(note) as {
                 links?: { link: string }[];
                 embeds?: { link: string }[];
@@ -4467,8 +4936,7 @@ export default class AnnotatorPlugin extends Plugin {
                 );
                 return;
             }
-            const note = await this.ensureNote(key),
-                identity = host.identity(),
+            const identity = host.identity(),
                 now = new Date().toISOString(),
                 title =
                     (collectionSource(key).split('/').pop() || 'page')
@@ -4477,47 +4945,65 @@ export default class AnnotatorPlugin extends Plugin {
                         .trim()
                         .slice(0, 60) || 'page';
             // A rectangle is an area, with its picture as a marked area has one, and the links to it beneath.
-            const areaRows: { annotation: Annotation; ink: Ink }[] = [];
+            const areaRows: { annotation: Annotation; ink: Ink }[] = [],
+                drawn = new Map<{ annotation: Annotation; ink: Ink }, PageArea>();
             for (const { link, area, words } of regions.areas) {
-                const image = await host.areaPictureDrawn(area);
-                let picture = '';
-                if (image) {
-                    const path = await this.attachmentPath(`${title} p${area.page} area.png`, note.path);
-                    await this.app.vault.createBinary(path, await image.arrayBuffer());
-                    pictures.push(path);
-                    picture = `![[${path}]]\n\n`;
-                }
-                areaRows.push({
+                const made = {
                     annotation: {
                         id: uuid().replaceAll('-', ''),
-                        text: `${picture}${linkedFrom(boxes.get(link.key)!.notes)}`,
+                        text: linkedFrom(boxes.get(link.key)!.notes),
                         tags: [],
                         created: now,
                         updated: now,
                         ...identity,
                         target: [{ source: identity.uri, selector: [areaSelector(area)] }],
                         nativePdf: { version: 1, page: area.page, ...(words ? { words } : {}), from: link.key }
-                    },
+                    } as Annotation,
                     ink: link.ink
-                });
+                };
+                areaRows.push(made);
+                drawn.set(made, area);
             }
-            const rows = [...plan.rows, ...areaRows];
-            await this.rewrite(note, async text => {
-                if (this.stopped) throw new Error('The reader was closed before the annotations were saved.');
-                if (!this.noteMatchesSource(note, key))
-                    throw new Error('The annotation note target changed; nothing was taken in.');
-                return this.codec.createMany(
-                    text,
-                    rows.map(({ annotation, ink }) => (ink !== DEFAULT_INK ? { annotation, ink } : { annotation })),
-                    { ...this.markdown }
+            // Each into the note of its page (a PDF has one, unless its notes hold page ranges); one on a page no note holds is left out and counted.
+            const rows = [...plan.rows, ...areaRows],
+                { groups, outside } = await this.notesForNew(key, rows, row => storedPage(row.annotation));
+            if (!groups.length) {
+                new Notice(
+                    `None of the ${outside.length} linked ${outside.length === 1 ? 'place is' : 'places are'} on a page one of this PDF's annotation notes holds, so none was taken in.`,
+                    10000
                 );
-            });
+                return;
+            }
+            for (const { note, rows: these } of groups)
+                for (const row of these) {
+                    const area = drawn.get(row);
+                    if (!area) continue;
+                    const image = await host.areaPictureDrawn(area);
+                    if (!image) continue;
+                    const path = await this.attachmentPath(`${title} p${area.page} area.png`, note.path);
+                    await this.app.vault.createBinary(path, await image.arrayBuffer());
+                    pictures.push(path);
+                    row.annotation = { ...row.annotation, text: `![[${path}]]\n\n${row.annotation.text}` };
+                }
+            for (const { note, rows: these } of groups)
+                await this.rewrite(note, async text => {
+                    if (this.stopped) throw new Error('The reader was closed before the annotations were saved.');
+                    if (!this.noteMatchesSource(note, key))
+                        throw new Error('The annotation note target changed; nothing was taken in.');
+                    return this.codec.createMany(
+                        text,
+                        these.map(({ annotation, ink }) =>
+                            ink !== DEFAULT_INK ? { annotation, ink } : { annotation }
+                        ),
+                        { ...this.markdown }
+                    );
+                });
             pictures.length = 0;
-            added = rows.length;
-            last = rows[0].annotation.id;
+            added = rows.length - outside.length;
+            last = groups[0].rows[0].annotation.id;
             await this.loadNote(key);
-            const passages = plan.rows.length,
-                areas = areaRows.length,
+            const passages = plan.rows.filter(row => !outside.includes(row)).length,
+                areas = areaRows.filter(row => !outside.includes(row)).length,
                 taken = [
                     passages ? `${passages} linked ${passages === 1 ? 'passage' : 'passages'}` : '',
                     areas ? `${areas} linked ${areas === 1 ? 'region' : 'regions'}` : ''
@@ -4536,7 +5022,7 @@ export default class AnnotatorPlugin extends Plugin {
                             : 'areas'
                 }`;
             new Notice(
-                `${said}.${already ? ` ${already} ${already === 1 ? 'was' : 'were'} here already.` : ''}${left ? ` ${left} could not be placed.` : ''}`,
+                `${said}.${already ? ` ${already} ${already === 1 ? 'was' : 'were'} here already.` : ''}${left ? ` ${left} could not be placed.` : ''}${outside.length ? ` ${outside.length} on pages none of this PDF's annotation notes holds ${outside.length === 1 ? 'was' : 'were'} left out.` : ''}`,
                 10000
             );
         } catch (error) {
@@ -4709,17 +5195,31 @@ export default class AnnotatorPlugin extends Plugin {
                 rows = plan.rows.map(row =>
                     ink !== DEFAULT_INK ? { annotation: { ...row, tags }, ink } : { annotation: { ...row, tags } }
                 );
-            const note = await this.ensureNote(key);
-            // The note as it was, kept for Undo: while nothing else has changed it, Undo puts back exactly that.
-            let before = '';
-            const after = await this.rewrite(note, async text => {
-                if (this.stopped) throw new Error('The reader was closed before the highlights were saved.');
-                if (!this.noteMatchesSource(note, key))
-                    throw new Error('The annotation note target changed; nothing was highlighted.');
-                before = text;
-                return this.codec.createMany(text, rows, { ...this.markdown });
-            });
-            made = rows.map(row => row.annotation.id);
+            // Each match into the note of its page (a PDF has one, unless its notes hold page ranges); one on a page no note holds is left out.
+            const { groups, outside } = await this.notesForNew(key, rows, row => storedPage(row.annotation));
+            if (!groups.length) {
+                new Notice(
+                    `None of the ${outside.length} matches of “${words}” is on a page one of this PDF's annotation notes holds; nothing was highlighted.`,
+                    10000
+                );
+                return [];
+            }
+            // Each note as it was, kept for Undo: while nothing else has changed it, Undo puts back exactly that.
+            const kept = new Map<string, { before: string; after: string; ids: string[] }>();
+            for (const { note, rows: these } of groups) {
+                let was = '';
+                const now = await this.rewrite(note, async text => {
+                    if (this.stopped) throw new Error('The reader was closed before the highlights were saved.');
+                    if (!this.noteMatchesSource(note, key))
+                        throw new Error('The annotation note target changed; nothing was highlighted.');
+                    was = text;
+                    return this.codec.createMany(text, these, { ...this.markdown });
+                });
+                kept.set(note.path, { before: was, after: now, ids: these.map(row => row.annotation.id) });
+            }
+            const single = groups.length === 1 && !this.notes.get(key)?.parts ? kept.get(groups[0].note.path)! : null,
+                exact = single ? { before: single.before, after: single.after } : kept;
+            made = groups.flatMap(group => group.rows.map(row => row.annotation.id));
             // The ink of a new highlight is the one remembered for the next.
             if (ink !== this.lastInk) {
                 this.lastInk = ink;
@@ -4734,13 +5234,13 @@ export default class AnnotatorPlugin extends Plugin {
             undo.textContent = 'Undo';
             undo.className = 'annotator-notice-undo';
             message.append(
-                `${count} ${count === 1 ? 'match' : 'matches'} of “${words}” highlighted.${plan.skipped ? ` ${plan.skipped} could not be anchored and ${plan.skipped === 1 ? 'was' : 'were'} left out.` : ''}${places.already ? ` ${places.already} ${places.already === 1 ? 'was' : 'were'} highlighted already.` : ''}`,
+                `${count} ${count === 1 ? 'match' : 'matches'} of “${words}” highlighted.${plan.skipped ? ` ${plan.skipped} could not be anchored and ${plan.skipped === 1 ? 'was' : 'were'} left out.` : ''}${places.already ? ` ${places.already} ${places.already === 1 ? 'was' : 'were'} highlighted already.` : ''}${outside.length ? ` ${outside.length} on pages none of this PDF's annotation notes holds ${outside.length === 1 ? 'was' : 'were'} left out.` : ''}`,
                 undo
             );
             const notice = new Notice(message, 15000) as Notice & { hide?(): void };
             undo.onclick = () => {
                 notice.hide?.();
-                void this.undoMatches(key, ids, { text: request.note, tags, ink }, { before, after }).catch(error =>
+                void this.undoMatches(key, ids, { text: request.note, tags, ink }, exact).catch(error =>
                     this.fail(error)
                 );
             };
@@ -4767,44 +5267,68 @@ export default class AnnotatorPlugin extends Plugin {
         key: string,
         ids: readonly string[],
         as: { text: string; tags: string[]; ink: Ink },
-        exact?: { before: string; after: string }
+        exact?: { before: string; after: string } | Map<string, { before: string; after: string; ids: string[] }>
     ) {
         if (this.busy) throw new Error('An annotation operation is already running.');
         this.busy = true;
         let removed = 0,
             kept = 0;
         try {
-            const note = this.notes.get(key)?.note;
-            if (!note) throw new Error('Annotation note is unavailable.');
+            // Of a PDF whose notes hold page ranges, the step wrote into each note of the pages its matches were on.
+            const state = this.notes.get(key),
+                notes = this.notesOf(state);
+            if (!notes.length) throw new Error('Annotation note is unavailable.');
             const wanted = new Set(ids),
                 open = this.editMode && this.editing?.file === key ? this.editing.annotation.id : null;
-            let gone: string[] = [];
-            await this.rewrite(note, async source => {
-                if (this.stopped) throw new Error('Plugin was unloaded before the highlights were removed.');
-                if (!this.noteMatchesSource(note, key)) throw new Error('The annotation note target changed.');
-                if (exact && source === exact.after && !(open && ids.includes(open))) {
-                    gone = [...ids];
-                    kept = 0;
-                    return exact.before;
-                }
-                const rows = await this.codec.readAll(source),
-                    answered = new Set(rows.flatMap(row => row.references || []));
-                gone = [];
-                kept = 0;
-                for (const row of rows) {
-                    if (!wanted.has(row.id)) continue;
-                    if (
-                        row.id !== open &&
-                        !answered.has(row.id) &&
-                        row.text === as.text &&
-                        inkOf(row) === as.ink &&
-                        JSON.stringify(row.tags) === JSON.stringify(as.tags)
-                    )
-                        gone.push(row.id);
-                    else kept++;
-                }
-                return gone.length ? this.codec.removeMany(source, gone) : source;
-            });
+            const steps: { note: TFile; ids: readonly string[]; exact?: { before: string; after: string } }[] =
+                exact instanceof Map
+                    ? notes
+                          .filter(note => exact.has(note.path))
+                          .map(note => {
+                              const { before, after, ids: made } = exact.get(note.path)!;
+                              return { note, ids: made, exact: { before, after } };
+                          })
+                    : state?.parts
+                      ? state.parts
+                            .map(part => ({
+                                note: part.note,
+                                ids: ids.filter(id => part.records.some(row => row.id === id))
+                            }))
+                            .filter(step => step.ids.length)
+                      : [{ note: notes[0], ids, ...(exact ? { exact } : {}) }];
+            const gone: string[] = [];
+            for (const step of steps) {
+                let here: string[] = [],
+                    left = 0;
+                await this.rewrite(step.note, async source => {
+                    if (this.stopped) throw new Error('Plugin was unloaded before the highlights were removed.');
+                    if (!this.noteMatchesSource(step.note, key)) throw new Error('The annotation note target changed.');
+                    if (step.exact && source === step.exact.after && !(open && step.ids.includes(open))) {
+                        here = [...step.ids];
+                        left = 0;
+                        return step.exact.before;
+                    }
+                    const rows = await this.codec.readAll(source),
+                        answered = new Set(rows.flatMap(row => row.references || []));
+                    here = [];
+                    left = 0;
+                    for (const row of rows) {
+                        if (!wanted.has(row.id)) continue;
+                        if (
+                            row.id !== open &&
+                            !answered.has(row.id) &&
+                            row.text === as.text &&
+                            inkOf(row) === as.ink &&
+                            JSON.stringify(row.tags) === JSON.stringify(as.tags)
+                        )
+                            here.push(row.id);
+                        else left++;
+                    }
+                    return here.length ? this.codec.removeMany(source, here) : source;
+                });
+                gone.push(...here);
+                kept += left;
+            }
             removed = gone.length;
             // A removed highlight that was the one selected is no longer there to be shown.
             if (this.editing?.file === key && gone.includes(this.editing.annotation.id)) {
@@ -4838,7 +5362,7 @@ export default class AnnotatorPlugin extends Plugin {
                 new Notice('This PDF says nothing about itself: no title, author or date is recorded in it.', 8000);
                 return;
             }
-            const note = await this.ensureNote(key);
+            const note = await this.ensureNote(key, this.shownPage(key));
             let added: string[] = [];
             await this.app.fileManager.processFrontMatter(note, frontmatter => {
                 added = addDetails(frontmatter as Record<string, unknown>, details);
@@ -5265,7 +5789,7 @@ export default class AnnotatorPlugin extends Plugin {
         if (this.busy) return;
         this.busy = true;
         try {
-            const note = this.notes.get(file)?.note;
+            const note = this.noteHolding(file, annotation.id);
             if (!note) throw new Error('Annotation note is unavailable.');
             await this.rewrite(note, async source => {
                 if (this.stopped) throw new Error('Plugin was unloaded before the words were kept.');
@@ -5481,7 +6005,7 @@ export default class AnnotatorPlugin extends Plugin {
     }
     async exportSummary(file: string) {
         const text = this.summaryText(file),
-            note = this.notes.get(file)?.note;
+            note = this.shownNote(file);
         const folder = note?.parent?.path && note.parent.path !== '/' ? `${note.parent.path}/` : '';
         const base = `${folder}${displayTitle(note?.basename || 'Annotations')
             .replace(/[\\/:*?"<>|#^[\]]/g, ' ')
@@ -5498,8 +6022,10 @@ export default class AnnotatorPlugin extends Plugin {
      * annotation note, with a .base that lists them. A snapshot: nothing existing is overwritten.
      */
     async exportAnnotationNotes(file: string) {
-        const records = this.notes.get(file)?.records || [],
-            note = this.notes.get(file)?.note;
+        // Of a PDF whose notes hold page ranges, the note shown: the chapter being read.
+        const shown = this.shownNotes(file),
+            records = shown?.records || [],
+            note = shown?.note || null;
         if (!records.length) throw new Error('There are no annotations to export yet.');
         const parent = note?.parent?.path && note.parent.path !== '/' ? `${note.parent.path}/` : '';
         const title =
@@ -5509,7 +6035,7 @@ export default class AnnotatorPlugin extends Plugin {
         let folder = `${parent}${title} annotations`;
         for (let copy = 2; this.app.vault.getAbstractFileByPath(folder); copy++)
             folder = `${parent}${title} annotations ${copy}`;
-        const exported = annotationNotes(records, this.summaryContext(file), this.inkLabels, folder);
+        const exported = annotationNotes(records, this.summaryContext(file, note), this.inkLabels, folder);
         if (this.stopped) throw new Error('Plugin unloaded before export.');
         await this.app.vault.createFolder(folder);
         for (const item of exported.files) await this.app.vault.create(`${folder}/${item.name}`, item.content);
@@ -5541,9 +6067,10 @@ export default class AnnotatorPlugin extends Plugin {
      * title and author), it is what the reader wants pasted: a quote with its link, a citation, a list item.
      */
     annotationLink(file: string, annotation: Annotation) {
+        // The note that holds it: of a PDF whose notes hold page ranges, the one it is in.
         const state = this.notes.get(file),
-            note = state?.note;
-        if (!note) return '';
+            note = this.noteHolding(file, annotation.id);
+        if (!note || !state) return '';
         const plain = annotationReference(note.path, annotation.id),
             template = this.display.linkTemplate.trim();
         if (!template) return plain;
@@ -5553,7 +6080,7 @@ export default class AnnotatorPlugin extends Plugin {
             return (
                 annotationMarkdown(
                     thread,
-                    { ...this.summaryContext(file), inkName: ink => inkLabel(ink as Ink, this.inkLabels) },
+                    { ...this.summaryContext(file, note), inkName: ink => inkLabel(ink as Ink, this.inkLabels) },
                     {
                         ...this.summary,
                         style: 'template',
@@ -5985,6 +6512,14 @@ export default class AnnotatorPlugin extends Plugin {
                 key = copy.path;
             }
         }
+        // A note that holds some of a PDF's pages opens the PDF with all its notes, each on its pages: at the annotation
+        // asked for, or else at the note's first page.
+        const paged = this.pagesOf(note);
+        if (paged && /\.pdf$/i.test(key)) {
+            await this.openPagedNote(note, key, paged, annotationId, newLeaf, reuse, destination, shouldActivate);
+            requireCurrent();
+            return;
+        }
         // A link to an annotation, the library and the search show a source where it is already open with this note's
         // annotations (issues 230, 321) instead of opening it again. Opening it in a named pane, tab, split or window does not.
         const context = collectionKey(key, note.path),
@@ -6032,6 +6567,58 @@ export default class AnnotatorPlugin extends Plugin {
         if (fictionBookName(file.path))
             await leaf.setViewState({ type: EPUB_VIEW, state: { file: file.path }, active });
         else await leaf.openFile(file, { active });
+    }
+    /**
+     * Open a PDF from one of its notes that hold page ranges. The pane shows the PDF with every note's annotations (it is
+     * not given one note of its own, as a pane opened from a note otherwise is); the annotation asked for is opened, or
+     * else the note's first page is gone to unless one of its pages is being read already.
+     */
+    private async openPagedNote(
+        note: TFile,
+        key: string,
+        paged: { range: PageRange } | { error: string },
+        annotationId: string | undefined,
+        newLeaf: PaneType | boolean,
+        reuse: boolean,
+        destination: WorkspaceLeaf | undefined,
+        shouldActivate: () => boolean
+    ) {
+        const source = this.app.vault.getAbstractFileByPath(key);
+        if (!(source instanceof TFile)) throw new Error('Source is missing.');
+        let shown: WorkspaceLeaf | null = null;
+        if (!destination && reuse)
+            this.app.workspace.iterateAllLeaves?.(leaf => {
+                if (!shown && leaf.view && this.sourceKey(leaf.view) === key) shown = leaf;
+            });
+        const leaf: WorkspaceLeaf = destination || shown || this.app.workspace.getLeaf(newLeaf);
+        if (shown && shouldActivate()) {
+            try {
+                this.app.workspace.setActiveLeaf?.(shown, { focus: true });
+            } catch {
+                /* The host reveals it when the file opens. */
+            }
+        }
+        if (this.leafCollections.get(leaf)?.source === key) this.leafCollections.delete(leaf);
+        await this.loadNote(key);
+        await this.openSourceFile(leaf, source, shouldActivate());
+        this.bindSources();
+        if (shouldActivate()) {
+            if (leaf.view) this.lastSource = leaf.view;
+            this.focusSource(key);
+            if (!Platform.isPhone) await this.sidebarForOpened(!!annotationId);
+        }
+        const state = this.notes.get(key);
+        if (state?.error) throw new Error(state.error);
+        if (annotationId) {
+            const row = state?.records.find(item => item.id === annotationId);
+            if (!row) throw new Error('Annotation block was not found.');
+            this.openAnnotation(key, row);
+            return;
+        }
+        const host: unknown = leaf.view ? this.bindings.get(leaf.view)?.host : undefined;
+        if (!('range' in paged) || !(host instanceof NativePdf)) return;
+        const at = host.currentPage();
+        if (!at || partForPage([{ range: paged.range }], at) === null) host.showPage(paged.range.first);
     }
     /** A pane that already shows this source with this note's annotations, if there is one in the workspace. */
     private leafShowing(source: string, note: string): WorkspaceLeaf | null {
@@ -6742,7 +7329,7 @@ export default class AnnotatorPlugin extends Plugin {
         return job;
     }
     private async selectRemoteCandidate(candidate: RemoteCandidate) {
-        const selectedNote = this.currentFile && this.notes.get(this.currentFile)?.note;
+        const selectedNote = this.shownNote(this.currentFile);
         const file = await this.commitRemoteRevision(candidate);
         if (this.stopped) return;
         await this.loadNote(file.path);

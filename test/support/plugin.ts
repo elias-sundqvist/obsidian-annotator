@@ -28,3 +28,4 @@ export {EditorState, EditorSelection} from '@codemirror/state';
 export {CitationsView, CITATIONS_VIEW} from '../../src/citations-view';
 export {scanIntroduction, chosenPages, scanStanding} from '../../src/scan-dialog';
 export {EveryMatchModal, matchStatus} from '../../src/every-match-dialog';
+export {PageRangeModal} from '../../src/page-range-dialog';

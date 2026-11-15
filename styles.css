@@ -390,6 +390,11 @@ button.annotator-ink-swatch:focus-visible { outline: 2px solid var(--interactive
 .annotator-ui button.annotator-head-name:disabled { cursor: default; opacity: 1; }
 .annotator-ui button.annotator-head-name:not(:disabled):hover { color: var(--text-accent); background: transparent; }
 .annotator-head-tools { flex: none; display: flex; gap: 2px; margin-inline-end: -5px; }
+/* A PDF whose notes each hold some of its pages: the pages of the note shown. */
+.annotator-head-pages { color: var(--text-muted); font-size: var(--font-ui-smaller); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.annotator-uncovered button { flex: none; }
+.annotator-page-range-status { margin: 0 0 var(--size-4-3, 12px); color: var(--text-muted); font-size: var(--font-ui-smaller); }
+.annotator-page-range-status.is-error { color: var(--text-error); }
 .annotator-ink-filter { flex: none; display: flex; align-items: center; gap: 7px; padding: 4px 1px 4px 4px; --annotator-swatch-size: 10px; }
 .annotator-ink-filter-icon { display: flex; color: var(--text-faint); }
 .annotator-ink-filter-icon svg { width: 11px; height: 11px; }
