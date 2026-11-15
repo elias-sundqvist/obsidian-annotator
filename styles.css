@@ -1761,3 +1761,7 @@ body.annotator-reading-fullscreen .workspace-leaf.mod-active > .workspace-leaf-c
 .annotator-sign-in .annotator-sign-in-field label { font-size: var(--font-ui-small); color: var(--text-muted); }
 .annotator-sign-in .annotator-sign-in-field input { width: 100%; }
 .annotator-sign-in .mod-warning { color: var(--text-error); }
+
+/* Open from outside Obsidian: the recipe as text to copy, and the button in the notice for a file outside the vault. */
+.annotator-open-with-recipe { width: 24em; max-width: 100%; font-family: var(--font-monospace); font-size: var(--font-smallest); white-space: pre; resize: vertical; }
+.notice .annotator-outside-copy { display: block; margin-top: var(--size-4-2); }

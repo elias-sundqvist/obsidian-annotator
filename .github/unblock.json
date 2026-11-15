@@ -1444,6 +1444,24 @@
       "dependsOn": [],
       "estimate": 2,
       "notes": "Done 2026-11-15: Built 2026-11-15 on feature/basic-auth, merged into next. Asks on a Basic challenge, keeps the sign-in in memory per origin, never stored. Tried in Obsidian 1.13.7 against a local Basic server. Answers the request for Basic auth (Calibre-Web behind nginx)."
+    },
+    {
+      "id": "open-with-annotator",
+      "title": "Open a PDF or book from outside Obsidian in Annotator (\"Open with\")",
+      "status": "done",
+      "parent": "community",
+      "dependsOn": [],
+      "estimate": 5,
+      "notes": "Plan written 2026-11-14: docs/dev/OPEN_WITH_DESIGN.md (reviewed by a sceptical subagent and revised). Outcome: no helper app for a first version. Obsidian 1.14+ lists itself under \"Open with\" on desktop and opens outside files in place (said of Markdown; for PDF and EPUB read in 1.15.0's code only, not seen), and Obsidian for Android takes shared PDFs (not EPUBs). Stage 0: one live test of \"Open with → Obsidian\" on a PDF and an EPUB, and a guard so the plugin never writes beside a file outside the vault (ensureNote, PDF export, import archive, positions all derive paths from view.file.path). Stage 1, in the plugin only: the address obsidian://annotator-open (file= everywhere; source= on desktop only with a per-device key, so a web page gets nothing), an offer to copy in a file Obsidian opened from outside, an item in the phone share menu (undocumented receive-files-menu), and recipes printed by the settings. Later on demand: annotate in place, a Windows helper through the Microsoft Store, an Android helper for EPUB. Left out: an iOS app. Waits on the owner's six decisions at the end of the plan. Nothing built.\n\nDone 2026-11-15: Done 2026-11-15, stages 0 and 1, on branch claude/sleepy-jones-4c48cc (not merged, not released). The address obsidian://annotator-open (file= everywhere; source= with this computer's key, asked once per folder), a button and command that copy in a file Obsidian opened from outside the vault, 'Open in Annotator' in the menu after a share on a phone, and a settings section that makes the key and prints this computer's recipe. Also fixed: a yes for a file on this computer is for one copy and is no longer kept in synced settings, and a Mac path into the vault in another case is the vault's file. Seen live in an isolated Obsidian 1.15.0 on macOS (a scratch keychain made it load): Obsidian opens outside PDFs and EPUBs, the button and command copy them in, the address opens vault files warm and cold, the key and the question behave. A bug found there was fixed: a new note must be read by Obsidian before it is opened. 715 tests and 77 proofs pass. Not run: Windows, Linux desktop, phones (see open-with-devices). Helper apps that need accounts were not built."
+    },
+    {
+      "id": "open-with-devices",
+      "title": "Check \"Open with Annotator\" on Windows, a Linux desktop and phones",
+      "status": "todo",
+      "parent": "community",
+      "dependsOn": ["open-with-annotator"],
+      "estimate": 2,
+      "notes": "What docs/OPEN_WITH.md says was not run. Windows 11 (the owner's machine, ask first): Obsidian's own Open with for a PDF and a book with a current installer; the PowerShell recipe, its flashing window, Smart App Control. Ubuntu (the owner's VM, ask first): the recipe under dash, GNOME Files' Open With, Obsidian as .deb, Flatpak and AppImage. Android emulator: share a PDF to Obsidian, Import, then the 'Open in Annotator' item; a file pushed into a device-storage vault then opened with file=. iPhone/iPad (owner's devices): Save to Files into the vault, and the Shortcut in OPEN_WITH.md. Also: Finder's 'Open With → Obsidian' with an installer from 1.14.4 on (this Mac's is 1.13.7). Correct OPEN_WITH.md and the README to what is found."
     }
   ]
 }

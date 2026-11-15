@@ -453,3 +453,78 @@ export class PromptModal extends Modal {
         this.contentEl.empty();
     }
 }
+
+/**
+ * The question an address brings: may this file, or files from its folder, be copied into the vault. It starts on
+ * "Not now", and the answers that copy can be given only after a moment, so that a key or a click meant for
+ * something else cannot give them.
+ */
+export class OpenSourceModal extends Modal {
+    private answered = false;
+    private armed: number | null = null;
+    constructor(
+        app: App,
+        private shown: string,
+        private whole: string,
+        private vault: string,
+        private answer: (choice: 'file' | 'folder' | 'no') => void
+    ) {
+        super(app);
+    }
+    onOpen() {
+        this.setTitle?.('Copy this file into the vault?');
+        this.modalEl.addClass('annotator-confirm');
+        this.contentEl.createEl('p', {
+            text: 'Something on this computer asked Annotator to open a file from outside the vault. To read and annotate it, it is copied once into \u201cAnnotator sources\u201d and a note is made for it. The file itself is not changed.'
+        });
+        this.contentEl.createEl('p', { text: this.shown, cls: 'annotator-confirm-subject' });
+        // A long path is shown by its two ends; the whole of it is one press away.
+        if (this.whole !== this.shown) {
+            const whole = this.contentEl.createEl('details', { cls: 'annotator-confirm-whole' });
+            whole.createEl('summary', { text: 'The whole path' });
+            whole.createEl('p', { text: this.whole, cls: 'annotator-confirm-subject' });
+        }
+        if (this.vault) this.contentEl.createEl('p', { text: `Vault: ${this.vault}` });
+        this.contentEl.createEl('p', { text: 'Say yes only if you just asked to open this file.' });
+        const row = new Setting(this.contentEl);
+        const pick = (choice: 'file' | 'folder' | 'no') => {
+            if (this.answered) return;
+            this.answered = true;
+            this.close();
+            this.answer(choice);
+        };
+        const copying: { setDisabled(disabled: boolean): unknown }[] = [];
+        row.addButton(button => {
+            button.setButtonText('Not now').onClick(() => pick('no'));
+            // Where the keyboard starts: Enter leaves the file where it is.
+            window.setTimeout(() => button.buttonEl.focus(), 0);
+        });
+        row.addButton(button => {
+            copying.push(
+                button
+                    .setButtonText('Always from this folder')
+                    .setDisabled(true)
+                    .onClick(() => pick('folder'))
+            );
+        });
+        row.addButton(button => {
+            copying.push(
+                button
+                    .setButtonText('Copy this file')
+                    .setDisabled(true)
+                    .onClick(() => pick('file'))
+            );
+        });
+        this.armed = window.setTimeout(() => {
+            for (const button of copying) button.setDisabled(false);
+        }, 700);
+    }
+    onClose() {
+        if (this.armed !== null) window.clearTimeout(this.armed);
+        this.contentEl.empty();
+        if (!this.answered) {
+            this.answered = true;
+            this.answer('no');
+        }
+    }
+}

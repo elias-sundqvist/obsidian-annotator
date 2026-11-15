@@ -64,9 +64,22 @@ What changed for someone using Annotator. How to use each thing is in
   shown. The idea is from the fork `sparthaje/obsidian-references`. See
   "The works a page cites" in the README.
 - A setting names the folder reference notes are made in.
-- A PDF or book that Obsidian itself opened from outside the vault (it can,
-  since Obsidian 1.14.4) is shown without annotations, and says why. Before,
-  the reader could have made its note beside that file, outside the vault.
+- **Open a file from outside Obsidian.** A PDF or book opened with
+  Obsidian's own "Open with" (Obsidian 1.14.4 or later) is shown without
+  annotations, with a button that copies it into the vault and opens the
+  copy in the same tab. The settings make a recipe for this computer that
+  adds "Open with Annotator" to the system, for a double-click. On Android,
+  a PDF shared to Obsidian can be opened in Annotator from the menu that
+  follows. Behind all of it is an address, `obsidian://annotator-open`, that
+  a script or a Shortcut can open; it reads a file outside the vault only
+  with this computer's key. Before, a file Obsidian opened from outside the
+  vault could have had its note made beside it, outside the vault.
+- A yes to copying in a file from this computer is now for that one copy.
+  It used to be kept in the synced settings, so the same path was read again
+  without asking when the file there had changed, also on another computer.
+- On a Mac, a target that names a file of the vault with its letters in
+  another case (`/users/me/vault/…`) is now that file, not a file outside
+  the vault to be copied in.
 - Links to a passage of a PDF, as Obsidian's **Copy link to selection** and
   PDF++ write them, can be taken in as highlights with **Take in links to
   this PDF's passages**. The notes that hold the links are left alone.

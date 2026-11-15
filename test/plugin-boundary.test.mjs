@@ -895,7 +895,9 @@ test('a file Obsidian opened from outside the vault is shown without annotations
   // The file in the vault is annotated as ever; the one outside gets no painter and no note is looked for.
   assert.ok(h.plugin.bindings.has(here.view));assert.ok(!h.plugin.bindings.has(there.view));assert.equal(h.plugin.sourceKey(there.view),null);assert.equal(h.plugin.sourceKey(here.view),'Papers/Inside.pdf');
   // Said once, however often the tabs are looked over.
-  const said=Notice.messages.slice(before).filter(message=>/outside your vault/.test(String(message)));assert.equal(said.length,1);assert.match(said[0],/shown without annotations/);
+  const said=Notice.messages.slice(before).filter(message=>/outside your vault/.test(message.textContent??String(message)));assert.equal(said.length,1);assert.match(said[0].textContent,/shown without annotations/);
+  // With it, the way to have them: one press copies the file in (what the press does is tested with the address).
+  assert.equal(said[0].querySelector('button').textContent,'Copy into the vault and annotate');
   // Whatever asks for its note is refused, in every form such a path takes, and nothing was written anywhere.
   for(const key of ['file:/Users/someone/Downloads/Paper.pdf','file:///C:/Users/someone/Paper.pdf','/Users/someone/Downloads/Paper.pdf','C:\\Users\\someone\\Paper.pdf'])await assert.rejects(h.plugin.ensureNote(key),/outside your vault/,key);
   assert.deepEqual(created.filter(path=>/Downloads|someone|^file:|^\//.test(path)),[]);
@@ -1350,3 +1352,195 @@ test('the sign-in dialog: two labelled fields, a warning for an unencrypted addr
   [...el.querySelectorAll('button')].find(button=>button.textContent==='Cancel').click();assert.deepEqual(given.at(-1),null);assert.equal(given.length,2);
  }finally{h.dispose();}
 });
+// "Open with": the address obsidian://annotator-open, the file Obsidian opened from outside the vault, and the share menu.
+const later=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+function openHost(){
+ const h=host(),store=new Map(),made=[],trashed=[],newNotes={path:'/'};
+ h.app.fileManager={getNewFileParent:()=>newNotes,trashFile:async file=>{trashed.push(file.path);h.files.delete(file.path);h.contents.delete(file.path);h.metadata.delete(file.path);}};
+ h.app.loadLocalStorage=key=>store.has(key)?structuredClone(store.get(key)):null;h.app.saveLocalStorage=(key,value)=>{store.set(key,structuredClone(value));};
+ // A note is made as the vault makes it, and its properties are read as the cache would read them.
+ h.app.vault.create=async(path,text)=>{if(h.files.has(path))throw new Error('File already exists.');made.push(path);const target=/^annotation-target: (".*")$/m.exec(text),file=h.add(path,text,{});
+  // As in Obsidian, the properties of a note just written are read a moment later, not at once.
+  h.metadata.delete(path);setTimeout(()=>h.metadata.set(path,{frontmatter:target?{'annotation-target':JSON.parse(target[1])}:{}}),60);return file;};
+ h.app.vault.getFiles=()=>[...h.files.values()].filter(file=>file instanceof TFile);
+ const fire=async params=>{h.plugin.protocolHandlers.get('annotator-open')({action:'annotator-open',...params});await h.plugin.openQueue.idle();};
+ return Object.assign(h,{store,made,trashed,newNotes,fire});
+}
+test('an address opens a PDF or book of the vault, waits for one just put there, and opens nothing else',async()=>{
+ const {Notice}=await import('./.generated/plugin-boundary.mjs');
+ const h=openHost();try{h.plugin.manifest={id:'obsidian-annotator'};
+  const pdf=h.add('Papers/Paper.pdf'),book=h.add('Books/Book.epub');h.add('Notes/Note.md','private');h.add('.obsidian/hidden.pdf');h.files.set('Folder.pdf',{path:'Folder.pdf'});
+  // The handler is there before anything of the plugin has loaded: an address that started Obsidian finds it.
+  const loading=h.plugin.onload();assert.equal(typeof h.plugin.protocolHandlers.get('annotator-open'),'function');
+  h.plugin.protocolHandlers.get('annotator-open')({action:'annotator-open',file:'Papers/Paper.pdf'});assert.equal(h.opened.length,0);await loading;await h.plugin.openQueue.idle();
+  assert.equal(h.opened.length,1);assert.equal(h.opened[0].file,pdf);
+  const written=[],write=h.app.vault.adapter.write,binary=h.app.vault.createBinary,create=h.app.vault.create;h.app.vault.adapter.write=async(path,raw)=>{if(!path.endsWith('/data.json'))written.push(path);return write(path,raw);};h.app.vault.createBinary=async(path,bytes)=>{written.push(path);return binary(path,bytes);};h.app.vault.create=async(path,text)=>{written.push(path);return create(path,text);};
+  await h.fire({file:'Books/Book.epub',vault:'Some vault',key:'not needed',into:'.obsidian'});assert.equal(h.opened.at(-1).file,book);assert.equal(h.opened.length,2);
+  // The same on a phone.
+  Platform.isMobile=true;Platform.isPhone=true;await h.fire({file:'Papers/Paper.pdf'});assert.equal(h.opened.length,3);Platform.isMobile=false;Platform.isPhone=false;
+  // Anything that is not a PDF or EPUB of the vault is refused, and said; nothing is opened.
+  let before=Notice.messages.length;const refused=['Notes/Note.md','.obsidian/hidden.pdf','../Paper.pdf','/etc/Paper.pdf','C:\\Paper.pdf','file:///Paper.pdf','Papers','true'];
+  for(const file of refused)await h.fire({file});
+  assert.equal(h.opened.length,3);assert.equal(Notice.messages.length-before,refused.length);for(const message of Notice.messages.slice(before))assert.doesNotMatch(String(message),/private|hidden\.pdf/);
+  before=Notice.messages.length;await h.fire({file:'Folder.pdf'});assert.match(String(Notice.messages.at(-1)),/a folder, not a file/);await h.fire({});await h.fire({file:'Papers/Paper.pdf',source:'/x/y.pdf'});assert.equal(h.opened.length,3);assert.equal(Notice.messages.length-before,3);
+  // A file another program is still putting into the vault is waited for, and opened when it is there.
+  h.plugin.openWait={total:2000,step:5};const waited=h.fire({file:'Inbox/Late.pdf'});await later(40);assert.equal(h.opened.length,3);const late=h.add('Inbox/Late.pdf');await waited;assert.equal(h.opened.at(-1).file,late);
+  // One that never comes is given up on. The name in the address is the caller's word: it is not repeated.
+  h.plugin.openWait={total:60,step:5};before=Notice.messages.length;await h.fire({file:'Inbox/A name someone chose.pdf'});
+  const said=Notice.messages.slice(before).map(String);assert.ok(said.some(message=>/Waiting for the file to appear/.test(message)));assert.ok(said.some(message=>/No such file appeared in the vault/.test(message)));assert.equal(said.some(message=>/someone chose/.test(message)),false);assert.equal(h.opened.length,4);
+  // A path that differs from the file's only in the case of its letters is that file, when it is the only one.
+  await h.fire({file:'papers/PAPER.pdf'});assert.equal(h.opened.at(-1).file,pdf);h.add('papers/paper.pdf');h.add('PAPERS/paper.pdf');h.plugin.openWait={total:20,step:5};await h.fire({file:'Papers/paper.PDF'});assert.equal(h.opened.length,5);
+  // A flood is cut off at twenty, and said once.
+  before=Notice.messages.length;for(let i=0;i<60;i++)h.plugin.protocolHandlers.get('annotator-open')({action:'annotator-open',file:'Papers/Paper.pdf'});await h.plugin.openQueue.idle();
+  assert.equal(h.opened.length,25);assert.equal(Notice.messages.slice(before).filter(message=>/Too many files/.test(String(message))).length,1);
+  // None of this wrote anything, in the vault or out of it.
+  assert.deepEqual(written,[]);
+ }finally{Platform.isMobile=false;Platform.isPhone=false;h.dispose();}
+});
+test('if another plugin holds the address, Annotator says so and still loads',async()=>{
+ const {Notice}=await import('./.generated/plugin-boundary.mjs');
+ const h=openHost();try{h.plugin.registerObsidianProtocolHandler=()=>{throw new Error('Action "annotator-open" is already registered as a handler.');};
+  const before=Notice.messages.length;await h.plugin.onload();assert.ok(Notice.messages.slice(before).some(message=>/Another plugin already answers/.test(String(message))));assert.ok(h.plugin.commands.some(command=>command.id==='copy-outside-file'));
+ }finally{h.dispose();}
+});
+test('a file outside the vault is copied in by address only with this device\'s key, asked about once for a folder, through a note of its own',async()=>{
+ const {Notice}=await import('./.generated/plugin-boundary.mjs');
+ const fs=await import('node:fs/promises'),os=await import('node:os'),path=await import('node:path'),directory=await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(),'annotator-open-with-host-'))),h=openHost();
+ try{h.plugin.manifest={id:'obsidian-annotator'};
+  const folder=path.join(directory,'Papers & more'),other=path.join(directory,'Elsewhere');await fs.mkdir(folder);await fs.mkdir(other);
+  const first=path.join(folder,'Paper #1 50%.pdf'),second=path.join(folder,'Second.pdf'),third=path.join(folder,'Third.epub'),far=path.join(other,'Far.pdf'),text=path.join(folder,'Not a paper.pdf');
+  for(const [file,body] of [[first,'%PDF-1.7 first'],[second,'%PDF-1.7 second'],[far,'%PDF-1.7 far'],[text,'just words, whatever the name says']])await fs.writeFile(file,body);
+  const listing=async()=>JSON.stringify([await fs.readdir(folder),await fs.readdir(other),(await fs.readFile(first)).toString(),(await fs.stat(first)).mtimeMs]),untouched=await listing();
+  h.app.vault.adapter.getBasePath=()=>'/unrelated/vault';h.add('Second.md','A note of the same name about something else');
+  globalThis.__annotatorTestPdfJs=async()=>({getDocument:()=>({promise:Promise.resolve({numPages:1,fingerprints:['x'],getPage:async()=>({getTextContent:async()=>({items:[{str:'Words'}]})})}),destroy:async()=>{}})});
+  globalThis.__annotatorTestRequest=async()=>{throw new Error('A file on this computer is never asked of the network');};
+  // Every use of the computer's file system is counted, and every question.
+  let touched=0;const files=nodeRequire('fs').promises;h.plugin.desktopFileSystem=()=>{touched++;return files;};
+  const asked=[];let answer='no';h.plugin.openApproval=async asking=>{asked.push(asking);return answer;};
+  await h.plugin.onload();const keyless=()=>Notice.messages.filter(message=>/without this device's key/.test(String(message))).length,start=keyless();
+  // No key has been made: whatever key an address brings, nothing is asked, nothing is touched, nothing is opened.
+  for(const key of [undefined,'','guess','true'])await h.fire({source:first,key});
+  assert.equal(asked.length,0);assert.equal(touched,0);assert.equal(h.opened.length,0);assert.deepEqual(h.made,[]);
+  // It is said, once: a page that keeps asking gets no more than that.
+  assert.equal(keyless()-start,1);
+  const key=h.plugin.newOpenKey();assert.match(key,/^[A-Za-z0-9_-]{24}$/);assert.equal(h.store.get('annotator-open-with').key,key);
+  for(const wrong of [key+'x',key.slice(1),'',undefined])await h.fire({source:first,key:wrong});
+  assert.equal(asked.length,0);assert.equal(touched,0);assert.equal(keyless()-start,1);
+  // With the key the reader is asked, before the file is touched at all. "Not now" leaves everything as it was.
+  await h.fire({source:first,key});assert.deepEqual(asked,[first]);assert.equal(touched,0);assert.equal(h.opened.length,0);assert.deepEqual(h.made,[]);
+  // "Copy this file": a note named after the file is made where new notes go, and opening it copies the file in.
+  answer='file';await h.fire({source:first,key});assert.equal(asked.length,2);
+  assert.deepEqual(h.made,['Paper 1 50%.md']);assert.equal(h.metadata.get('Paper 1 50%.md').frontmatter['annotation-target'],first);
+  const copy=h.opened.at(-1).file;assert.ok(copy.path.startsWith('Annotator sources/'));assert.deepEqual(Buffer.from(h.binaries.get(copy.path)).toString(),'%PDF-1.7 first');assert.equal(h.plugin.noteMatchesSource(h.files.get('Paper 1 50%.md'),copy.path),true);
+  assert.ok(Notice.messages.some(message=>/Copied “Paper 1 50%” into the vault/.test(String(message))));
+  // The same file again: its copy is shown through the same note. No question, no second note, no second copy.
+  const copies=()=>[...h.files.keys()].filter(file=>file.startsWith('Annotator sources/')&&/\.(pdf|epub)$/.test(file)).length;
+  await h.fire({source:first,key});await h.fire({source:'file://'+first.split('/').map(encodeURIComponent).join('/'),key});assert.equal(asked.length,2);assert.deepEqual(h.made,['Paper 1 50%.md']);assert.equal(copies(),1);assert.equal(h.opened.at(-1).file,copy);
+  // Another file of the folder is a new question. "Always from this folder" is kept on this device, and a note's name
+  // already taken by another note is not taken again.
+  answer='folder';await h.fire({source:second,key});assert.equal(asked.length,3);assert.deepEqual(h.made,['Paper 1 50%.md','Second 1.md']);assert.equal(h.contents.get('Second.md'),'A note of the same name about something else');
+  assert.deepEqual(h.store.get('annotator-open-with').folders,[folder]);assert.equal(copies(),2);
+  // From then on a file of that folder is copied in without a question; one from another folder is still asked about.
+  answer='no';await fs.writeFile(third,Buffer.from([0x50,0x4b,3,4]));const epubs=h.opened.length;await h.fire({source:third,key});assert.equal(asked.length,3);
+  // That one was no book (four bytes of one): nothing of it is kept, and the note made for it a moment before is not left behind.
+  assert.ok(h.made.includes('Third.md'));assert.deepEqual(h.trashed,['Third.md']);assert.equal(h.files.has('Third.md'),false);assert.equal(h.opened.length,epubs);
+  await h.fire({source:far,key});assert.equal(asked.length,4);assert.equal(asked.at(-1),far);assert.equal(h.made.some(made=>/Far/.test(made)),false);
+  // A file that is not what its name says is read (it was allowed), found out, and not kept.
+  const kept=copies();await h.fire({source:text,key});assert.equal(copies(),kept);assert.deepEqual(h.trashed,['Third.md','Not a paper.md']);assert.equal(h.files.has('Paper 1 50%.md'),true);assert.equal(h.files.has('Second 1.md'),true);
+  // Where new notes go is the vault's own setting.
+  h.newNotes.path='Inbox';answer='file';await h.fire({source:far,key});assert.ok(h.made.includes('Inbox/Far.md'));answer='no';
+  // Refused whatever the key: another type, a path that is not full, a network path. Nothing is asked.
+  const questions=asked.length;for(const source of [path.join(folder,'Notes.md'),'Papers/Paper.pdf','//server/share/Paper.pdf','file://server/Paper.pdf'])await h.fire({source,key});assert.equal(asked.length,questions);
+  // On a phone nothing outside the vault is read, key or no key.
+  Platform.isMobile=true;const calls=touched;await h.fire({source:far,key});assert.equal(touched,calls);assert.equal(asked.length,questions);Platform.isMobile=false;
+  // The key and the allowed folders are this device's own: they are not in the settings that sync, and neither is a yes.
+  await h.plugin.persist();const saved=JSON.stringify(h.plugin.data);assert.equal(saved.includes(key),false);assert.equal(/openFolders|"folders"/.test(saved),false);assert.deepEqual(h.plugin.data.approvedSources||[],[]);
+  // A new key ends the old one; with no key at all nothing outside is followed again.
+  const next=h.plugin.newOpenKey(),unseen=path.join(other,'Not asked about before.pdf');assert.notEqual(next,key);const quiet=asked.length;await h.fire({source:unseen,key});assert.equal(asked.length,quiet);await h.fire({source:unseen,key:next});assert.equal(asked.length,quiet+1);
+  h.plugin.dropOpenKey();assert.deepEqual(h.store.get('annotator-open-with'),{key:null,folders:[]});await h.fire({source:unseen,key:next});assert.equal(asked.length,quiet+1);
+  // Through all of it nothing outside the vault was written, changed or removed.
+  await fs.rm(third);await fs.rm(text);await fs.writeFile(text,'just words, whatever the name says');assert.equal((await fs.readFile(first)).toString(),'%PDF-1.7 first');assert.deepEqual((await fs.readdir(folder)).sort(),['Not a paper.pdf','Paper #1 50%.pdf','Second.pdf']);assert.deepEqual(await fs.readdir(other),['Far.pdf']);
+  assert.equal(JSON.parse(untouched)[3],(await fs.stat(first)).mtimeMs);
+ }finally{Platform.isMobile=false;delete globalThis.__annotatorTestPdfJs;delete globalThis.__annotatorTestRequest;h.dispose();await fs.rm(directory,{recursive:true,force:true});}
+});
+test('a file Obsidian opened from outside the vault is copied in by one press, or by the command, and shown where it was',async()=>{
+ const {Notice}=await import('./.generated/plugin-boundary.mjs');
+ const fs=await import('node:fs/promises'),os=await import('node:os'),path=await import('node:path'),directory=await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(),'annotator-outside-press-'))),h=openHost();
+ try{h.plugin.manifest={id:'obsidian-annotator'};h.dom.window.ResizeObserver=class{observe(){}unobserve(){}disconnect(){}};
+  const real=path.join(directory,'Opened from Finder.pdf');await fs.writeFile(real,'%PDF-1.7 outside');h.app.vault.adapter.getBasePath=()=>'/unrelated/vault';
+  globalThis.__annotatorTestPdfJs=async()=>({getDocument:()=>({promise:Promise.resolve({numPages:1,fingerprints:['x'],getPage:async()=>({getTextContent:async()=>({items:[{str:'Words'}]})})}),destroy:async()=>{}})});
+  const outside=new TFile('file:'+real);outside.getRealPath=()=>real;const inside=h.add('Papers/Inside.pdf');
+  const shownIn=[],leaf=file=>{const item=new WorkspaceLeaf();item.contentEl=h.dom.window.document.createElement('div');h.dom.window.document.body.append(item.contentEl);item.app=h.app;item.view=new FileView(item);item.view.leaf=item;item.view.file=file;item.view.getViewType=()=>'pdf';item.view.viewer={child:{pdfViewer:{pdfViewer:null}}};item.openFile=async opened=>{shownIn.push([item,opened]);item.view.file=opened;};return item;};
+  const there=leaf(outside),here=leaf(inside),leaves=[there,here];h.app.workspace.getLeavesOfType=type=>type==='pdf'?leaves:type==='annotator-sidebar'?[{}]:[];let recent=there;h.app.workspace.getMostRecentLeaf=()=>recent;
+  // No key is needed and no question is asked here: the reader opened the file, and presses the button.
+  let asked=0;h.plugin.openApproval=async()=>{asked++;return 'no';};h.plugin.sourceApproval=async()=>{asked++;return 'no';};
+  const before=Notice.messages.length;await h.plugin.onload();h.plugin.bindSources();
+  const said=Notice.messages.slice(before).filter(message=>/outside your vault/.test(message.textContent??String(message)));assert.equal(said.length,1);
+  said[0].querySelector('button').click();for(let turn=0;turn<200&&!shownIn.length;turn++)await later(5);
+  // A note for it was made in the vault, the file was copied in, and the copy is shown in the tab the file was in.
+  assert.deepEqual(h.made,['Opened from Finder.md']);assert.equal(h.metadata.get('Opened from Finder.md').frontmatter['annotation-target'],real);
+  assert.equal(shownIn.length,1);assert.equal(shownIn[0][0],there);assert.ok(shownIn[0][1].path.startsWith('Annotator sources/'));assert.deepEqual(Buffer.from(h.binaries.get(shownIn[0][1].path)).toString(),'%PDF-1.7 outside');
+  assert.equal(asked,0);assert.equal((await fs.readFile(real)).toString(),'%PDF-1.7 outside');assert.deepEqual(await fs.readdir(directory),['Opened from Finder.pdf']);
+  // The command does the same for the file in front, and is there only for a PDF or book that is outside the vault.
+  const command=h.plugin.commands.find(each=>each.id==='copy-outside-file');there.view.file=outside;assert.equal(command.checkCallback(true),true);
+  recent=here;assert.equal(command.checkCallback(true),false);recent=there;Platform.isMobile=true;assert.equal(command.checkCallback(true),false);Platform.isMobile=false;
+  const text=new TFile('file:'+path.join(directory,'Words.md'));text.getRealPath=()=>path.join(directory,'Words.md');there.view.file=text;assert.equal(command.checkCallback(true),false);
+  // Run again for the same file, it shows the copy there already is: no second note, no second copy.
+  there.view.file=outside;command.checkCallback(false);for(let turn=0;turn<200&&shownIn.length<2;turn++)await later(5);
+  assert.equal(shownIn.length,2);assert.equal(shownIn[1][1],shownIn[0][1]);assert.deepEqual(h.made,['Opened from Finder.md']);assert.equal([...h.files.keys()].filter(file=>file.startsWith('Annotator sources/')&&file.endsWith('.pdf')).length,1);
+ }finally{Platform.isMobile=false;delete globalThis.__annotatorTestPdfJs;h.dispose();await fs.rm(directory,{recursive:true,force:true});}
+});
+test('after a file is shared to Obsidian on a phone, its menu offers to open a PDF or book in Annotator',async()=>{
+ const {Menu}=await import('./.generated/plugin-boundary.mjs');
+ const h=openHost();try{h.plugin.manifest={id:'obsidian-annotator'};await h.plugin.onload();
+  const heard=h.events.get('receive-files-menu');assert.equal(typeof heard,'function');
+  const pdf=h.add('Attachments/Shared.pdf'),book=h.add('Attachments/Shared.epub'),picture=h.add('Attachments/Photo.png'),note=h.add('Shared.md');
+  let menu=new Menu();heard(menu,[picture,pdf,note]);assert.deepEqual(menu.items.map(item=>item.title),['Open in Annotator']);menu.items[0].run();for(let turn=0;turn<50&&!h.opened.length;turn++)await later(2);assert.equal(h.opened.at(-1).file,pdf);
+  menu=new Menu();heard(menu,[pdf,book]);assert.deepEqual(menu.items.map(item=>item.title),['Open “Shared.pdf” in Annotator','Open “Shared.epub” in Annotator']);menu.items[1].run();for(let turn=0;turn<50&&h.opened.length<2;turn++)await later(2);assert.equal(h.opened.at(-1).file,book);
+  // Nothing to offer, nothing added; and whatever arrives instead of a menu or a list of files, nothing breaks.
+  menu=new Menu();heard(menu,[picture,note]);assert.equal(menu.items.length,0);
+  const outside=new TFile('file:/Users/someone/Paper.pdf');outside.getRealPath=()=>'/Users/someone/Paper.pdf';menu=new Menu();heard(menu,[outside,{path:'x.pdf',extension:'pdf'},'x.pdf',null]);assert.equal(menu.items.length,0);
+  for(const [first,second] of [[null,[pdf]],[undefined,undefined],[{},[pdf]],[new Menu(),null],[new Menu(),'x'],[{addItem(){throw new Error('changed');}},[pdf]]])assert.doesNotThrow(()=>heard(first,second));
+ }finally{h.dispose();}
+});
+test('a yes for a file on this computer is for the one copy then made: it is not kept, and not taken from older settings',async()=>{
+ const fs=await import('node:fs/promises'),os=await import('node:os'),path=await import('node:path'),directory=await fs.mkdtemp(path.join(os.tmpdir(),'annotator-one-yes-')),h=openHost();
+ try{const external=path.join(directory,'Paper.pdf');await fs.writeFile(external,'%PDF-1.7 first');
+  const note=h.add('Local.md','Unchanged',{'annotation-target':external});h.app.vault.adapter.getBasePath=()=>'/unrelated/vault';
+  globalThis.__annotatorTestPdfJs=async()=>({getDocument:()=>({promise:Promise.resolve({numPages:1,fingerprints:['x'],getPage:async()=>({getTextContent:async()=>({items:[{str:'Words'}]})})}),destroy:async()=>{}})});
+  // Settings written before: a yes for a file address is not carried over; one for an internet address is.
+  h.plugin.data={approvedSources:['file:///Users/someone/Old.pdf','https://example.org/kept.pdf','origin:https://example.org']};
+  const asked=[];h.plugin.sourceApproval=async address=>{asked.push(address);return 'yes';};await h.plugin.onload();
+  assert.deepEqual([...h.plugin.approvedSources].sort(),['https://example.org/kept.pdf','origin:https://example.org']);
+  await h.plugin.openNoteTarget(note);assert.equal(asked.length,1);const copy=h.opened.at(-1).file;await h.plugin.persistQueue;
+  assert.equal((h.plugin.data.approvedSources||[]).some(item=>item.startsWith('file:')),false);assert.equal([...h.plugin.approvedSources].some(item=>item.startsWith('file:')),false);
+  // While the copy is there it is what is read: no question, and the file outside is not looked at.
+  await h.plugin.openNoteTarget(note);assert.equal(asked.length,1);
+  // The copy is gone and the file at that path is another one now: the old yes does not cover it.
+  h.files.delete(copy.path);h.binaries.delete(copy.path);await fs.writeFile(external,'%PDF-1.7 another file altogether');
+  h.plugin.sourceApproval=async address=>{asked.push(address);return 'no';};await assert.rejects(h.plugin.openNoteTarget(note),/was not allowed/);assert.equal(asked.length,2);assert.equal(h.files.has(copy.path),false);
+ }finally{delete globalThis.__annotatorTestPdfJs;h.dispose();await fs.rm(directory,{recursive:true,force:true});}
+});
+test('on a disk that ignores the case of letters, a path into the vault written in another case is the vault\'s own file',async()=>{
+ const fs=await import('node:fs/promises'),os=await import('node:os'),path=await import('node:path'),h=openHost();
+ const directory=await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(),'Annotator-Case-')));
+ try{h.app.vault.adapter.getBasePath=()=>'/Users/test/Vault';const file=h.add('Books/Paper.pdf'),note=h.add('Case.md','',{'annotation-target':'/users/TEST/vault/books/PAPER.pdf'}),exact=h.add('Exact.md','',{'annotation-target':'/Users/test/Vault/Books/Paper.pdf'});
+  await h.plugin.onload();
+  // A disk that tells the two apart: the other spelling is some other folder, outside the vault.
+  h.plugin.foldVaultCase=false;assert.ok(h.plugin.targetKey(note).startsWith('remote:file:'));assert.equal(h.plugin.targetKey(exact),file.path);
+  // A disk that does not: it is the file in the vault, opened where it is, and not copied.
+  h.plugin.foldVaultCase=true;assert.equal(h.plugin.targetKey(note),file.path);assert.equal(h.plugin.targetKey(exact),file.path);
+  await h.plugin.openNoteTarget(note);assert.equal(h.opened.at(-1).file,file);assert.equal([...h.files.keys()].some(each=>each.startsWith('Annotator sources/')),false);
+  // A neighbour whose name only begins like the vault's is still outside, whatever the case.
+  assert.ok(h.plugin.targetKey(h.add('Near.md','',{'annotation-target':'/users/test/VAULT-copy/Books/Paper.pdf'})).startsWith('remote:file:'));
+  // Two files that differ only in case (a vault from a disk that tells them apart): neither is guessed at.
+  h.add('books/paper.pdf');assert.ok(h.plugin.targetKey(h.add('Either.md','',{'annotation-target':'/USERS/test/vault/BOOKS/paper.PDF'})).startsWith('remote:file:'));assert.equal(h.plugin.targetKey(exact),file.path);
+  // The note opened above keeps the file it was found to mean.
+  assert.equal(h.plugin.targetKey(note),file.path);
+  // What the disk does is asked of the disk itself.
+  const other=directory===directory.toUpperCase()?directory.toLowerCase():directory.toUpperCase();let same=false;try{const [a,b]=await Promise.all([fs.stat(directory),fs.stat(other)]);same=a.ino===b.ino&&a.dev===b.dev;}catch{same=false;}
+  h.app.vault.adapter.getBasePath=()=>directory;h.plugin.foldVaultCase=!same;await h.plugin.readVaultCase();assert.equal(h.plugin.foldVaultCase,same);
+  h.app.vault.adapter.getBasePath=()=>path.join(directory,'no such folder');h.plugin.foldVaultCase=true;await h.plugin.readVaultCase();assert.equal(h.plugin.foldVaultCase,false);
+ }finally{h.dispose();await fs.rm(directory,{recursive:true,force:true});}
+});
+

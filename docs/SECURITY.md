@@ -52,14 +52,39 @@ assets…" (`readers.test.mjs`), "network CSS, dynamic selectors…"
 
 ## Known and not yet changed
 
-- **A note's `annotation-target` outside the vault is asked about, once.**
+- **A note's `annotation-target` outside the vault is asked about.**
   Before an http(s) target is fetched, or a file outside the vault is read
-  and copied in, the reader asks, naming the address or the path. The answer
-  is remembered for that address (for a web address it can be given for the
-  whole site), so a later change of the file at the same path or address is
-  not asked about again. A Zotero or Calibre link is first followed to a
-  path inside the folder the settings name, and that path is then asked
-  about in the same way.
+  and copied in, the reader asks, naming the address or the path. For a web
+  address the answer is remembered (it can be given for the whole site), so
+  a later change at the same address is not asked about again. For a file
+  on this computer the answer is for the one copy then made, and is not
+  kept: while the copy is in the vault the file outside is not read again,
+  and if it is read again it is asked about again. A Zotero or Calibre link
+  is first followed to a path inside the folder the settings name, and that
+  path is then asked about in the same way.
+- **An address cannot make the reader read outside the vault without this
+  computer's key.** `obsidian://annotator-open` can be opened by any web
+  page or program. With `file=` it opens a PDF or EPUB that is already in
+  the vault, named by its path there; anything else is refused (another
+  type, a hidden or configuration folder, an absolute or climbing path).
+  That writes nothing and asks nothing, as Obsidian's own `obsidian://open`
+  does for any file. With `source=` it names a file outside the vault, and
+  is followed only when it carries the key this computer made; without it no
+  file is looked at, nothing is asked, and one notice a minute at most says
+  so. With it, the first file from a folder is asked about (the dialog
+  starts on **Not now**, and its other answers work only after a moment);
+  **Always from this folder** allows that folder from then on. The key and
+  the allowed folders are kept in Obsidian's storage for this computer and
+  vault, not in the plugin's settings, so they do not sync. No address names
+  where anything is written, and nothing is sent back to whoever opened it.
+  At most twenty requests wait at once. What remains: a program on the same
+  computer can read the key from the recipe, and on macOS such a program
+  could then have Obsidian copy a PDF from a folder already allowed into the
+  vault, where that program may be able to read it. **New key** or
+  **Remove** in the settings ends a key, and **Forget them** the folders.
+- On a Mac, whether the vault's disk takes names that differ only in case
+  for one name is asked of the disk, so that a path into the vault written
+  in another case is not taken for a file outside it.
 - **A user name and password for a source's server are asked for, never
   stored.** An address with them in it is refused, so they cannot end up in a
   note that syncs. When a server answers a download with a Basic challenge,
@@ -156,5 +181,8 @@ checked again.
   let go; a text longer than six million characters is not kept. It is only a
   head start for painting: the text is read from the file again at every
   opening, and nothing is written into a note from remembered text.
+- **This computer's key and the folders files may be copied from** without
+  a question (Open from outside Obsidian), in Obsidian's own storage for
+  this computer and vault. They are not in the vault and do not sync.
 - **Settings, reading positions and unfinished drafts** are in the plugin's
   `data.json` inside the vault's configuration folder, as with any plugin.
