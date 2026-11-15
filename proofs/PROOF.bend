@@ -1,3 +1,4 @@
+import ./chapters.bend as Chapters
 import ./book.bend as Book
 import ./stroke.bend as Stroke
 import ./area.bend as Area
@@ -3666,3 +3667,130 @@ def video_errors_seen_fold(+reversed: List<&2, VideoDocument.Part>, +later: List
 
 def Laws.video_errors_pairwise(parts):
   Equal.trans(Bool, VideoDocument.errors(parts), VideoDocument.errors_pairwise(List.reverse.go(&2, VideoDocument.Part, List.reverse.go(&2, VideoDocument.Part, parts, Nil{}), Nil{})), VideoDocument.errors_pairwise(parts), video_errors_seen_fold(List.reverse.go(&2, VideoDocument.Part, parts, Nil{}), Nil{}), Equal.cong(List<&2, VideoDocument.Part>, Bool, x => VideoDocument.errors_pairwise(x), List.reverse.go(&2, VideoDocument.Part, List.reverse.go(&2, VideoDocument.Part, parts, Nil{}), Nil{}), parts, video_reverse_twice(parts, Nil{})))
+
+# ── A book's pieces gathered into chapters ──────────────────────────────────
+def ch_join_nil(+xs: List<&2, Chapters.Piece>) -> {Chapters.join(xs, Nil{}) == xs : List<&2, Chapters.Piece>}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{h, t}:
+      %ch_join_nil(t) : {Con{h, Chapters.join(t, Nil{})} == Con{h, _} : List<&2, Chapters.Piece>}
+      {==}
+
+def ch_join_assoc(+xs: List<&2, Chapters.Piece>, +ys: List<&2, Chapters.Piece>, +zs: List<&2, Chapters.Piece>) -> {Chapters.join(Chapters.join(xs, ys), zs) == Chapters.join(xs, Chapters.join(ys, zs)) : List<&2, Chapters.Piece>}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{h, t}:
+      %ch_join_assoc(t, ys, zs) : {Con{h, Chapters.join(Chapters.join(t, ys), zs)} == Con{h, _} : List<&2, Chapters.Piece>}
+      {==}
+
+def ch_pieces_add(+xs: List<&2, Chapters.Quiet>, +ys: List<&2, Chapters.Quiet>) -> {Chapters.pieces(Chapters.add(xs, ys)) == Chapters.join(Chapters.pieces(xs), Chapters.pieces(ys)) : List<&2, Chapters.Piece>}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{h, t}:
+      %ch_pieces_add(t, ys) : {Con{Chapters.piece(h), Chapters.pieces(Chapters.add(t, ys))} == Con{Chapters.piece(h), _} : List<&2, Chapters.Piece>}
+      {==}
+
+# Everything a scan holds, in the row's order.
+def ch_all(scan: Chapters.Scan) -> List<&2, Chapters.Piece>:
+  match scan:
+    case Chapters.Scan{follows, waits, done}:
+      Chapters.join(Chapters.pieces(follows), Chapters.join(Chapters.pieces(waits), Chapters.flat(done)))
+
+def ch_opened_all(+id: Nat, +f: List<&2, Chapters.Quiet>, +w: List<&2, Chapters.Quiet>, +d: List<&2, Chapters.Chapter>) -> {ch_all(Chapters.opened(id, f, w, d)) == Con{Chapters.Opens{id}, Chapters.join(Chapters.pieces(f), Chapters.join(Chapters.pieces(w), Chapters.flat(d)))} : List<&2, Chapters.Piece>}:
+  match d:
+    case Nil{}:
+      %ch_join_assoc(Chapters.pieces(f), Chapters.pieces(w), Nil{}) : {Con{Chapters.Opens{id}, Chapters.join(Chapters.pieces(Chapters.add(f, w)), Nil{})} == Con{Chapters.Opens{id}, _} : List<&2, Chapters.Piece>}
+      %ch_pieces_add(f, w) : {Con{Chapters.Opens{id}, Chapters.join(Chapters.pieces(Chapters.add(f, w)), Nil{})} == Con{Chapters.Opens{id}, Chapters.join(_, Nil{})} : List<&2, Chapters.Piece>}
+      {==}
+    case Con{Chapters.Chapter{lead, open, tail}, more}:
+      %ch_join_assoc(Chapters.pieces(w), Chapters.pieces(lead), Con{Chapters.Opens{open}, Chapters.join(Chapters.pieces(tail), Chapters.flat(more))}) : {Con{Chapters.Opens{id}, Chapters.join(Chapters.pieces(f), Chapters.join(Chapters.pieces(Chapters.add(w, lead)), Con{Chapters.Opens{open}, Chapters.join(Chapters.pieces(tail), Chapters.flat(more))}))} == Con{Chapters.Opens{id}, Chapters.join(Chapters.pieces(f), _)} : List<&2, Chapters.Piece>}
+      %ch_pieces_add(w, lead) : {Con{Chapters.Opens{id}, Chapters.join(Chapters.pieces(f), Chapters.join(Chapters.pieces(Chapters.add(w, lead)), Con{Chapters.Opens{open}, Chapters.join(Chapters.pieces(tail), Chapters.flat(more))}))} == Con{Chapters.Opens{id}, Chapters.join(Chapters.pieces(f), Chapters.join(_, Con{Chapters.Opens{open}, Chapters.join(Chapters.pieces(tail), Chapters.flat(more))}))} : List<&2, Chapters.Piece>}
+      {==}
+
+def ch_step_all(+piece: Chapters.Piece, +scan: Chapters.Scan) -> {ch_all(Chapters.step(piece, scan)) == Con{piece, ch_all(scan)} : List<&2, Chapters.Piece>}:
+  match piece scan:
+    case Chapters.Opens{id} Chapters.Scan{f, w, d}:
+      ch_opened_all(id, f, w, d)
+    case Chapters.Waits{id} Chapters.Scan{f, w, d}:
+      %ch_join_assoc(Chapters.pieces(f), Chapters.pieces(w), Chapters.flat(d)) : {Con{Chapters.Waits{id}, Chapters.join(Chapters.pieces(Chapters.add(f, w)), Chapters.flat(d))} == Con{Chapters.Waits{id}, _} : List<&2, Chapters.Piece>}
+      %ch_pieces_add(f, w) : {Con{Chapters.Waits{id}, Chapters.join(Chapters.pieces(Chapters.add(f, w)), Chapters.flat(d))} == Con{Chapters.Waits{id}, Chapters.join(_, Chapters.flat(d))} : List<&2, Chapters.Piece>}
+      {==}
+    case Chapters.Follows{id} Chapters.Scan{f, w, d}:
+      {==}
+
+def ch_scan_all(+row: List<&2, Chapters.Piece>) -> {ch_all(Chapters.scan(row)) == row : List<&2, Chapters.Piece>}:
+  match row:
+    case Nil{}:
+      {==}
+    case Con{h, t}:
+      %ch_scan_all(t) : {ch_all(Chapters.step(h, Chapters.scan(t))) == Con{h, _} : List<&2, Chapters.Piece>}
+      ch_step_all(h, Chapters.scan(t))
+
+def ch_finish_all(+scan: Chapters.Scan) -> {Chapters.spread(Chapters.finish(scan)) == ch_all(scan) : List<&2, Chapters.Piece>}:
+  match scan:
+    case Chapters.Scan{f, w, Nil{}}:
+      %Equal.sym(List<&2, Chapters.Piece>, Chapters.join(Chapters.pieces(w), Nil{}), Chapters.pieces(w), ch_join_nil(Chapters.pieces(w))) : {Chapters.pieces(Chapters.add(f, w)) == Chapters.join(Chapters.pieces(f), _) : List<&2, Chapters.Piece>}
+      ch_pieces_add(f, w)
+    case Chapters.Scan{f, w, Con{Chapters.Chapter{lead, open, tail}, more}}:
+      %ch_join_assoc(Chapters.pieces(w), Chapters.pieces(lead), Con{Chapters.Opens{open}, Chapters.join(Chapters.pieces(tail), Chapters.flat(more))}) : {Chapters.join(Chapters.pieces(Chapters.add(f, Chapters.add(w, lead))), Con{Chapters.Opens{open}, Chapters.join(Chapters.pieces(tail), Chapters.flat(more))}) == Chapters.join(Chapters.pieces(f), _) : List<&2, Chapters.Piece>}
+      %ch_join_assoc(Chapters.pieces(f), Chapters.join(Chapters.pieces(w), Chapters.pieces(lead)), Con{Chapters.Opens{open}, Chapters.join(Chapters.pieces(tail), Chapters.flat(more))}) : {Chapters.join(Chapters.pieces(Chapters.add(f, Chapters.add(w, lead))), Con{Chapters.Opens{open}, Chapters.join(Chapters.pieces(tail), Chapters.flat(more))}) == _ : List<&2, Chapters.Piece>}
+      %ch_pieces_add(w, lead) : {Chapters.join(Chapters.pieces(Chapters.add(f, Chapters.add(w, lead))), Con{Chapters.Opens{open}, Chapters.join(Chapters.pieces(tail), Chapters.flat(more))}) == Chapters.join(Chapters.join(Chapters.pieces(f), _), Con{Chapters.Opens{open}, Chapters.join(Chapters.pieces(tail), Chapters.flat(more))}) : List<&2, Chapters.Piece>}
+      %ch_pieces_add(f, Chapters.add(w, lead)) : {Chapters.join(Chapters.pieces(Chapters.add(f, Chapters.add(w, lead))), Con{Chapters.Opens{open}, Chapters.join(Chapters.pieces(tail), Chapters.flat(more))}) == Chapters.join(_, Con{Chapters.Opens{open}, Chapters.join(Chapters.pieces(tail), Chapters.flat(more))}) : List<&2, Chapters.Piece>}
+      {==}
+
+def Laws.chapters_keep(row):
+  Equal.trans(List<&2, Chapters.Piece>, Chapters.spread(Chapters.finish(Chapters.scan(row))), ch_all(Chapters.scan(row)), row, ch_finish_all(Chapters.scan(row)), ch_scan_all(row))
+
+def ch_opens_pieces(+quiets: List<&2, Chapters.Quiet>) -> {Chapters.opens(Chapters.pieces(quiets)) == 0n : Nat}:
+  match quiets:
+    case Nil{}:
+      {==}
+    case Con{Chapters.Waiting{id}, t}:
+      ch_opens_pieces(t)
+    case Con{Chapters.Following{id}, t}:
+      ch_opens_pieces(t)
+
+def ch_opens_join(+xs: List<&2, Chapters.Piece>, +ys: List<&2, Chapters.Piece>) -> {Chapters.opens(Chapters.join(xs, ys)) == Nat.add(Chapters.opens(xs), Chapters.opens(ys)) : Nat}:
+  match xs:
+    case Nil{}:
+      {==}
+    case Con{Chapters.Opens{id}, t}:
+      %ch_opens_join(t, ys) : {1n+Chapters.opens(Chapters.join(t, ys)) == 1n+_ : Nat}
+      {==}
+    case Con{Chapters.Waits{id}, t}:
+      ch_opens_join(t, ys)
+    case Con{Chapters.Follows{id}, t}:
+      ch_opens_join(t, ys)
+
+def ch_flat_opens(+chapters: List<&2, Chapters.Chapter>) -> {Chapters.opens(Chapters.flat(chapters)) == List.length(&2, Chapters.Chapter, chapters) : Nat}:
+  match chapters:
+    case Nil{}:
+      {==}
+    case Con{Chapters.Chapter{lead, open, tail}, more}:
+      %ch_flat_opens(more) : {Chapters.opens(Chapters.join(Chapters.pieces(lead), Con{Chapters.Opens{open}, Chapters.join(Chapters.pieces(tail), Chapters.flat(more))})) == 1n+_ : Nat}
+      %ch_opens_pieces(lead) : {Chapters.opens(Chapters.join(Chapters.pieces(lead), Con{Chapters.Opens{open}, Chapters.join(Chapters.pieces(tail), Chapters.flat(more))})) == Nat.add(_, 1n+Chapters.opens(Chapters.flat(more))) : Nat}
+      %ch_opens_pieces(tail) : {Chapters.opens(Chapters.join(Chapters.pieces(lead), Con{Chapters.Opens{open}, Chapters.join(Chapters.pieces(tail), Chapters.flat(more))})) == Nat.add(Chapters.opens(Chapters.pieces(lead)), 1n+Nat.add(_, Chapters.opens(Chapters.flat(more)))) : Nat}
+      %ch_opens_join(Chapters.pieces(tail), Chapters.flat(more)) : {Chapters.opens(Chapters.join(Chapters.pieces(lead), Con{Chapters.Opens{open}, Chapters.join(Chapters.pieces(tail), Chapters.flat(more))})) == Nat.add(Chapters.opens(Chapters.pieces(lead)), 1n+_) : Nat}
+      ch_opens_join(Chapters.pieces(lead), Con{Chapters.Opens{open}, Chapters.join(Chapters.pieces(tail), Chapters.flat(more))})
+
+def ch_spread_opens(+gathered: Chapters.Gathered) -> {Chapters.opens(Chapters.spread(gathered)) == Chapters.count(gathered) : Nat}:
+  match gathered:
+    case Chapters.Chapters{list}:
+      ch_flat_opens(list)
+    case Chapters.Loose{quiets}:
+      ch_opens_pieces(quiets)
+
+def Laws.chapters_count(row):
+  %Laws.chapters_keep(row) : {Chapters.count(Chapters.gather(row)) == Chapters.opens(_) : Nat}
+  Equal.sym(Nat, Chapters.opens(Chapters.spread(Chapters.gather(row))), Chapters.count(Chapters.gather(row)), ch_spread_opens(Chapters.gather(row)))
+
+def Laws.chapters_stretches(early, late, start):
+  match early:
+    case Nil{}:
+      {==}
+    case Con{h, t}:
+      %Laws.chapters_stretches(t, late, start) : {Chapters.step(h, Chapters.scan_onto(Chapters.join(t, late), start)) == Chapters.step(h, _) : Chapters.Scan}
+      {==}

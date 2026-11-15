@@ -17,8 +17,8 @@ cd proofs
 node verify.mjs
 ```
 
-The verifier checks all 182 laws, requires 88 deliberately broken programs to
-fail type checking, and runs 61 Node tests against the actual compiled Bend
+The verifier checks all 185 laws, requires 92 deliberately broken programs to
+fail type checking, and runs 65 Node tests against the actual compiled Bend
 modules. It also has the proofs checked a second time by Bend's small kernel
 (`bend PROOF.bend --verdict`), which has its own proof in Lean and accepts
 only defs that are valid proofs and rely on no `@unsafe` or foreign code.
@@ -269,3 +269,26 @@ further in than the chapter is long. The reader shows the percentage with
 `before` and resumes from a percentage with `place` (`src/progress.ts`), so
 the two agree. The definitions walk chapter by chapter; `reader.mjs` hands
 them a book 2000 chapters at a time and only ever passes over whole chapters.
+
+## A book's pieces gathered into chapters
+
+`chapters.bend`: a FictionBook brings no chapters of its own, so the reader
+reads it, in its order, as a row of pieces: one that opens a chapter (the
+text of a section that is a chapter), one that waits (a heading with no text
+under it yet) or one that follows (words set after a section inside a larger
+one). `gather` decides which chapter each belongs to. A chapter is one
+opening piece with the quiet pieces around it by the shape of its type, so no
+chapter is only headings and each has the one place its opening piece has.
+`chapters_keep` says that spread out again the chapters are the row as it
+was: no piece dropped, none twice, none changed places with another;
+`chapters_count` that there are as many chapters as opening pieces;
+`chapters_stretches` that reading a long row a stretch at a time, the last
+stretch first, reads what reading it whole reads, which is how `chapters.mjs`
+hands it over (1,000 pieces at a time, the Bend value carried between them).
+Stating the first law found a defect in the converter as it was first
+written: words after a heading-only section were put in the chapter before
+that heading. `src/fb2-book.ts` calls `gatherChapters`.
+
+What stays in TypeScript: deciding what each section is (a walk of the
+parsed file) and writing a chapter's HTML. Those are tested, with generated
+books whose expected text is written down beside them, not proved.

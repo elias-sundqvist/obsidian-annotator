@@ -30,6 +30,8 @@ import type JSZip from 'jszip';
 import { bounded, pictureMime, type Chapter, type Publication } from './epub-book';
 import { passiveSvgImage } from './dom-source';
 import { digest } from './source';
+// @ts-expect-error The proofs' JavaScript wrappers carry no type declarations.
+import { gatherChapters } from '../proofs/chapters.mjs';
 
 export const FB2_BYTE_LIMIT = 64 * 1024 * 1024;
 const PICTURE_LIMIT = 12 * 1024 * 1024,
@@ -142,10 +144,17 @@ const says = (node: Node): boolean =>
           !HEADER.has((node as Element).localName) &&
           (node as Element).localName !== 'empty-line' &&
           !blank(node.textContent || '');
+// (Child nodes, not `children`: the same elements, read without the by-name lookups an element collection carries.)
 const named = (element: Element, name: string) =>
-    Array.from(element.children).filter(child => child.localName === name);
+    Array.from(element.childNodes).filter(
+        (child): child is Element => child.nodeType === 1 && (child as Element).localName === name
+    );
 const first = (element: Element | undefined | null, name: string) =>
-    element ? Array.from(element.children).find(child => child.localName === name) : undefined;
+    element
+        ? (Array.from(element.childNodes).find(
+              child => child.nodeType === 1 && (child as Element).localName === name
+          ) as Element | undefined)
+        : undefined;
 /** The address a link or a picture names: `xlink:href` under whatever prefix the file gave the namespace, or none. */
 function hrefOf(element: Element): string {
     for (const item of Array.from(element.attributes)) if (item.localName === 'href') return item.value.trim();
@@ -250,7 +259,7 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
 
     // Pictures: each binary is a file under images/, named by its id. (A name too long to keep with a note is no picture.)
     const pictures = new Map<string, Held>();
-    for (const binary of Array.from(root.getElementsByTagName('*')).filter(item => item.localName === 'binary')) {
+    for (const binary of Array.from(root.querySelectorAll('binary'))) {
         const id = binary.getAttribute('id'),
             path = id ? `images/${pictureName(id)}` : '';
         if (!id || path.length > 400 || pictures.has(path)) continue;
@@ -285,59 +294,81 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
     };
     named(main, 'section').forEach((section, index) => survey(section, `s${index + 1}`));
 
+    // The book is read, in its own order, as a row of pieces: one that opens a chapter (the text of a section that
+    // is a chapter), one that waits (a heading with no text under it yet) or one that follows (words set after a
+    // section inside a larger one). Which chapter each belongs to is decided by the checked gathering in
+    // proofs/chapters.bend: every piece once and in its place, one opening piece to a chapter.
+    interface Row {
+        kind: 'opens' | 'waits' | 'follows';
+        piece: Piece;
+        place?: string;
+        trail?: string[];
+    }
     const plan = (splitBelow: number): Draft[] => {
-        const drafts: Draft[] = [];
-        let waiting: Piece[] = [];
-        const open = (place: string, trail: string[]): Draft => {
-            const draft: Draft = { place, idref: place, pieces: waiting, linear: true, notes: false, trail };
-            waiting = [];
-            drafts.push(draft);
-            return draft;
-        };
-        const stray = (node: Node, depth: number) => {
-            if (!matters(node)) return;
-            if (drafts.length) drafts[drafts.length - 1].pieces.push({ nodes: [node], depth });
-            else waiting.push({ nodes: [node], depth });
-        };
+        const row: Row[] = [];
+        const holds = (nodes: Node[], owner?: Element) => nodes.some(matters) || !!owner?.getAttribute('id');
         const section = (element: Element, depth: number, trail: string[]) => {
             const all = Array.from(element.childNodes),
                 here = plain(first(element, 'title')),
                 around = here ? [...trail, here] : trail;
             if (divided.has(element) && depth < splitBelow) {
-                const inner = named(element, 'section'),
-                    at = all.indexOf(inner[0]);
-                waiting.push({ owner: element, nodes: all.slice(0, at), depth });
+                const at = all.indexOf(named(element, 'section')[0]),
+                    head = all.slice(0, at);
+                if (holds(head, element)) row.push({ kind: 'waits', piece: { owner: element, nodes: head, depth } });
                 for (const node of all.slice(at))
                     if (node.nodeType === 1 && (node as Element).localName === 'section')
                         section(node as Element, depth + 1, around);
-                    else stray(node, depth);
+                    else if (matters(node)) row.push({ kind: 'follows', piece: { nodes: [node], depth } });
             } else if (all.some(says))
-                open(placeOfSection.get(element)!, around).pieces.push({ owner: element, nodes: all, depth });
+                row.push({
+                    kind: 'opens',
+                    piece: { owner: element, nodes: all, depth },
+                    place: placeOfSection.get(element)!,
+                    trail: around
+                });
             // A section that says nothing but its heading opens the chapter that follows it.
-            else if (all.some(matters) || element.getAttribute('id'))
-                waiting.push({ owner: element, nodes: all, depth });
+            else if (holds(all, element)) row.push({ kind: 'waits', piece: { owner: element, nodes: all, depth } });
         };
         const all = Array.from(main.childNodes),
             sections = named(main, 'section');
-        if (!sections.length) open('s0', []).pieces.push({ owner: main, nodes: all, depth: 0 });
+        if (!sections.length)
+            row.push({ kind: 'opens', piece: { owner: main, nodes: all, depth: 0 }, place: 's0', trail: [] });
         else {
-            waiting.push({ owner: main, nodes: all.slice(0, all.indexOf(sections[0])), depth: 0 });
+            const head = all.slice(0, all.indexOf(sections[0]));
+            if (holds(head)) row.push({ kind: 'waits', piece: { owner: main, nodes: head, depth: 0 } });
             for (const node of all.slice(all.indexOf(sections[0])))
                 if (node.nodeType === 1 && (node as Element).localName === 'section') section(node as Element, 1, []);
-                else stray(node, 0);
-            // Headings with no chapter after them close the last chapter; a book of headings alone is one chapter.
-            if (waiting.some(piece => piece.nodes.some(matters) || piece.owner?.getAttribute('id'))) {
-                if (drafts.length) drafts[drafts.length - 1].pieces.push(...waiting);
-                else open('s0', []);
-            }
-            waiting = [];
+                else if (matters(node)) row.push({ kind: 'follows', piece: { nodes: [node], depth: 0 } });
         }
-        return drafts;
+        let gathered: {
+            chapters: { lead: number[]; open: number; tail: number[] }[];
+            loose: number[];
+        } | null;
+        try {
+            gathered = gatherChapters(row.map(item => item.kind));
+        } catch {
+            gathered = null;
+        }
+        if (!gathered) throw new Error('This book has more headings in a row than can be read.');
+        const draft = (ids: number[], place: string, trail: string[]): Draft => ({
+            place,
+            idref: place,
+            pieces: ids.map(id => row[id].piece),
+            linear: true,
+            notes: false,
+            trail
+        });
+        // A book in which nothing opens a chapter (headings alone) is one chapter of what it has.
+        if (!gathered.chapters.length) return gathered.loose.length ? [draft(gathered.loose, 's0', [])] : [];
+        return gathered.chapters.map(chapter =>
+            draft([...chapter.lead, chapter.open, ...chapter.tail], row[chapter.open].place!, row[chapter.open].trail!)
+        );
     };
     let drafts = plan(Infinity);
     // A book cut finer than the reader can list is read by its outermost sections instead.
     if (drafts.length > CHAPTER_LIMIT) drafts = plan(1);
     if (drafts.length > CHAPTER_LIMIT) throw new Error('This book has more sections than can be listed (2000).');
+    if (!drafts.length) throw new Error('This FictionBook has no text.');
     // A titled chapter's name in an annotation is made from its titles (and which of several with the same titles it is).
     const met = new Map<string, number>();
     await Promise.all(
@@ -426,7 +457,7 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
                     const note =
                         !!target &&
                         (element.getAttribute('type') === 'note' || notePaths.has(target)) &&
-                        !Array.from(element.getElementsByTagName('*')).some(inside => inside.localName === 'sup');
+                        !element.querySelector('sup');
                     if (to)
                         out.push(
                             `<a${idOf(element.getAttribute('id'))} href="${attr(to)}"${note ? ' class="fb2-noteref"' : ''}>`

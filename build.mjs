@@ -14,7 +14,7 @@ const bendVersion = spawnSync(bendBin, ['version'], { encoding: 'utf8', env: ben
 if (bendVersion.status !== 0) throw new Error(`Bend compiler not found (${bendBin}); set BEND_BIN`);
 // Where things are: the plugin's source, the proofs it is built from, and what the tests are built into.
 const SRC = 'src', PROOFS = 'proofs', OUT = 'test/.generated', SUPPORT = 'test/support';
-const wrappers = ['bridge.mjs', 'typed-annotations.mjs', 'video-crud.mjs', 'reader.mjs'].map(name => `${PROOFS}/${name}`);
+const wrappers = ['bridge.mjs', 'typed-annotations.mjs', 'video-crud.mjs', 'reader.mjs', 'chapters.mjs'].map(name => `${PROOFS}/${name}`);
 const roots = new Map();
 for (const wrapper of wrappers) {
     const source = await readFile(wrapper, 'utf8');

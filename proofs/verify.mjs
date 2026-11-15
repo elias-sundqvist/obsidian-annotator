@@ -144,6 +144,10 @@ for (const [name, file, oldCode, brokenCode] of [
     ['a place past the end of a one-chapter book', 'book.bend', 'Place{0n, Nat.min(at, length)}', 'Place{0n, at}'],
     ['a place found without taking off the chapters before it', 'book.bend', 'later(place(Con{next, more}, Nat.sub(at, length)))', 'later(place(Con{next, more}, at))'],
     ['the characters before a place leave out an earlier chapter', 'book.bend', 'Nat.add(length, before(rest, Place{chapter, offset}))', 'before(rest, Place{chapter, offset})'],
+    ['words after a waiting heading overtake it into the chapter before', 'chapters.bend', 'Scan{Nil{}, Con{Waiting{id}, add(follows, waits)}, done}', 'Scan{follows, Con{Waiting{id}, waits}, done}'],
+    ['the pieces waiting when a chapter opens are dropped', 'chapters.bend', 'Con{Chapter{Nil{}, id, follows}, Con{Chapter{add(waits, lead), open, tail}, more}}', 'Con{Chapter{Nil{}, id, follows}, Con{Chapter{lead, open, tail}, more}}'],
+    ['the pieces before the first chapter are lost', 'chapters.bend', 'Chapters{Con{Chapter{add(follows, add(waits, lead)), open, tail}, more}}', 'Chapters{Con{Chapter{add(waits, lead), open, tail}, more}}'],
+    ['a stretch read onto what was read forgets it', 'chapters.bend', "    case Nil{}:\n      start\n    case Con{head, rest}:\n      step(head, scan_onto(rest, start))", "    case Nil{}:\n      Scan{Nil{}, Nil{}, Nil{}}\n    case Con{head, rest}:\n      step(head, scan_onto(rest, start))"],
 ]) {
     const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'annotator-bend-proof-'));
     try {
@@ -163,7 +167,7 @@ for (const [name, file, oldCode, brokenCode] of [
         fs.rmSync(temporary, { recursive: true, force: true });
     }
 }
-const tests = run(process.execPath, ['--import', loader, '--test', 'bridge.test.mjs', 'typed.test.mjs', 'video.test.mjs', 'video-document.test.mjs', 'reader.test.mjs'], { timeout: 180000 });
+const tests = run(process.execPath, ['--import', loader, '--test', 'bridge.test.mjs', 'typed.test.mjs', 'video.test.mjs', 'video-document.test.mjs', 'reader.test.mjs', 'chapters.test.mjs'], { timeout: 180000 });
 process.stdout.write(tests.stdout);
 process.stderr.write(tests.stderr);
 assert.equal(tests.status, 0, 'JavaScript bridge tests failed');
