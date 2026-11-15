@@ -1527,6 +1527,24 @@
       "dependsOn": [],
       "estimate": 2,
       "notes": "Done 2026-11-15: 2026-11-15: ten faults found while recording 0.3.2's demos, all fixed on fix/found-while-recording and fast-forwarded into next: chapter-note sidebar stuck after a highlight; page-note marker not switching tab; empty hint ignoring chosen keys; book text moving after a highlight (EPUB too) and two-line titles under the border; FB2 header and title separators; the note's quote running words together at PDF line ends (now written as shown; stored exact unchanged); Rename heading dropping colons; settings grouped under clear headings; readable source names where possible (the core PDF tab still shows the file name); the Open the copy notice timing out and checking the file. Each with a test; checked in Obsidian 1.15.1."
+    },
+    {
+      "id": "fb3-support",
+      "title": "FB3 books in the book reader",
+      "status": "todo",
+      "parent": "community",
+      "dependsOn": [],
+      "estimate": 3,
+      "notes": "Owner's decision 2026-11-15: FB3 is to be supported (asked in the FB2 issue). FB3 is a zip of XML parts (OPC-like: description, body, images); the FB2 work (src/fb2*, chapters.bend) is the starting point. Then reply on that issue and close it."
+    },
+    {
+      "id": "mobi-support",
+      "title": "MOBI and AZW3 books in the book reader",
+      "status": "todo",
+      "parent": "community",
+      "dependsOn": [],
+      "estimate": 5,
+      "notes": "Owner's decision 2026-11-15: MOBI is to be supported. MOBI/AZW3 are PalmDB containers with (often compressed) HTML; DRM-protected files cannot be read. Calibre links already choose an EPUB or PDF over MOBI."
     }
   ]
 }
