@@ -1472,6 +1472,15 @@
       "dependsOn": ["open-with-annotator"],
       "estimate": 2,
       "notes": "What docs/OPEN_WITH.md says was not run. Windows 11 (the owner's machine, ask first): Obsidian's own Open with for a PDF and a book with a current installer; the PowerShell recipe, its flashing window, Smart App Control. Ubuntu (the owner's VM, ask first): the recipe under dash, GNOME Files' Open With, Obsidian as .deb, Flatpak and AppImage. Android emulator: share a PDF to Obsidian, Import, then the 'Open in Annotator' item; a file pushed into a device-storage vault then opened with file=. iPhone/iPad (owner's devices): Save to Files into the vault, and the Shortcut in OPEN_WITH.md. Also: Finder's 'Open With → Obsidian' with an installer from 1.14.4 on (this Mac's is 1.13.7). Correct OPEN_WITH.md and the README to what is found."
+    },
+    {
+      "id": "page-range-notes",
+      "title": "A note for each chapter of a PDF (page ranges)",
+      "status": "done",
+      "parent": "community",
+      "dependsOn": [],
+      "estimate": 5,
+      "notes": "Done 2026-11-15: Built 2026-11-15 by a subagent on feature/page-range, fast-forwarded into next. Property annotation-pages (10-100, 200-, 7) beside an unchanged annotation-target; non-overlapping ranges are parts of one PDF; overlaps, mixed ranged/unranged notes and unreadable ranges are refused with the notes and pages named. Writes go to the note of the page; a page in no range is read-only. Command 'New annotation note for pages…' with outline-based names. src/page-ranges.ts with property tests. Tried in Obsidian 1.13.7: the sidebar follows the page between two chapter notes, a highlight on page 5 goes into the second, and an overlap is refused with a clear message. Answers the request for a contiguous subset of pages."
     }
   ]
 }
