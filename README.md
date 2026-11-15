@@ -669,8 +669,9 @@ reader, with everything above. A newer Kindle book (KF8, which is what an
 was made from: its own chapters, stylesheets, pictures, links and table of
 contents. An older one (MOBI 6) is one stream of text cut into pages, and
 each page is a chapter; its contents come from the book's table of contents,
-or else from its contents page. The cover is the first page when the book's
-text does not show it already.
+or else from its contents page. A book's own cover page (Calibre and Kindle
+tools write one) is named Cover; a book without one gets its cover as a first
+page.
 
 - A book bought from Amazon is protected by DRM and is refused with that
   reason. Annotator does not remove DRM.
@@ -1109,8 +1110,9 @@ and the PDF export is read back with two independent PDF readers. See
 - Annotator 0.3.2 and earlier do not open Kindle books; their annotation
   notes are kept but not shown with the book. A Kindle book whose chapters
   are added to or taken out in a later copy is treated as a FictionBook is
-  above. Kindle books have been opened in tests with books made for them, not
-  yet in Obsidian or with books from a store.
+  above. Kindle books made by Calibre (9.18, every kind of file it writes)
+  have been read in Obsidian 1.15 on macOS; books from a shop, phones and
+  tablets have not been tried.
 - iOS and iPadOS: the reader's own code has been run in iOS WebKit in the
   Simulator (selection, highlights, notes, drawing, books), not yet inside
   Obsidian for iOS on a device. YouTube may refuse to play there (its Error 153). The

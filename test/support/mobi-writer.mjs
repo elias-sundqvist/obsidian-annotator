@@ -297,7 +297,7 @@ function kf8Records(options, firstResource) {
     const offsets = index({ table, strings: selectors, entries: [] }).offsets;
     list.push(...index({ table, strings: selectors, entries: fragments.map((item, k) => ({ name: String(item.insert).padStart(10, '0'), tags: { 2: [offsets[k]], 3: [item.file], 4: [item.seq], 6: [item.start, item.text.length] } })) }).records);
     let ncx = NONE;
-    if (contents.length) { ncx = list.length; list.push(...ncxIndex(contents.map(entry => (entry.absolute ? { ...entry, filepos: absolute(entry.at) } : { ...entry, pos: where(entry.at) }))).records); }
+    if (contents.length) { ncx = list.length; list.push(...ncxIndex(contents.map(entry => (entry.absolute ? { ...entry, filepos: absolute(entry.at) } : entry.both ? { ...entry, filepos: absolute(entry.at), pos: where(entry.at) } : { ...entry, pos: where(entry.at) }))).records); }
     list[0] = header({ compression, textLength: text.length, textRecords: records.length, encryption, title, version: 8, firstResource, huff: huffAt, huffCount, flags, ncx, fdst: fdstAt, fdstCount: ranges.length / 2, skel: skelAt, frag: fragAt, exth: metadata({ ...options, title }) });
     return list;
 }

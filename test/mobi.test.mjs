@@ -270,6 +270,122 @@ test('a font a KF8 book embeds is given to its stylesheet: unmasked and inflated
     try { assert.equal(await book.font('images/1'), null); assert.ok(await book.font('images/2')); } finally { globalThis.DecompressionStream = inflate; }
 });
 
+// Shaped as Calibre writes a KF8 book: a cover page that shows the cover through an SVG drawing (a flow of its own,
+// put in the page by an <img>), and contents entries that give both a place in the text and a fragment.
+const CALIBRE_COVER = '<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="100%" height="100%" viewBox="0 0 800 1104" preserveAspectRatio="xMidYMid meet"><image width="800" height="1104" xlink:href="kindle:embed:0001?mime=image/jpeg"/></svg>';
+const calibreKf8 = () => kf8({
+    files: [
+        XHTML('"Cover"', '\u0001<div class="x-ebookmaker-cover" id="calibre_pb_0" aid="1"><img src="kindle:flow:0002?mime=image/svg+xml"/></div>'),
+        XHTML('One', '\u0001<h1 id="one" aid="3">Chapter One</h1>\u0001<p aid="4">The keeper counted the ships.</p>'),
+        XHTML('Two', '\u0001<h1 id="two" aid="5">Chapter Two</h1>\u0001<p id="last" aid="6">A green sail.</p>')
+    ],
+    flows: ['p { text-indent: 1.5em; }', CALIBRE_COVER], images: [PNG('cover'), PNG('thumbnail')], cover: 0, language: 'en',
+    contents: [{ label: 'Chapter One', at: 'one', both: true }, { label: 'Chapter Two', at: 'two', both: true }, { label: 'The way back', at: 'last', both: true, parent: 1, depth: 1 }]
+});
+
+test('a cover page that shows the cover through a drawing has the drawing set into it, and is the cover: no second one is made', async () => {
+    const { book, sections } = await read(calibreKf8());
+    // The drawing's picture is the book's first record; as an <img> the drawing could load nothing, so it is in the page.
+    assert.deepEqual(book.chapters.map(chapter => [chapter.href, chapter.title]), [['part0000.xhtml', 'Cover'], ['part0001.xhtml', 'Chapter One'], ['part0002.xhtml', 'Chapter Two']]);
+    const html = await book.text('part0000.xhtml');
+    assert.ok(!/flows\/2\.svg|<img/.test(html), html); assert.match(html, /<svg [^>]*viewBox="0 0 800 1104"/);
+    const image = sections[0].root.querySelector('svg image');
+    assert.equal(image.getAttributeNS('http://www.w3.org/1999/xlink', 'href'), 'images/1'); assert.deepEqual([...(await book.image('images/1')).bytes], [...PNG('cover')]);
+    // Contents entries that give both a place in the text and a fragment lead to the fragment's element.
+    assert.deepEqual(book.nav, [{ title: 'Chapter One', path: 'part0001.xhtml', fragment: 'one', depth: 0 }, { title: 'Chapter Two', path: 'part0002.xhtml', fragment: 'two', depth: 0 }, { title: 'The way back', path: 'part0002.xhtml', fragment: 'last', depth: 1 }]);
+    for (const entry of book.nav) assert.ok(sections[book.chapters.findIndex(chapter => chapter.path === entry.path)].root.ownerDocument.getElementById(entry.fragment), entry.title);
+    // In the reader the cover is a picture on the first page, and Next chapter goes on through the book.
+    await withReader(calibreKf8(), 'Books/Keeper.azw3', async ({ view, content, frames }) => {
+        assert.equal(view.getState().chapter, 0); assert.ok(content.querySelector('.annotator-epub-chapter svg image'));
+        const next = content.querySelector('[aria-label="Next chapter"]');
+        for (const expected of [1, 2]) { next.click(); await frames(6); assert.equal(view.getState().chapter, expected); }
+    });
+});
+
+test('a MOBI 6 book shaped as Calibre writes one: its own cover page is the cover, and its flat contents take their nesting from its contents page', async () => {
+    const pages = {
+        cover: '<p align="center" width="0pt" height="0pt"><img recindex="00003" width="300" height="400"/></p>',
+        one: '{{at:one}}<h1>Chapter One</h1><p>The keeper counted the ships.</p>',
+        two: '{{at:two}}<h1>Chapter Two</h1><p>A green sail.</p>{{at:back}}<p>Back to the first.</p>',
+        toc: '{{at:toc}}<p align="center"><font size="+2"><b>Table of Contents</b></font></p><p><a filepos={{filepos:one}}>Chapter One</a></p><p><a filepos={{filepos:two}}>Chapter Two</a></p><blockquote><blockquote><a filepos={{filepos:back}}>The way back</a></blockquote></blockquote>'
+    };
+    const book = order => mobi6({
+        html: `<html><head><guide><reference type="toc" title="Table of Contents" filepos={{filepos:toc}} /></guide></head><body>${order.map(name => pages[name]).join('<mbp:pagebreak/>')}<mbp:pagebreak/></body></html>`,
+        // Calibre keeps the cover, its thumbnail and the cover page's own picture as three records.
+        images: [PNG('cover'), PNG('thumbnail'), PNG('cover page')], cover: 0,
+        contents: [{ label: 'Chapter One', at: 'one' }, { label: 'Chapter Two', at: 'two' }, { label: 'The way back', at: 'back' }]
+    });
+    const atEnd = await read(book(['cover', 'one', 'two', 'toc']));
+    assert.deepEqual(atEnd.book.chapters.map(chapter => chapter.title), ['Cover', 'Chapter One', 'Chapter Two', 'Table of Contents']);
+    assert.deepEqual(atEnd.book.nav.map(entry => [entry.title, entry.depth]), [['Chapter One', 0], ['Chapter Two', 0], ['The way back', 1]]);
+    // With the contents page first (Calibre's --mobi-toc-at-start) the cover page is still the cover.
+    const atStart = await read(book(['toc', 'cover', 'one', 'two']));
+    assert.deepEqual(atStart.book.chapters.map(chapter => chapter.title), ['Table of Contents', 'Cover', 'Chapter One', 'Chapter Two']);
+    assert.deepEqual(atStart.book.chapters.map(chapter => chapter.idref).slice(2), atEnd.book.chapters.map(chapter => chapter.idref).slice(1, 3));
+});
+
+const KEEPER = new URL('./support/fixtures/kindle/', import.meta.url);
+test('books Calibre made (test/support/fixtures/kindle/keeper.mjs): each way of making one opens, and everything in it is there', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { archivePath } = await import('./.generated/readers/epub-book.js');
+    const books = {};
+    for (const name of ['Keeper-old.mobi', 'Keeper-toc.mobi', 'Keeper-new.mobi', 'Keeper-both.mobi']) {
+        const opened = (books[name] = await read(new Uint8Array(readFileSync(new URL(name, KEEPER))).buffer)), { book, sections } = opened;
+        assert.equal(book.title, 'The Keeper', name); assert.equal(book.language, 'en', name);
+        assert.deepEqual(book.nav.map(entry => [entry.title, entry.depth]), [['Chapter One', 0], ['Chapter Two', 0], ['The way back', 1], ['Notes', 0]], name);
+        // Every contents entry and every link in the text lands on an element that is there; every picture is the book's own.
+        const lands = (from, href) => {
+            const target = archivePath(from, href), index = book.chapters.findIndex(chapter => chapter.path === target.path);
+            return index >= 0 && (!target.fragment || !!sections[index].root.ownerDocument.getElementById(target.fragment));
+        };
+        for (const entry of book.nav) assert.ok(lands('', `${entry.path}#${entry.fragment}`), `${name}: ${entry.title}`);
+        let links = 0, pictures = 0;
+        for (const [index, section] of sections.entries()) {
+            const path = book.chapters[index].path;
+            assert.ok(!/kindle:/.test(await book.text(path)), `${name}: ${path}`);
+            for (const link of section.root.querySelectorAll('a[href]')) { links++; assert.ok(lands(path, link.getAttribute('href')), `${name}: ${path} ${link.textContent}`); }
+            for (const picture of section.root.querySelectorAll('img, image')) {
+                pictures++;
+                const src = picture.getAttribute('src') || picture.getAttributeNS('http://www.w3.org/1999/xlink', 'href');
+                assert.match((await book.image(archivePath(path, src).path))?.mime || '', /^image\//, `${name}: ${src}`);
+            }
+        }
+        assert.equal(links, 8, name); assert.equal(pictures, 3, name);
+        const plate = sections.find(section => /lighthouse keeper/.test(section.root.textContent)).root.querySelector('img');
+        // (A MOBI 6 book keeps no description of its pictures; a KF8 book keeps the EPUB's.)
+        assert.equal(plate.getAttribute('alt'), /old|toc/.test(name) ? null : 'A blue plate of the harbour', name);
+    }
+    // One book, made four ways: the same chapters by the same names, the MOBI 6 ones with the contents page where Calibre put it.
+    const names = name => books[name].book.chapters.map(chapter => [chapter.title, chapter.idref]);
+    assert.deepEqual(names('Keeper-new.mobi').map(([title]) => title), ['Cover', 'Chapter One', 'Chapter Two', 'Notes', 'Table of Contents']);
+    assert.deepEqual(names('Keeper-old.mobi'), names('Keeper-new.mobi')); assert.deepEqual(names('Keeper-both.mobi'), names('Keeper-new.mobi'));
+    assert.deepEqual(names('Keeper-toc.mobi').map(([title]) => title), ['Table of Contents', 'Cover', 'Chapter One', 'Chapter Two', 'Notes']);
+    // A file holding both books is read as its KF8 book: the same places to go to as the KF8-only file.
+    assert.deepEqual(books['Keeper-both.mobi'].book.nav, books['Keeper-new.mobi'].book.nav);
+    assert.deepEqual(books['Keeper-both.mobi'].texts, books['Keeper-new.mobi'].texts);
+    // The text is the book's, whichever way it was made.
+    const words = name => books[name].texts.join(' ').replace(/\s+/g, ' ');
+    for (const name of ['Keeper-old.mobi', 'Keeper-new.mobi']) assert.match(words(name), /The lighthouse keeper counted the ships each evening, writing their names in a ledger\. ?1/);
+});
+
+test('a highlight made in a book Calibre made is stored, and restored when it is opened again', async () => {
+    const { readFileSync } = await import('node:fs');
+    for (const name of ['Keeper-both.mobi', 'Keeper-old.mobi']) {
+        const bytes = new Uint8Array(readFileSync(new URL(name, KEEPER))).buffer, words = 'Morning brought a green sail';
+        const stored = await withReader(bytes, `Books/${name}`, async ({ view, content, win, frames }) => {
+            await view.showChapter(2); await frames(); select(win, content, words);
+            const annotation = await view.payload(view.capture(), '', 'h1');
+            assert.match(annotation.uri, /\?loc=part0002\.xhtml$/); assert.equal(annotation.document.dc.identifier[0], view.book.chapters[2].idref);
+            return JSON.stringify(annotation);
+        });
+        await withReader(bytes, `Books/${name}`, async ({ view, frames }) => {
+            await view.showChapter(2); await frames();
+            view.setAnnotations([JSON.parse(stored)]); await frames();
+            assert.equal(view.status('h1'), 'Highlight restored · Verified passage', name); assert.equal(view.ranges.get('h1').toString(), words);
+        });
+    }
+});
+
 test('fixed-layout KF8 pages keep the size their page or the book gives', async () => {
     const files = [XHTML('Page', '\u0001<img src="kindle:embed:0001?mime=image/png" alt="Page one"/>', '<meta name="viewport" content="width=1072, height=1448"/>'), XHTML('Page', '\u0001<img src="kindle:embed:0001?mime=image/png" alt="Page two"/>')];
     const fixed = await open(kf8({ files, images: [PNG('page')], extra: [[122, 'true'], [126, '600x800']] }));

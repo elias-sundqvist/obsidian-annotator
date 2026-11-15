@@ -61,6 +61,10 @@ Some checks are made by hand and are not part of `npm test`:
 - `test/support/searchable-copy-check.mjs` writes the searchable copy of the
   scanned fixture and has pdf.js (as Obsidian ships it) and Apple's PDFKit
   read it back. The suite pins the copy they were given by its checksum.
+- `test/support/kindle-real-check.mjs` opens Kindle books you give it (from
+  Calibre, a shop, Kindle tools) and says whether every contents entry, link
+  and picture in them is there. The suite has four books Calibre made, in
+  `test/support/fixtures/kindle/`; `keeper.mjs` there says how.
 - `test/support/ios/` runs the built plugin in iOS WebKit in the Simulator
   (its README says how).
 - `npm run proofs` also has the proofs checked a second time by Bend's kernel

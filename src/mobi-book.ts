@@ -575,13 +575,20 @@ async function convertMobi6(
     });
     const contents: Contents[] = [];
     if (ncx?.entries.length) {
+        // Calibre writes a MOBI 6 book's contents flat; where they are, the nesting of the contents page is kept.
+        const flat = ncx.entries.every(entry => !entry.tags.get(4)?.[0] && !entry.tags.has(21)),
+            nested = new Map<number, number>();
+        for (const page of pages) for (const link of page.links) nested.set(Number(link.href), link.depth);
+        const levels = [...new Set(nested.values())].sort((x, y) => x - y);
         for (const entry of ordered(ncx.entries)) {
-            const found = resolve(entry.tags.get(1)?.[0] ?? -1),
+            const at = entry.tags.get(1)?.[0] ?? -1,
+                found = resolve(at),
                 title = ncx.strings
                     .get(entry.tags.get(3)?.[0] ?? -1)
                     ?.replace(/\s+/g, ' ')
-                    .trim();
-            if (found && title) contents.push({ title, ...found, depth: depthOf(entry, ncx.entries) });
+                    .trim(),
+                depth = flat && nested.has(at) ? levels.indexOf(nested.get(at)!) : depthOf(entry, ncx.entries);
+            if (found && title) contents.push({ title, ...found, depth: Math.min(8, depth) });
         }
     } else
         for (const page of pages)
@@ -590,6 +597,22 @@ async function convertMobi6(
                 if (found) contents.push({ title: link.title, ...found, depth: link.depth });
             }
     return { drafts, contents, styles: new Map(), svgs: new Map() };
+}
+/** How a page begins: the words of the first block that has any (a heading, a paragraph), on one line. */
+function opening(body: HTMLElement): string {
+    const walker = body.ownerDocument.createTreeWalker(body, 4);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (!/\S/.test(node.textContent || '')) continue;
+        let block: Element | null = node.parentElement;
+        while (
+            block &&
+            block !== body &&
+            !/^(?:p|div|h[1-6]|li|dt|dd|td|th|blockquote|pre|figcaption|caption)$/i.test(block.localName)
+        )
+            block = block.parentElement;
+        return ((block || body).textContent || '').replace(/\s+/g, ' ').trim();
+    }
+    return '';
 }
 const partPath = (part: number) => `part${String(part).padStart(4, '0')}.xhtml`;
 /** The entries of a contents index in reading order: each followed by those under it. */
@@ -848,20 +871,33 @@ async function convertKf8(
         };
     const addresses = /kindle:(embed|flow):([0-9A-Va-v]{1,8})(?:\?mime=([\w/+.-]+))?/g;
     const styles = new Map<string, string>(),
-        svgs = new Map<string, string>();
+        svgs = new Map<string, string>(),
+        inline = new Map<string, string>();
     for (let flow = 1; flow < flows.length; flow++) {
         const source = new TextDecoder(encoding).decode(unlatin1(text.slice(...flows[flow])));
         styles.set(`flows/${flow}.css`, source.replace(addresses, resource('../')));
         svgs.set(`flows/${flow}.svg`, source.replace(addresses, resource('../')));
+        // A drawing that shows a picture (Calibre's cover page is one) cannot show it from an <img>, which loads
+        // nothing further; it is set into the page instead, where the picture is the book's like any other.
+        const drawing = /<svg\b[\s\S]*<\/svg\s*>/i.exec(source)?.[0];
+        if (drawing && /<image\b/i.test(drawing) && !/<!ENTITY|<!DOCTYPE/i.test(drawing))
+            inline.set(`flows/${flow}.svg`, drawing.replace(addresses, resource('')));
     }
+    const setIn = (html: string) =>
+        html.replace(
+            /<img\b[^>]*?\ssrc\s*=\s*["'](flows\/\d+\.svg)["'][^>]*>/gi,
+            (tag, path: string) => inline.get(path) ?? tag
+        );
     const fixed = exthText(header, 122, 'utf-8')[0] === 'true',
         resolution = /^(\d{1,5})x(\d{1,5})$/.exec(exthText(header, 126, 'utf-8')[0] || '');
     const drafts: Draft[] = [];
     for (const [index, part] of parts.entries()) {
-        const whole = new TextDecoder(encoding)
-            .decode(unlatin1(part.html))
-            .replace(position, found => hrefs.get(found) ?? '')
-            .replace(addresses, resource(''));
+        const whole = setIn(
+            new TextDecoder(encoding)
+                .decode(unlatin1(part.html))
+                .replace(position, found => hrefs.get(found) ?? '')
+                .replace(addresses, resource(''))
+        );
         let viewport: PageViewport | undefined;
         if (fixed)
             try {
@@ -977,6 +1013,10 @@ export async function openMobi(source: ArrayBuffer, doc: Document): Promise<Publ
     const texts = new Map<string, string>([[STYLE_PATH, MOBI_STYLE], ...styles]),
         chapters: Chapter[] = [],
         met = new Map<string, number>();
+    // The book's own cover page, as Calibre and Kindle tools write one: the first page that is only a picture, before
+    // any chapter the contents name (after a contents page, where a book puts that first).
+    const firstNamed = contents.length ? Math.min(...contents.map(entry => entry.part)) : 1;
+    let coverPage = -1;
     const rtl = RTL.has(spoken.split('-')[0].toLowerCase()) ? ' dir="rtl"' : '';
     const wrap = (body: string) =>
         `<!DOCTYPE html><html${spoken ? ` lang="${attr(spoken)}"` : ''}${rtl}><head>${title ? `<title>${esc(title)}</title>` : ''}<link rel="stylesheet" type="text/css" href="${STYLE_PATH}"/></head><body>${body}</body></html>`;
@@ -988,17 +1028,29 @@ export async function openMobi(source: ArrayBuffer, doc: Document): Promise<Publ
             html = draft.whole ?? wrap(draft.html);
         let name = named?.title.slice(0, 200) || '',
             idref = path.replace(/\.xhtml$/, '');
+        const parsed = !name || index < firstNamed ? inertHtml(html, doc) : null,
+            begins = parsed ? opening(parsed.body) : '',
+            pictured = !!parsed && !begins && !!parsed.body.querySelector('img, svg, image');
+        if (pictured && coverPage < 0 && index < firstNamed) coverPage = index;
         if (name) {
             const key = JSON.stringify([name]),
                 nth = (met.get(key) || 0) + 1;
             met.set(key, nth);
             idref = `t${(await digest(`${key}\n${nth}`)).slice(0, 12)}`;
         } else {
-            // A chapter the contents do not name is called by its first heading, else by how it begins.
-            const body = inertHtml(html, doc).body,
-                heading = body.querySelector('h1, h2, h3, h4, h5, h6')?.textContent?.replace(/\s+/g, ' ').trim(),
-                begins = (body.textContent || '').replace(/\s+/g, ' ').trim();
-            name = heading?.slice(0, 200) || begins.slice(0, 60) || `Section ${index + 1}`;
+            // A chapter the contents do not name is called by its first heading, else by how it begins; a page that is
+            // only a picture, by being the cover where it is the book's cover page, else by the title its file gives it.
+            const heading = parsed!.body
+                    .querySelector('h1, h2, h3, h4, h5, h6')
+                    ?.textContent?.replace(/\s+/g, ' ')
+                    .trim(),
+                own = draft.whole ? (parsed!.title || '').replace(/["“”]/g, '').replace(/\s+/g, ' ').trim() : '';
+            name =
+                heading?.slice(0, 200) ||
+                begins.slice(0, 60) ||
+                (coverPage === index ? 'Cover' : '') ||
+                own.slice(0, 200) ||
+                `Section ${index + 1}`;
         }
         texts.set(path, html);
         chapters.push({
@@ -1010,7 +1062,8 @@ export async function openMobi(source: ArrayBuffer, doc: Document): Promise<Publ
             ...(draft.viewport ? { layout: 'pre-paginated' as const, viewport: draft.viewport } : {})
         });
     }
-    // The cover is the book's first page, where it is a picture that can be shown and the text does not show it already.
+    // The cover is the book's first page, where it is a picture that can be shown, the text does not show it already
+    // and the book has no cover page of its own.
     const coverAt = exthNumber(header, 201) !== NONE ? exthNumber(header, 201) : exthNumber(first, 201),
         coverPath = coverAt !== NONE ? `images/${coverAt + 1}` : '';
     const picture = (path: string): { bytes: Uint8Array; mime: string } | null => {
@@ -1026,7 +1079,12 @@ export async function openMobi(source: ArrayBuffer, doc: Document): Promise<Publ
         const safe = passiveSvgImage(drawing, doc);
         return safe ? { bytes: new TextEncoder().encode(safe), mime: 'image/svg+xml' } : null;
     };
-    if (coverPath && picture(coverPath) && ![...texts.values()].some(html => html.includes(`"${coverPath}"`))) {
+    if (
+        coverPath &&
+        coverPage < 0 &&
+        picture(coverPath) &&
+        ![...texts.values()].some(html => html.includes(`"${coverPath}"`))
+    ) {
         texts.set('cover.xhtml', wrap(`<div style="text-align: center"><img src="${coverPath}" alt="Cover"/></div>`));
         chapters.unshift({ idref: 'cover', href: 'cover.xhtml', path: 'cover.xhtml', title: 'Cover', linear: true });
     }
