@@ -28,7 +28,7 @@ function view(texts, { rotate = 0, size = [612, 792], runs = null, pictured = nu
     };
     const viewer = { pdfDocument: document, currentPageNumber: 1, pagesRotation: 180 }, file = { path: 'Scan.pdf', stat: { mtime: 1, size: 20 } };
     const adapter = new NativePdf({ contentEl: root, file, viewer: { child: { pdfViewer: { pdfViewer: viewer } } } }, () => {}, () => {}, () => {});
-    return { win, root, viewer, document, adapter, drawn, async flush() { for (let i = 0; i < 6; i++) { await new Promise(resolve => setImmediate(resolve)); const pending = [...frames.values()]; frames.clear(); for (const fn of pending) fn(); } }, close() { adapter.dispose(); win.close(); } };
+    return { win, root, viewer, document, adapter, drawn, async flush() { for (let i = 0; i < 6; i++) { await new Promise(resolve => setImmediate(resolve)); const pending = [...frames.values()]; frames.clear(); for (const fn of pending) fn(); } }, async until(ready, turns = 2000) { for (let i = 0; i < turns && !ready(); i++) { await new Promise(resolve => setImmediate(resolve)); const pending = [...frames.values()]; frames.clear(); for (const fn of pending) fn(); } assert.ok(ready(), 'the pages were read'); }, close() { adapter.dispose(); win.close(); } };
 }
 
 test('the pages a recogniser can read are those with no text of their own, known once the PDF has been read through', async () => {
@@ -92,7 +92,8 @@ test('pages with only a little text of their own, over a picture, are known, and
     const h = view(['', 'Downloaded from a library on 12 March', 'x'.repeat(301), '  ', 'A short title page'], { runs: { 2: [stamp, { str: '' }] }, pictured: [1, 2, 3] });
     try {
         assert.equal(h.adapter.pagesWithLittleText, null, 'not said before the pages are read');
-        h.adapter.setAnnotations([]); await h.flush(); await h.flush();
+        // Reading the pages takes as many turns as the machine needs: waited for, not counted.
+        h.adapter.setAnnotations([]); await h.until(() => h.adapter.pagesWithoutText !== null && h.adapter.pagesWithLittleText !== null);
         assert.deepEqual(h.adapter.pagesWithoutText, [1, 4]); assert.deepEqual(h.adapter.pagesWithLittleText, [2], 'a short page of text that draws no picture is not a scan; nor is a page of text');
         // The stamp: a tenth in from the left, four tenths wide, at the page's top.
         assert.deepEqual(await h.adapter.ownText(2), [{ page: 2, x: 1000, y: 374, w: 4000, h: 126 }]);
