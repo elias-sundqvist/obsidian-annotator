@@ -16,7 +16,7 @@ import {
 } from './dom-source';
 import { matcher, matchPattern, type MatchOptions, type Occurrence, type Occurrences } from './every-match';
 import { fileRevision, type ReaderCallbacks, type SourceCapture, type SourceIdentity } from './source';
-import { openPublication, archivePath, fictionBookName, type Publication } from './epub-book';
+import { openPublication, archivePath, fictionBookName, kindleBookName, type Publication } from './epub-book';
 import { EpubResolver, publicationSections } from './epub-resolver';
 import { ReadingAxis, wholly } from './epub-flow';
 import { domRange, indexLayer } from './anchors';
@@ -233,17 +233,21 @@ export class EpubView extends FileView {
         this.history = [];
         this.contentEl.empty();
         this.contentEl.addClass('annotator-publication', 'annotator-epub-reader');
-        // A FictionBook is read by its own converter, which is loaded when the first one is opened; from there on it is a book like any other.
-        const fictionBook = fictionBookName(file.path);
+        // A FictionBook or a Kindle book is read by its own converter, which is loaded when the first one is opened; from
+        // there on it is a book like any other.
+        const fictionBook = fictionBookName(file.path),
+            kindleBook = kindleBookName(file.path);
         this.statusEl = this.contentEl.createEl('p', { text: 'Opening book…' });
         try {
             const revision = fileRevision(file),
                 bytes = await this.app.vault.readBinary(file),
-                book = !fictionBook
-                    ? await openPublication(bytes, this.contentEl.ownerDocument)
-                    : /\.fb3$/i.test(file.path)
-                      ? await (await import('./fb3-book')).openFictionBook3(bytes, this.contentEl.ownerDocument)
-                      : await (await import('./fb2-book')).openFictionBook(bytes, this.contentEl.ownerDocument);
+                book = fictionBook
+                    ? /\.fb3$/i.test(file.path)
+                        ? await (await import('./fb3-book')).openFictionBook3(bytes, this.contentEl.ownerDocument)
+                        : await (await import('./fb2-book')).openFictionBook(bytes, this.contentEl.ownerDocument)
+                    : kindleBook
+                      ? await (await import('./mobi-book')).openMobi(bytes, this.contentEl.ownerDocument)
+                      : await openPublication(bytes, this.contentEl.ownerDocument);
             if (epoch !== this.epoch || this.stopped || fileRevision(file) !== revision) return;
             const sections = await publicationSections(
                 book,

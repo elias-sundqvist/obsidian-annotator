@@ -3,10 +3,10 @@
 
 # Annotator
 
-Read and annotate PDFs, books (EPUB, FB2 and FB3), web pages and videos inside
-[Obsidian](https://obsidian.md), and keep what you mark as Markdown in your
-vault. Every annotation is a block in an ordinary note, so it links, embeds,
-searches and syncs like the rest of your notes.
+Read and annotate PDFs, books (EPUB, FB2, FB3 and Kindle), web pages and
+videos inside [Obsidian](https://obsidian.md), and keep what you mark as
+Markdown in your vault. Every annotation is a block in an ordinary note, so it
+links, embeds, searches and syncs like the rest of your notes.
 
 Website: [annotator.esh.sh](https://annotator.esh.sh/).
 
@@ -595,7 +595,7 @@ keeps working beside it.
   for a figure or a table) becomes a marked area there, with its picture and
   the same note. One that lies off its page is left out.
 
-## Books (EPUB, FB2 and FB3)
+## Books (EPUB, FB2, FB3 and Kindle)
 
 ![A book in the Pages layout: a page is turned, a sentence is highlighted, and the text is made larger from the reading controls](docs/book.gif)
 
@@ -650,7 +650,6 @@ theme's colours and the typeface you chose.
 - Older Russian files written in windows-1251, KOI8-R and the like are read as
   they declare. A file that is not well-formed XML is refused with the reason;
   [Calibre](https://calibre-ebook.com) can repair it.
-- MOBI is not read; Calibre converts it to EPUB.
 
 FictionBook 3 books (`.fb3`) open the same way. An FB3 is a package of the
 book's description, its text and its pictures; its text is set as an FB2's
@@ -661,6 +660,35 @@ section, so a new edition that adds a chapter, or corrects a title, still
 finds every note. How the book asks to float a box or size a picture is left
 to the reader's layout, and a section the book marks as part of a sample or
 not is shown either way.
+
+### Kindle books (MOBI and AZW3)
+
+Kindle books without DRM (`.mobi`, `.prc` and `.azw3`) open in the same
+reader, with everything above. A newer Kindle book (KF8, which is what an
+`.azw3` is, and the second half of many `.mobi` files) is read as the EPUB it
+was made from: its own chapters, stylesheets, pictures, links and table of
+contents. An older one (MOBI 6) is one stream of text cut into pages, and
+each page is a chapter; its contents come from the book's table of contents,
+or else from its contents page. The cover is the first page when the book's
+text does not show it already.
+
+- A book bought from Amazon is protected by DRM and is refused with that
+  reason. Annotator does not remove DRM.
+- Books compressed either way Kindle tools compress them (PalmDOC or
+  HUFF/CDIC) are read. A large book is opened a slice at a time, so Obsidian
+  stays responsive while it opens.
+- A book is known by its ASIN, ISBN or source as its metadata gives them, so
+  the same book opened again, or a newer copy of it, finds its annotations. A
+  book given another of these is a different book: its annotations are kept
+  but not shown on it.
+- If another plugin already opens `.mobi` (or `.prc`, `.azw3`) files,
+  Annotator leaves them to it; **Annotate** in the file's menu and the book's
+  annotation note still open it here.
+- Not read: embedded fonts (your typeface is used), sound and video, a
+  dictionary's look-up index (its text is read as a book), and the panel view
+  of comics. Fixed-layout Kindle books keep their pages' size; they have been
+  tried only with books made for the tests. `.azw` and older PalmDOC `.pdb`
+  or `.prc` texts are not read; Calibre converts them to EPUB.
 
 ## Videos and recordings
 
@@ -843,10 +871,10 @@ example `annotation-target: calibre://show-book/Calibre_Library/42` (in
 Calibre, right-click the book's details and choose **Copy link to book**).
 Name the library's folder in the setting **Calibre library folders**. On a
 computer the reader finds the book there, takes its EPUB (or its PDF when
-there is no EPUB, or the one a `view-book` link names), asks once and reads a
-copy kept in `Annotator sources`. Calibre need not be running and its files
-are never changed. A book that has neither format has to be converted in
-Calibre first. This was tried on macOS against a Calibre 9 library.
+there is no EPUB, or the one a `view-book` link names; a book with neither,
+its AZW3 or MOBI), asks once and reads a copy kept in `Annotator sources`.
+Calibre need not be running and its files are never changed. A book that has
+none of these formats has to be converted in Calibre first. This was tried on macOS against a Calibre 9 library.
 
 ## With DEVONthink
 
@@ -1077,6 +1105,11 @@ and the PDF export is read back with two independent PDF readers. See
 - FB3 is read as its published schemas and its authors' example books
   describe it, and has been tried on books made to them, not yet on books
   from a shop or inside Obsidian itself.
+- Annotator 0.3.2 and earlier do not open Kindle books; their annotation
+  notes are kept but not shown with the book. A Kindle book whose chapters
+  are added to or taken out in a later copy is treated as a FictionBook is
+  above. Kindle books have been opened in tests with books made for them, not
+  yet in Obsidian or with books from a store.
 - iOS and iPadOS: the reader's own code has been run in iOS WebKit in the
   Simulator (selection, highlights, notes, drawing, books), not yet inside
   Obsidian for iOS on a device. YouTube may refuse to play there (its Error 153). The

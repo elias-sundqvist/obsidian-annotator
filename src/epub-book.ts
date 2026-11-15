@@ -61,6 +61,10 @@ export interface Publication {
 export function fictionBookName(name: string): boolean {
     return /\.(?:fb2|fbz|fb2\.zip|fb3)$/i.test(name);
 }
+/** Whether a file's name says it is a Kindle book: `.mobi`, `.prc` or `.azw3`. */
+export function kindleBookName(name: string): boolean {
+    return /\.(?:mobi|prc|azw3)$/i.test(name);
+}
 export function archivePath(base: string, href: string): { path: string; fragment: string } {
     if (/^[a-z][\w+.-]*:|^\/\//i.test(href)) throw new Error('External archive reference');
     const [location, fragment = ''] = href.split('#', 2),

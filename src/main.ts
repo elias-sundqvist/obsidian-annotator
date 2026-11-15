@@ -140,7 +140,7 @@ import { annotationThreads } from './annotation-threads';
 import { compareLocations, defaultLocation } from './annotation-search';
 import { NativePdf } from './native-pdf';
 import { EpubView, EPUB_VIEW, type FigureCapture } from './epub';
-import { fictionBookName } from './epub-book';
+import { fictionBookName, kindleBookName } from './epub-book';
 import { makeSnapshot, SnapshotHost } from './snapshot';
 import { refreshSnapshotEditors, snapshotEditorExtension } from './snapshot-editor';
 import { noteFolding, refold } from './note-folding';
@@ -200,6 +200,8 @@ import {
     validateRemote,
     remoteRevisions,
     revisionFilename,
+    remoteLabel,
+    type RemoteKind,
     type RemoteRevision
 } from './remote-source';
 import {
@@ -262,7 +264,7 @@ export interface ShownNotes {
 }
 interface RemoteCandidate {
     url: string;
-    kind: 'pdf' | 'epub';
+    kind: RemoteKind;
     previous: RemoteRevision;
     next: RemoteRevision;
     bytes: ArrayBuffer;
@@ -788,9 +790,10 @@ export default class AnnotatorPlugin extends Plugin {
             return view;
         });
         this.registerExtensions(['epub'], EPUB_VIEW);
-        // FictionBook files open in the book reader too. Obsidian refuses an extension another plugin has already taken;
-        // the plugin must still start then, and such a book is opened from its menu (Annotate) or its annotation note.
-        for (const extension of ['fb2', 'fbz', 'fb3'])
+        // FictionBook files and Kindle books open in the book reader too. Obsidian refuses an extension another plugin has
+        // already taken; the plugin must still start then, and such a book is opened from its menu (Annotate) or its
+        // annotation note.
+        for (const extension of ['fb2', 'fbz', 'fb3', 'mobi', 'prc', 'azw3'])
             try {
                 this.registerExtensions([extension], EPUB_VIEW);
             } catch {
@@ -1236,7 +1239,10 @@ export default class AnnotatorPlugin extends Plugin {
         );
         this.registerEvent(
             this.app.workspace.on('file-menu', (menu, file) => {
-                if (file instanceof TFile && (/^(pdf|epub)$/i.test(file.extension) || fictionBookName(file.path)))
+                if (
+                    file instanceof TFile &&
+                    (/^(pdf|epub)$/i.test(file.extension) || fictionBookName(file.path) || kindleBookName(file.path))
+                )
                     menu.addItem(item =>
                         item
                             .setTitle('Annotate')
@@ -7163,11 +7169,12 @@ export default class AnnotatorPlugin extends Plugin {
         }
     }
     /**
-     * Open a source file in a pane. A FictionBook is opened in the book reader by name: a zipped one ends in `.zip`,
-     * which is not the reader's to claim for every archive, and `.fb2` may be another plugin's by default.
+     * Open a source file in a pane. A FictionBook or a Kindle book is opened in the book reader by name: a zipped
+     * FictionBook ends in `.zip`, which is not the reader's to claim for every archive, and `.fb2` or `.mobi` may be
+     * another plugin's by default.
      */
     private async openSourceFile(leaf: WorkspaceLeaf, file: TFile, active = true) {
-        if (fictionBookName(file.path))
+        if (fictionBookName(file.path) || kindleBookName(file.path))
             await leaf.setViewState({ type: EPUB_VIEW, state: { file: file.path }, active });
         else await leaf.openFile(file, { active });
     }
@@ -7450,7 +7457,8 @@ export default class AnnotatorPlugin extends Plugin {
             );
         const local = this.local(path);
         if (!local) throw new Error('This is not the full path of a file on this computer.');
-        if (!remoteKind(local.uri)) throw new Error('Only a PDF or an EPUB can be copied into the vault this way.');
+        if (!remoteKind(local.uri))
+            throw new Error('Only a PDF, an EPUB or a Kindle book can be copied into the vault this way.');
         const inside =
             (local.vaultPath ? this.vaultFileAt(local.vaultPath) : null) || (await this.reachedInVault(local.path));
         if (inside) {
@@ -7569,7 +7577,7 @@ export default class AnnotatorPlugin extends Plugin {
             // Nothing outside the vault is fetched or read on a note's say-so alone.
             await this.approveSource(url, kind);
             if (this.stopped) throw new Error('Plugin unloaded before downloading the source.');
-            new Notice(`Preparing ${kind.toUpperCase()} for reading…`);
+            new Notice(`Preparing ${remoteLabel(kind)} for reading…`);
             const bytes = await this.sourceBytes(url, kind);
             validateRemote(bytes, kind);
             if (url.startsWith('file:'))
@@ -7741,7 +7749,7 @@ export default class AnnotatorPlugin extends Plugin {
     private askSignIn(question: SignInQuestion): Promise<{ user: string; password: string } | null> {
         return new Promise(resolve => new SignInModal(this.app, question, resolve).open());
     }
-    private async sourceBytes(url: string, kind: 'pdf' | 'epub', refresh = false): Promise<ArrayBuffer> {
+    private async sourceBytes(url: string, kind: RemoteKind, refresh = false): Promise<ArrayBuffer> {
         if (url.startsWith('file:')) {
             if (Platform.isMobile)
                 throw new Error(
@@ -7749,7 +7757,7 @@ export default class AnnotatorPlugin extends Plugin {
                 );
             return readLocalSource(
                 url,
-                (kind === 'epub' ? 64 : 128) * 1024 * 1024,
+                (kind === 'pdf' ? 128 : 64) * 1024 * 1024,
                 Platform.isWin,
                 this.desktopFileSystem()
             );
@@ -7877,7 +7885,7 @@ export default class AnnotatorPlugin extends Plugin {
             if ((await digest(bytes)) !== supplied.sha256)
                 throw new Error('That cached revision was modified. It was not selected.');
         } else {
-            new Notice(`Reading a new ${kind.toUpperCase()} revision for review…`);
+            new Notice(`Reading a new ${remoteLabel(kind)} revision for review…`);
             bytes = await this.sourceBytes(url, kind, true);
         }
         if (this.stopped) throw new Error('Plugin unloaded before source review.');

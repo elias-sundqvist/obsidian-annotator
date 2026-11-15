@@ -161,7 +161,7 @@ test('the notice after text recognition goes away as the other notices with a bu
 test('a source kept under a digest is called by the file it was made from: in the sidebar, and in what is made from it',async()=>{
  const {originalName}=await import('./.generated/readers/remote-source.js');
  assert.equal(originalName('https://example.org/papers/remote.pdf?x=1#page=2'),'remote');assert.equal(originalName('file:///Users/me/Zotero/storage/N7SMB24A/Vaswani%20et%20al.%20-%202017%20-%20Attention.pdf'),'Vaswani et al. - 2017 - Attention');
- assert.equal(originalName('https://docdrop.org/x/paper.pdf/'),'paper');assert.equal(originalName('file:///Library/Book%20Title.fb2.zip'),'Book Title');assert.equal(originalName('file:///Library/Book%20Title.fb3'),'Book Title');assert.equal(originalName('https://example.org/'),'');assert.equal(originalName('not a url'),'');assert.equal(originalName('https://example.org/%E0%A4%A.pdf'),'');
+ assert.equal(originalName('https://docdrop.org/x/paper.pdf/'),'paper');assert.equal(originalName('file:///Library/Book%20Title.fb2.zip'),'Book Title');assert.equal(originalName('file:///Library/Book%20Title.fb3'),'Book Title');assert.equal(originalName('file:///Calibre/Kindle%20only%20-%20Jane%20Doe.azw3'),'Kindle only - Jane Doe');assert.equal(originalName('https://example.org/'),'');assert.equal(originalName('not a url'),'');assert.equal(originalName('https://example.org/%E0%A4%A.pdf'),'');
  const h=await remoteHost();try{
   // Obsidian names its own PDF tab by the file; the reader names the source by where it came from.
   assert.equal(h.plugin.sourceTitle(h.path),'remote');assert.equal(h.plugin.sourceTitle('Papers/Own.pdf'),'',"a file of the vault's own is named by its file");
@@ -1642,7 +1642,7 @@ test('on a disk that ignores the case of letters, a path into the vault written 
 test('the plugin starts when another plugin already opens .fb2 files, and opens a FictionBook (FB2 or FB3) in the book reader by name',async()=>{
  const h=host();try{
   const registered=[];h.plugin.registerExtensions=(extensions,view)=>{if(extensions.includes('fb2'))throw new Error('Attempting to register an existing file extension "fb2".');registered.push(...extensions.map(extension=>`${extension}:${view}`));};
-  await h.plugin.onload();assert.deepEqual(registered,['epub:annotator-native-epub','fbz:annotator-native-epub','fb3:annotator-native-epub']);
+  await h.plugin.onload();assert.deepEqual(registered,['epub:annotator-native-epub','fbz:annotator-native-epub','fb3:annotator-native-epub','mobi:annotator-native-epub','prc:annotator-native-epub','azw3:annotator-native-epub']);
   // A zipped book ends in .zip, which is no reader's to claim; it and a .fb2 another plugin has taken open in the book view by name.
   const states=[];h.app.workspace.getLeaf=()=>({openFile:async file=>h.opened.push({file}),setViewState:async state=>{states.push(state);}});
   for(const name of ['Books/Dama.fb2.zip','Books/Dama.fb2','Books/Dama.fbz','Books/Dama.fb3']){h.add(name);const note=h.add(name+'.md','',{'annotation-target':name});await h.plugin.openNoteTarget(note);}
@@ -1660,6 +1660,32 @@ test('the plugin starts when another plugin already opens .fb2 files, and opens 
   assert.deepEqual(['Books/Dama.fb2.zip','Books/Dama.fbz','Books/Dama.fb3','Books/Other.epub'].map(target=>kinds.get(target)),['fb2','fb2','fb3','epub']);
   assert.equal(displayTitle('Dama.fb3.annotations'),'Dama');assert.equal(displayTitle('Dama.fb2.annotations'),'Dama');
  }finally{h.dispose();}
+});
+test('Kindle books open in the book reader, by name where another plugin has their extension, and a Calibre link to a book that is only a Kindle book is followed and copied in',async()=>{
+ const fs=nodeRequire('fs'),os=nodeRequire('os'),path=nodeRequire('path'),root=fs.mkdtempSync(path.join(os.tmpdir(),'annotator-kindle-'));
+ const {kf8}=await import('./support/mobi-writer.mjs'),book=new Uint8Array(kf8({files:['<html><head><title>T</title></head><body>\u0001<p>Kindle words.</p></body></html>']}));
+ const put=(file,bytes)=>{const full=path.join(root,file);fs.mkdirSync(path.dirname(full),{recursive:true});fs.writeFileSync(full,bytes);return full;};
+ const azw3=put('Books/Jane Doe/Kindle only (3)/Kindle only - Jane Doe.azw3',book);put('Books/Jane Doe/Kindle only (3)/cover.jpg','x');put('Books/Jane Doe/Both (4)/Both - Jane Doe.azw3',book);put('Books/Jane Doe/Both (4)/Both - Jane Doe.epub','PK');
+ globalThis.__annotatorTestRequest=async()=>{throw new Error('Local files must not use HTTP');};
+ const h=host();try{h.plugin.manifest={id:'obsidian-annotator'};h.app.vault.adapter.getBasePath=()=>'/unrelated/vault';
+  const registered=[];h.plugin.registerExtensions=(extensions,view)=>{if(extensions.includes('mobi'))throw new Error('Attempting to register an existing file extension "mobi".');registered.push(...extensions.map(extension=>`${extension}:${view}`));};
+  await h.plugin.onload();assert.deepEqual(registered,['epub:annotator-native-epub','fb2:annotator-native-epub','fbz:annotator-native-epub','fb3:annotator-native-epub','prc:annotator-native-epub','azw3:annotator-native-epub']);
+  const states=[];h.app.workspace.getLeaf=()=>({openFile:async file=>h.opened.push({file}),setViewState:async state=>{states.push(state);}});
+  for(const name of ['Books/Book.mobi','Books/Book.prc','Books/Book.azw3']){h.add(name);await h.plugin.openNoteTarget(h.add(name+'.md','',{'annotation-target':name}));}
+  assert.deepEqual(states.map(state=>[state.type,state.state.file]),[['annotator-native-epub','Books/Book.mobi'],['annotator-native-epub','Books/Book.prc'],['annotator-native-epub','Books/Book.azw3']]);assert.equal(h.opened.length,0);
+  // A Calibre book with an EPUB is still its EPUB; one with only a Kindle book is that book, asked about, copied in and opened in the reader.
+  h.plugin.display={...h.plugin.display,calibreLibraries:path.join(root,'Books')};
+  await h.plugin.followAppLink('calibre://view-book/Books/4/AZW3');assert.match(h.plugin.appLinkPaths['calibre://view-book/Books/4/AZW3'],/Both - Jane Doe\.epub$/);
+  const note=h.add('K.md','Unchanged',{'annotation-target':'calibre://show-book/Books/3'});
+  await h.plugin.openNoteTarget(note);assert.equal(h.plugin.appLinkPaths['calibre://show-book/Books/3'],azw3);
+  const copy=states.at(-1).state.file;assert.equal(states.at(-1).type,'annotator-native-epub');assert.match(copy,/^Annotator sources\/[0-9a-f]{64}\.azw3$/);
+  assert.deepEqual([...new Uint8Array(h.binaries.get(copy))],[...book]);assert.equal(h.plugin.targetKey(note),copy);assert.equal(h.contents.get(note.path),'Unchanged');
+  // A file that is not a Kindle book, or one with DRM, is not copied in.
+  const {mobi6}=await import('./support/mobi-writer.mjs');put('Books/Jane Doe/Locked (5)/Locked.mobi',new Uint8Array(mobi6({html:'<p>x</p>',encryption:2})));
+  await assert.rejects(h.plugin.openNoteTarget(h.add('L.md','',{'annotation-target':'calibre://show-book/Books/5'})),/protected by DRM/);assert.equal([...h.binaries.keys()].filter(key=>key.startsWith('Annotator sources/')).length,1);
+  // A Kindle book on the web is not fetched: it is not a source the reader downloads.
+  assert.equal(h.plugin.targetKey(h.add('W.md','',{'annotation-target':'https://example.org/book.mobi'})),'web:https://example.org/book.mobi');
+ }finally{h.dispose();fs.rmSync(root,{recursive:true,force:true});}
 });
 // The host's own Markdown editor, as far as the composer on the page uses it: a field that says when it changes.
 function hostEditor(h){

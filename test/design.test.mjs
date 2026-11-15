@@ -189,10 +189,14 @@ test('the library lists every annotation note with counts and reports unreadable
         const broken = '---\nannotation-target: Lost.pdf\n---\n\n>%%\n>```annotation-json\n>{not json\n>```\n>%%\n>*%%PREFIX%%%%HIGHLIGHT%% ==x== %%POSTFIX%%*\n>%%LINK%%[[#^z|show annotation]]\n>%%COMMENT%%\n>\n>%%TAGS%%\n>\n^z\n';
         h.add('Broken.md', broken, { 'annotation-target': 'Lost.pdf' });
         h.add('Plain.md', 'Just a note'); h.add('Paper.pdf');
+        h.add('Novel.azw3.annotations.md', good, { 'annotation-target': 'Novel.azw3' }); h.add('Novel.azw3');
         await h.plugin.onload();
         const before = new Map(h.contents);
         const entries = await scanLibrary(h.plugin);
-        assert.deepEqual(entries.map(entry => entry.note.path).sort(), ['Broken.md', 'Notes/Paper.pdf.annotations.md']);
+        assert.deepEqual(entries.map(entry => entry.note.path).sort(), ['Broken.md', 'Notes/Paper.pdf.annotations.md', 'Novel.azw3.annotations.md']);
+        // A Kindle book is listed as one, by its own name.
+        const novel = entries.find(entry => entry.note.path.startsWith('Novel'));
+        assert.deepEqual([novel.title, novel.kind, novel.resolved], ['Novel', 'kindle', true]);
         const paper = entries.find(entry => entry.note.path.startsWith('Notes/'));
         assert.deepEqual([paper.title, paper.kind, paper.resolved, paper.highlights, paper.notes, paper.inks, paper.problem], ['Paper', 'pdf', true, 2, 1, ['yellow', 'blue'], undefined]);
         const lost = entries.find(entry => entry.note.path === 'Broken.md');

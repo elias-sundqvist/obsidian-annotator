@@ -8,7 +8,7 @@ import { quoteOf } from './source';
  * One scan feeds the "open annotated source" switcher and the migration
  * check. It only reads; nothing is rewritten.
  */
-export type SourceKind = 'pdf' | 'epub' | 'fb2' | 'fb3' | 'web' | 'video' | 'other';
+export type SourceKind = 'pdf' | 'epub' | 'fb2' | 'fb3' | 'kindle' | 'web' | 'video' | 'other';
 export interface LibraryEntry {
     note: TFile;
     title: string;
@@ -37,6 +37,7 @@ function kindOf(raw: string, key: string | null, type: string | null): SourceKin
     if (type === 'pdf' || /\.pdf(?:[?#]|$)/i.test(raw)) return 'pdf';
     if (/\.(?:fb2|fbz|fb2\.zip)(?:[?#]|$)/i.test(raw)) return 'fb2';
     if (/\.fb3(?:[?#]|$)/i.test(raw)) return 'fb3';
+    if (/\.(?:mobi|prc|azw3)(?:[?#]|$)/i.test(raw)) return 'kindle';
     if (type === 'epub' || /\.epub(?:[?#]|$)/i.test(raw)) return 'epub';
     if (key?.startsWith('web:') || /^https?:/i.test(raw)) return 'web';
     return 'other';
@@ -46,6 +47,7 @@ export const KIND_ICON: Record<SourceKind, string> = {
     epub: 'book-open',
     fb2: 'book-open',
     fb3: 'book-open',
+    kindle: 'book-open',
     web: 'globe',
     video: 'play-circle',
     other: 'file'
@@ -55,6 +57,7 @@ export const KIND_LABEL: Record<SourceKind, string> = {
     epub: 'EPUB',
     fb2: 'FB2',
     fb3: 'FB3',
+    kindle: 'Kindle',
     web: 'Web page',
     video: 'Video',
     other: 'Source'
@@ -109,7 +112,7 @@ export function displayTitle(basename: string) {
     return (
         basename
             .replace(/(?:-[0-9a-f]{8})?\.md\.annotations$/i, '')
-            .replace(/\.(pdf|epub|fb2\.zip|fb2|fbz|fb3)\.annotations$/i, '')
+            .replace(/\.(pdf|epub|fb2\.zip|fb2|fbz|fb3|mobi|prc|azw3)\.annotations$/i, '')
             .replace(/\.annotations$/i, '') || basename
     );
 }

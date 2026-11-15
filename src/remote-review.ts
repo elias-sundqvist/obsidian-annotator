@@ -4,7 +4,7 @@ import { type TextPage } from './anchors';
 import { openPublication } from './epub-book';
 import { EpubResolver, publicationSections } from './epub-resolver';
 import { annotationQuote, resolvePdfAnnotation } from './pdf-annotation';
-import { validateRemote } from './remote-source';
+import { validateRemote, type RemoteKind } from './remote-source';
 export interface RevisionCheck {
     id: string;
     status: string;
@@ -16,7 +16,7 @@ export interface RevisionReview {
 }
 export async function reviewRemote(
     bytes: ArrayBuffer,
-    kind: 'pdf' | 'epub',
+    kind: RemoteKind,
     records: Annotation[],
     document: Document,
     // pdf.js as the host loads it; it comes without types.
@@ -29,8 +29,12 @@ export async function reviewRemote(
         if (!current()) throw new Error('Source review was cancelled or the plugin unloaded.');
     };
     check();
-    if (kind === 'epub') {
-        const book = await openPublication(bytes, document),
+    if (kind === 'epub' || kind === 'mobi') {
+        // A Kindle book's reader is loaded when the first one is reviewed, as when one is opened.
+        const book =
+                kind === 'mobi'
+                    ? await (await import('./mobi-book')).openMobi(bytes, document)
+                    : await openPublication(bytes, document),
             resolver = new EpubResolver(book, await publicationSections(book, document, current));
         check();
         return {

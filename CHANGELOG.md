@@ -12,6 +12,14 @@ What changed for someone using Annotator. How to use each thing is in
   as the book sets them, and a chapter keeps its notes when a new edition adds
   a chapter before it or corrects its title. **Open a FictionBook (FB2 or
   FB3) from this vault…** lists them too.
+- Kindle books without DRM open in the book reader: `.mobi`, `.prc` and
+  `.azw3`, the newer KF8 books with their own chapters, stylesheets and
+  pictures and the older MOBI books cut into pages. Contents, find,
+  highlights, notes, picture notes, reading position and the reading
+  controls work as for an EPUB, and annotations are kept in the same notes.
+  A book with DRM is refused with that reason. A Calibre link to a book that
+  is only a Kindle book now opens it; a book with an EPUB or PDF still opens
+  that.
 
 ## 0.3.2 (2026-11-15)
 

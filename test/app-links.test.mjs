@@ -45,8 +45,8 @@ test('a Zotero link is the PDF in the folder named by its key, under storage', a
     } finally { rmSync(data, { recursive: true, force: true }); }
 });
 
-test('a Calibre link is the EPUB or PDF in the book folder that ends in its number, in the library it names', async () => {
-    const root = tree(['My Test Library/metadata.db', 'My Test Library/.calnotes/notes.db', 'My Test Library/Unknown/Native Reader Field Guide (1)/Native Reader Field Guide - Unknown.epub', 'My Test Library/Unknown/Native Reader Field Guide (1)/metadata.opf', 'My Test Library/Unknown/Native PDF test (2)/Native PDF test - Unknown.pdf', 'My Test Library/Unknown/Native PDF test (2)/cover.jpg', 'My Test Library/Jane Doe/Both (12)/Both - Jane Doe.pdf', 'My Test Library/Jane Doe/Both (12)/Both - Jane Doe.epub', 'My Test Library/Jane Doe/Both (12)/Both - Jane Doe.mobi', 'My Test Library/Jane Doe/Kindle only (3)/Kindle only - Jane Doe.azw3', 'My Test Library/Jane Doe/A title (1) again (21)/x.epub', 'Other_Lib/A/One (1)/one.pdf']);
+test('a Calibre link is the EPUB or PDF in the book folder that ends in its number, in the library it names, else its Kindle book', async () => {
+    const root = tree(['My Test Library/metadata.db', 'My Test Library/.calnotes/notes.db', 'My Test Library/Unknown/Native Reader Field Guide (1)/Native Reader Field Guide - Unknown.epub', 'My Test Library/Unknown/Native Reader Field Guide (1)/metadata.opf', 'My Test Library/Unknown/Native PDF test (2)/Native PDF test - Unknown.pdf', 'My Test Library/Unknown/Native PDF test (2)/cover.jpg', 'My Test Library/Jane Doe/Both (12)/Both - Jane Doe.pdf', 'My Test Library/Jane Doe/Both (12)/Both - Jane Doe.epub', 'My Test Library/Jane Doe/Both (12)/Both - Jane Doe.mobi', 'My Test Library/Jane Doe/Kindle only (3)/Kindle only - Jane Doe.azw3', 'My Test Library/Jane Doe/Kindle only (3)/Kindle only - Jane Doe.mobi', 'My Test Library/Jane Doe/Old (4)/Old - Jane Doe.prc', 'My Test Library/Jane Doe/Old (4)/cover.jpg', 'My Test Library/Jane Doe/Nothing to read (5)/cover.jpg', 'My Test Library/Jane Doe/A title (1) again (21)/x.epub', 'Other_Lib/A/One (1)/one.pdf']);
     const mine = join(root, 'My Test Library'), other = join(root, 'Other_Lib'), at = (...parts) => join(mine, ...parts);
     const link = raw => appLink(raw);
     try {
@@ -54,7 +54,7 @@ test('a Calibre link is the EPUB or PDF in the book folder that ends in its numb
         assert.equal(await calibreFile(link('calibre://show-book/My_Test_Library/2'), [other, mine], list), at('Unknown', 'Native PDF test (2)', 'Native PDF test - Unknown.pdf'));
         // The number is the one at the end of the folder's name, not one inside it.
         assert.equal(await calibreFile(link('calibre://book-details/My_Test_Library/21'), [mine], list), at('Jane Doe', 'A title (1) again (21)', 'x.epub'));
-        // An EPUB before a PDF, unless the link is to one format; a format the reader does not open means the book, not that file.
+        // An EPUB before a PDF, unless the link is to one of them; a link to a Kindle format means the book, and its EPUB is taken first.
         assert.equal(await calibreFile(link('calibre://show-book/My_Test_Library/12'), [mine], list), at('Jane Doe', 'Both (12)', 'Both - Jane Doe.epub'));
         assert.equal(await calibreFile(link('calibre://view-book/My_Test_Library/12/PDF'), [mine], list), at('Jane Doe', 'Both (12)', 'Both - Jane Doe.pdf'));
         assert.equal(await calibreFile(link('calibre://view-book/My_Test_Library/12/MOBI'), [mine], list), at('Jane Doe', 'Both (12)', 'Both - Jane Doe.epub'));
@@ -66,7 +66,12 @@ test('a Calibre link is the EPUB or PDF in the book folder that ends in its numb
         await assert.rejects(calibreFile(link('calibre://show-book/_/2'), [mine, other], list), /several libraries are named/);
         await assert.rejects(calibreFile(link('calibre://show-book/Elsewhere/2'), [mine], list), /No Calibre library named in the settings is "Elsewhere"/);
         await assert.rejects(calibreFile(link('calibre://show-book/My_Test_Library/99'), [mine], list), /has no book 99/);
-        await assert.rejects(calibreFile(link('calibre://show-book/My_Test_Library/3'), [mine], list), /has no EPUB or PDF/);
+        // A book with no EPUB or PDF is its Kindle book: AZW3 before MOBI, unless the link names MOBI.
+        assert.equal(await calibreFile(link('calibre://show-book/My_Test_Library/3'), [mine], list), at('Jane Doe', 'Kindle only (3)', 'Kindle only - Jane Doe.azw3'));
+        assert.equal(await calibreFile(link('calibre://view-book/My_Test_Library/3/MOBI'), [mine], list), at('Jane Doe', 'Kindle only (3)', 'Kindle only - Jane Doe.mobi'));
+        assert.equal(await calibreFile(link('calibre://view-book/My_Test_Library/3/EPUB'), [mine], list).catch(error => error.message), "Calibre's book 3 has no EPUB file.");
+        assert.equal(await calibreFile(link('calibre://show-book/My_Test_Library/4'), [mine], list), at('Jane Doe', 'Old (4)', 'Old - Jane Doe.prc'));
+        await assert.rejects(calibreFile(link('calibre://show-book/My_Test_Library/5'), [mine], list), /has no EPUB, PDF, MOBI or AZW3 file\. Convert it in Calibre first\./);
         await assert.rejects(calibreFile(link('calibre://show-book/My_Test_Library/2'), [], list), /Name your Calibre library's folder/);
         await assert.rejects(calibreFile(link('calibre://show-book/My_Test_Library/2'), ['  ', ''], list), /Name your Calibre library's folder/);
     } finally { rmSync(root, { recursive: true, force: true }); }

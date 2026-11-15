@@ -17,8 +17,10 @@ export type AppLink =
 /** What a folder holds: names, and which of them are folders. */
 export type Listing = (folder: string) => Promise<{ name: string; folder: boolean }[]>;
 
-/** The kinds of file the reader opens. */
+/** The kinds of file the reader opens that a link may ask for by name and be given. */
 const READABLE = ['pdf', 'epub'];
+/** Kindle books without DRM, which the reader also opens: chosen only when a book has no EPUB or PDF. */
+const KINDLE = ['azw3', 'mobi', 'prc'];
 const extension = (name: string) => name.slice(name.lastIndexOf('.') + 1).toLowerCase();
 
 /**
@@ -134,8 +136,13 @@ export async function calibreFile(
     list: Listing
 ): Promise<string> {
     const named = libraries.map(folder => folder.trim()).filter(Boolean),
-        // A link to a format the reader does not open (MOBI, AZW3) is still a link to the book: its EPUB or PDF is taken.
-        format = link.format && READABLE.includes(link.format) ? link.format : null;
+        // A link to a Kindle format (MOBI, AZW3) is still a link to the book: its EPUB or PDF is taken where it has one,
+        // and its Kindle file (the one the link names first) where it has nothing else.
+        format = link.format && READABLE.includes(link.format) ? link.format : null,
+        kindle =
+            link.format && KINDLE.includes(link.format)
+                ? [link.format, ...KINDLE.filter(kind => kind !== link.format)]
+                : KINDLE;
     if (!named.length)
         throw new Error(
             "Name your Calibre library's folder in Annotator's settings, so its book links can be followed."
@@ -173,14 +180,14 @@ export async function calibreFile(
         const folder = under(under(library, author.name), book.name),
             name = pick(
                 (await list(folder)).filter(entry => !entry.folder).map(entry => entry.name),
-                // A book: its EPUB before its PDF, unless the link is to one of them.
-                format ? [format] : ['epub', 'pdf']
+                // A book: its EPUB before its PDF, unless the link is to one of them; a Kindle book only after both.
+                format ? [format] : ['epub', 'pdf', ...kindle]
             );
         if (!name)
             throw new Error(
                 format
                     ? `Calibre's book ${link.id} has no ${format.toUpperCase()} file.`
-                    : `Calibre's book ${link.id} has no EPUB or PDF. Convert it in Calibre first.`
+                    : `Calibre's book ${link.id} has no EPUB, PDF, MOBI or AZW3 file. Convert it in Calibre first.`
             );
         return under(folder, name);
     }

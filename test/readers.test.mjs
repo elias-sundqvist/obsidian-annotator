@@ -242,6 +242,19 @@ test('remote reader sources preserve URL identity and refuse HTML error pages ma
  validateRemote(new TextEncoder().encode('%PDF-1.7\n').buffer,'pdf');validateRemote(new Uint8Array([0x50,0x4b,3,4]).buffer,'epub');
 });
 
+test('a Kindle book outside the vault is a source when it is a file on this computer, kept under its own ending, and is checked to be one',async()=>{
+ const {remoteKind,remoteFilename,revisionFilename,validateRemote,remoteRevisions}=await import('./.generated/readers/remote-source.js');
+ for(const name of ['book.mobi','book.PRC','book.azw3'])assert.equal(remoteKind(`file:///Books/A%20Book/${name}`),'mobi',name);
+ // One on the web is not fetched; another kind of file outside the vault is not a source.
+ assert.equal(remoteKind('https://example.org/book.mobi'),null);assert.equal(remoteKind('file:///Books/book.azw'),null);assert.equal(remoteKind('file:///Books/book.mobi','epub'),'epub');
+ assert.match(await remoteFilename('file:///Books/Kindle%20only.azw3','mobi'),/^Annotator sources\/[0-9a-f]{64}\.azw3$/);assert.match(await remoteFilename('file:///Books/old.PRC','mobi'),/\.prc$/);
+ assert.match(await revisionFilename('file:///Books/k.azw3','mobi','ab'.repeat(32)),new RegExp(`^Annotator sources/[0-9a-f]{64}-${'ab'.repeat(32)}\\.azw3$`));
+ const database=new Uint8Array(80);database.set(new TextEncoder().encode('BOOKMOBI'),60);validateRemote(database.buffer,'mobi');
+ assert.throws(()=>validateRemote(new Uint8Array([0x50,0x4b,3,4]).buffer,'mobi'),/This file is not a Kindle book\./);assert.throws(()=>validateRemote(new ArrayBuffer(0),'mobi'),/Remote Kindle book exceeds its size limit or is empty/);
+ const revision={path:'Annotator sources/x.azw3',sha256:'ab'.repeat(32),kind:'mobi',capturedAt:'2026-11-15T00:00:00Z'};
+ assert.deepEqual(remoteRevisions({'file:///Books/k.azw3':[revision,{...revision,kind:'fb2'}]}),{'file:///Books/k.azw3':[revision]});
+});
+
 test('annotation navigation preserves ordinary links, modifier destinations, and later plugin wrappers',async()=>{
  const {installAnnotationLinks}=await import('./.generated/readers/link-navigation.js');const ordinary=[],routed=[];
  const original=async(...args)=>ordinary.push(args),workspace={openLinkText:original};
