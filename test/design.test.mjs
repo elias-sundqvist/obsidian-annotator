@@ -1240,6 +1240,20 @@ test('annotation headings: off by default; on, each new annotation gets one, ren
         assert.equal(field().value, 'Another passage'); assert.ok(button('Remove heading'));
         const was = text(); field().value = '  Key   finding '; button('Save').click(); await wait();
         assert.equal(text(), was.replace('### Another passage', '### Key finding')); assert.equal(JSON.stringify(h.records()), before);
+        // A colon is kept: a link to the heading reaches it. What a link cannot reach is said to be left out as it is typed.
+        cardMenu.items.find(item => item.title === 'Rename heading…').run(); await wait();
+        const leftOut = () => opened.at(-1).contentEl.querySelector('.annotator-heading-left-out');
+        assert.equal(leftOut().getAttribute('role'), 'status'); assert.equal(leftOut().textContent, '');
+        field().value = 'The core claim: attention alone'; field().dispatchEvent(new h.dom.window.Event('input')); assert.equal(leftOut().textContent, '');
+        button('Save').click(); await wait(); assert.ok(text().includes('\n### The core claim: attention alone\n\n>%%'), 'the colon is kept');
+        cardMenu.items.find(item => item.title === 'Rename heading…').run(); await wait();
+        assert.equal(field().value, 'The core claim: attention alone');
+        field().value = 'Claim #two | part ^b'; field().dispatchEvent(new h.dom.window.Event('input'));
+        assert.equal(leftOut().textContent, 'Left out: # | ^. A link to a heading ends or changes at these.');
+        field().value = '#'; field().dispatchEvent(new h.dom.window.Event('input')); assert.equal(leftOut().textContent, 'A heading needs words that a link can reach.');
+        const unchanged = text(); button('Save').click(); await wait(); assert.equal(text(), unchanged, 'nothing a link can reach: nothing saved');
+        field().value = 'Claim #two | part ^b'; button('Save').click(); await wait(); assert.ok(text().includes('\n### Claim two part b\n\n>%%'));
+        await h.plugin.renameHeading(h.file.path, row('b'), 'Key finding'); assert.equal(text(), was.replace('### Another passage', '### Key finding'));
         // Taken away, then given again from the dialog, which then suggests the first words.
         await h.plugin.renameHeading(h.file.path, row('b'), null); assert.ok(!text().includes('Key finding'));
         h.plugin.editHeading(h.file.path, row('b')); await wait(); assert.equal(field().value, 'Another passage'); assert.equal(button('Remove heading'), undefined);

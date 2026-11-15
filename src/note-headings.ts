@@ -87,18 +87,43 @@ export function ownedHeadings(
 /** The longest heading made from a passage, in characters, before its words are cut. */
 const LONGEST = 60;
 
-/** Words as a heading may say them: one line, without what would end a heading link or start Markdown. */
+/**
+ * What a heading cannot say, because a link to it (`[[Note#Heading]]`) would end or change there, or the line would be
+ * hidden: `#`, `|`, `^`, `[`, `]`, and `%%`, which starts a comment. Everything else, a colon too, a link reaches.
+ */
+const UNLINKABLE = /[#|^[\]]|%%/g;
+/** The characters of typed words a heading leaves out, each once, in the order they come. */
+export function unlinkable(text: string): string[] {
+    return [...new Set(text.match(UNLINKABLE) || [])];
+}
+/** Words as the reader gives a heading: one line, and nothing a link to the heading cannot reach. */
 export function headingWords(text: string): string {
-    return text
-        .replace(/!?\[\[([^\]|]*)\|?([^\]]*)\]\]/g, (_all, target: string, alias: string) => (alias || target) + ' ')
-        .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1 ')
-        .replace(/%%/g, ' ')
-        .replace(/[#|^[\]:\\*=~`<>{}$]/g, ' ')
+    return (
+        text
+            .replace(
+                /!?\[\[([^\]|]*)\|?([^\]]*)\]\]/g,
+                (_all, target: string, alias: string) => (alias || target) + ' '
+            )
+            .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1 ')
+            .replace(UNLINKABLE, ' ')
+            .replace(/\s+/g, ' ')
+            // (A link taken out leaves a space before the punctuation after it.)
+            .replace(/ ([,.;!?])/g, '$1')
+            .trim()
+    );
+}
+/**
+ * Words of a passage or a note as a heading made from them says them: as `headingWords`, and without what would start
+ * Markdown (a source's `*`, `$` or `<` are not the reader's formatting) or the punctuation a cut leaves at its ends.
+ */
+function passageWords(text: string): string {
+    return headingWords(text)
+        .replace(/[\\*=~`<>{}$]/g, ' ')
         .replace(/\s+/g, ' ')
-        .replace(/ ([,.;!?])/g, '$1')
+        .replace(/ ([,.;:!?])/g, '$1')
         .trim()
-        .replace(/^[\s\-+.,;!?'")]+/, '')
-        .replace(/[\s\-+,;'"(]+$/, '')
+        .replace(/^[\s\-+.,;:!?'")]+/, '')
+        .replace(/[\s\-+,;:'"(]+$/, '')
         .trim();
 }
 
@@ -107,7 +132,7 @@ export function headingWords(text: string): string {
  * words as fit, marked as cut with an ellipsis. Empty when there are no words.
  */
 export function shortHeading(text: string): string {
-    const all = headingWords(text);
+    const all = passageWords(text);
     if (all.length <= LONGEST) return all.replace(/[.]$/, '');
     const sentence = /^(.{12,}?)[.!?](?:\s|$)/.exec(all.slice(0, LONGEST + 1));
     if (sentence) return sentence[1].trim();

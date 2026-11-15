@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { stripTypeScriptTypes } from 'node:module';
 
-const { ownedHeadings, headingWords, shortHeading, uniqueHeading, annotationHeadingLine, headingLevel } = await import('./.generated/readers/note-headings.js');
+const { ownedHeadings, headingWords, unlinkable, shortHeading, uniqueHeading, annotationHeadingLine, headingLevel } = await import('./.generated/readers/note-headings.js');
 const { placeUnder, namedHeading } = await import('./.generated/readers/note-place.js');
 const { createMany } = (await import('./.generated/readers/logic.js')).logic;
 const { create, createUnder, readAll, readSome, remove, removeWithHeading, removeManyWithHeadings, headingFor, renameHeading, addHeadings, requote, update } = await import('./.generated/codec.mjs');
@@ -49,7 +49,15 @@ test('which heading is an annotation\'s: the chosen level, on the line above it,
 });
 
 test('what a new heading says: the first words, one line, nothing that ends a link, and unlike the note\'s other headings', () => {
-    assert.equal(headingWords('  A [[Note|link]] and [[Other]], ![[p3.png]] [a site](https://x.org) #tag a|b ^c :d %%e%% *f* ==g== `h` <i> $x$ \\ '), 'A link and Other, p3.png a site tag a b c d e f g h i x');
+    // Words given for a heading keep everything a link to it reaches, a colon too; only what ends or changes a link
+    // (`#`, `|`, `^`, `[`, `]`) or hides the line (`%%`) is left out, and said to be.
+    assert.equal(headingWords('  A [[Note|link]] and [[Other]], ![[p3.png]] [a site](https://x.org) #tag a|b ^c :d %%e%% *f* ==g== `h` <i> $x$ \\ '), 'A link and Other, p3.png a site tag a b c :d e *f* ==g== `h` <i> $x$ \\');
+    assert.equal(headingWords('The core claim: attention alone'), 'The core claim: attention alone');
+    assert.deepEqual(unlinkable('a # b | c ^ d [e] %% f # g'), ['#', '|', '^', '[', ']', '%%']); assert.deepEqual(unlinkable('The core claim: attention (alone) & more!'), []);
+    // A heading made from a passage says its words, a colon too, without the source's Markdown.
+    assert.equal(shortHeading('The core claim: attention alone, and *more* $x$'), 'The core claim: attention alone, and more x');
+    assert.equal(shortHeading('Results:'), 'Results'); assert.equal(shortHeading(': a list'), 'a list');
+    assert.equal(shortHeading('  A [[Note|link]] and [[Other]], ![[p3.png]] [a site](https://x.org) #tag a|b ^c :d %%e%% *f* ==g== `h` <i> $x$ \\ '), 'A link and Other, p3.png a site tag a b c:d e f g h i x');
     assert.equal(shortHeading('Short passage.'), 'Short passage');
     assert.equal(shortHeading('Attention is all you need. We propose a new simple network architecture, the Transformer, based solely on attention.'), 'Attention is all you need');
     const long = shortHeading('We propose a new simple network architecture based solely on attention mechanisms dispensing with recurrence');
@@ -68,7 +76,7 @@ test('created with a heading: the line above the annotation, which reads exactly
     }
     // Several: each its own, in order, the same words made distinct; a page note's from its note; links to the annotation are as they were.
     const note = make([quoted('a1', 'Same words'), quoted('b2', 'Same words'), pageNote('c3', 'My thoughts on the whole paper'), quoted('d4', '', { target: [{ source: 'urn:x-pdf:paper', selector: [{ type: 'FragmentSelector', value: 'page=2&xywh=percent:1,1,9,9' }] }], nativePdf: { version: 1, page: 2, words: 'Figure 3: results' }, text: '' })]);
-    assert.deepEqual(owned(note), { a1: 'Same words', b2: 'Same words (2)', c3: 'My thoughts on the whole paper', d4: 'Figure 3 results' });
+    assert.deepEqual(owned(note), { a1: 'Same words', b2: 'Same words (2)', c3: 'My thoughts on the whole paper', d4: 'Figure 3: results' });
     for (const id of ['a1', 'b2', 'c3', 'd4']) { assert.match(note, new RegExp(`\\n\\^${id}\\n`)); assert.ok(note.includes(`%%LINK%%[[#^${id}|show annotation]]`)); }
     // Nothing at all to say: "Annotation".
     assert.deepEqual(owned(make([pageNote('e5', '')])), { e5: 'Annotation' });
@@ -111,8 +119,8 @@ test('deleted with its heading, and brought back with it by Undo', () => {
 test('renamed, given or taken away from the card: only that line changes', () => {
     const note = make([quoted('a1', 'First passage'), quoted('b2', 'Second passage')]);
     const renamed = renameHeading(note, 'a1', '  A better   name: with [[odd]] #marks  ', ON);
-    assert.deepEqual(owned(renamed), { a1: 'A better name with odd marks', b2: 'Second passage' }); assert.equal(renamed, note.replace('### First passage', '### A better name with odd marks'));
-    assert.equal(renameHeading(renamed, 'a1', 'A better name with odd marks', ON), renamed, 'the same words: nothing written');
+    assert.deepEqual(owned(renamed), { a1: 'A better name: with odd marks', b2: 'Second passage' }); assert.equal(renamed, note.replace('### First passage', '### A better name: with odd marks'));
+    assert.equal(renameHeading(renamed, 'a1', 'A better name: with odd marks', ON), renamed, 'the same words: nothing written');
     const taken = renameHeading(note, 'a1', null, ON); assert.equal(taken, note.replace('### First passage\n\n', '')); assert.deepEqual(owned(taken), { b2: 'Second passage' }); assert.equal(renameHeading(taken, 'a1', null, ON), taken);
     const given = renameHeading(taken, 'a1', 'Given', ON); assert.deepEqual(owned(given), { a1: 'Given', b2: 'Second passage' }); assert.equal(given, note.replace('### First passage', '### Given'));
     for (const rows of [given, taken, renamed]) assert.deepEqual(readAll(rows), readAll(note));

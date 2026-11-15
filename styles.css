@@ -534,6 +534,7 @@ button.annotator-ink-swatch:focus-visible { outline: 2px solid var(--interactive
 .annotator-quote-dialog .annotator-quote-original { margin-top: var(--size-4-3, 12px); }
 .annotator-quote-dialog .annotator-quote-original blockquote { margin: 4px 0 0; padding: 0; padding-inline-start: 11px; border: 0; border-inline-start: 3px solid var(--background-modifier-border); color: var(--text-muted); max-height: 9em; overflow: auto; overflow-wrap: anywhere; }
 .annotator-heading-dialog .annotator-heading-field { width: 100%; }
+.annotator-heading-dialog .annotator-heading-left-out:empty { display: none; }
 
 .annotator-card-comment { margin-top: 7px; padding-inline-start: 11px; color: var(--text-normal); font-size: var(--font-ui-small); line-height: var(--line-height-normal, 1.5); overflow-wrap: anywhere; user-select: text; }
 .annotator-native-card:not(.has-quote) > .annotator-card-comment { margin-top: 0; padding-inline-start: 0; }

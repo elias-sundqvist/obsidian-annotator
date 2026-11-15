@@ -1,4 +1,5 @@
 import { Modal, type App } from 'obsidian';
+import { headingWords, unlinkable } from './note-headings';
 
 /**
  * The words of an annotation's own heading in its note: changed, given (when it has none yet), or taken away.
@@ -28,11 +29,26 @@ export class HeadingModal extends Modal {
             attr: { type: 'text', 'aria-label': 'Heading', dir: 'auto', spellcheck: 'true' }
         });
         field.value = this.current ?? this.suggested;
+        // What a heading cannot say is left out; said here as it is typed, and read out as it changes.
+        const said = this.contentEl.createEl('p', {
+            cls: 'setting-item-description annotator-heading-left-out',
+            attr: { role: 'status' }
+        });
+        const tell = () => {
+            const out = unlinkable(field.value);
+            said.textContent = !out.length
+                ? ''
+                : !headingWords(field.value)
+                  ? 'A heading needs words that a link can reach.'
+                  : `Left out: ${out.join(' ')}. A link to a heading ends or changes at ${out.length === 1 ? 'this' : 'these'}.`;
+        };
+        field.addEventListener('input', tell);
+        tell();
         const save = () => {
             const text = field.value.replace(/\s+/g, ' ').trim();
-            if (!text) return;
+            if (!text || !headingWords(text)) return;
             this.close();
-            if (text !== this.current) this.submit(text);
+            if (headingWords(text) !== this.current) this.submit(text);
         };
         field.addEventListener('keydown', event => {
             if (event.key === 'Enter' && !event.isComposing) {
