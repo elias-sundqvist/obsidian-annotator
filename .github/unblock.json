@@ -1390,6 +1390,15 @@
       "dependsOn": [],
       "estimate": 1,
       "notes": "Done 2026-11-15: Found by the text recognition session in Obsidian 1.15.1 and fixed in the reader's shared code (noteMatchesSource): a note this session made is known by what was written into it until the host has indexed it. Also: a source deleted and written again under its name is read anew. Taken into next on 2026-11-15 with its two plugin-boundary tests."
+    },
+    {
+      "id": "write-under-heading",
+      "title": "Write new annotations under a chosen heading",
+      "status": "done",
+      "parent": "community",
+      "dependsOn": [],
+      "estimate": 2,
+      "notes": "Done 2026-11-15: Built 2026-11-15 on branch next (not released). Setting 'Write new annotations under this heading'; src/note-place.ts finds the end of the heading's section; codec.createUnder writes with the checked append into the part before it and refuses unless the rest of the note is byte for byte unchanged. Tried through the logic worker in Obsidian 1.13.7. Tests: note-place.test.mjs, design.test.mjs. Answers the two open requests about where annotations are written in a note."
     }
   ]
 }
