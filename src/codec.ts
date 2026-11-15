@@ -16,6 +16,7 @@ import { displayText, readDisplayText } from '../proofs/display-text.mjs';
 // @ts-expect-error The proofs' JavaScript wrappers carry no type declarations.
 import { recolorJson } from '../proofs/reader.mjs';
 import { editedQuote, quoteText, withQuote } from './shown-quote';
+import { headingLine, namedHeading, placeUnder } from './note-place';
 export interface Annotation {
     id: string;
     text: string;
@@ -155,6 +156,52 @@ export function create(source: string, annotation: Annotation, settings?: Record
     if (readAll(source).some(row => row.id === annotation.id))
         throw new Error(`Duplicate annotation ID ${annotation.id}`);
     return createTypedAnnotation(source, annotation, annotation.id, settings).source;
+}
+/**
+ * Add an annotation under the heading the reader named for them (note-place.ts):
+ * at the end of that heading's section, or, in a note without the heading, under
+ * the heading written at the end. With no heading named it is `create`. The
+ * annotation is written by the checked append into the part of the note before
+ * its place; the result is refused unless that part and everything after the
+ * place are byte for byte what they were, and every other annotation reads as
+ * it did, in its order.
+ */
+export function createUnder(
+    source: string,
+    annotation: Annotation,
+    settings?: Record<string, boolean>,
+    under = ''
+): string {
+    const named = namedHeading(under);
+    if (!named) return create(source, annotation, settings);
+    const before = readAll(source);
+    if (before.some(row => row.id === annotation.id)) throw new Error(`Duplicate annotation ID ${annotation.id}`);
+    const place = placeUnder(source, named);
+    if (place.heading) {
+        // The heading starts a paragraph of its own: after a blank line, unless the note is empty.
+        const ending = source.match(/\r?\n/)?.[0] ?? '\n',
+            blank = /\n[ \t]*\r?\n\s*$/.test(source),
+            gap = !source.trim() || blank ? '' : source.endsWith('\n') ? ending : ending + ending;
+        return create(`${source}${gap}${headingLine(named, under)}${ending}`, annotation, settings);
+    }
+    if (place.at >= source.length) return create(source, annotation, settings);
+    const head = source.slice(0, place.at),
+        tail = source.slice(place.at),
+        made = create(head, annotation, settings),
+        // The section's last annotation is followed by a blank line before the next heading, as at the end of a note.
+        result = /\n\s*\n$/.test(made) ? made + tail : `${made}\n${tail}`;
+    const after = readAll(result),
+        index = after.findIndex(row => row.id === annotation.id),
+        others = after.filter(row => row.id !== annotation.id);
+    if (
+        !result.startsWith(head) ||
+        !result.endsWith(tail) ||
+        index < 0 ||
+        JSON.stringify(others) !== JSON.stringify(before) ||
+        index !== readAll(head).length
+    )
+        throw new Error('The annotation could not be written under its heading.');
+    return result;
 }
 export function update(source: string, annotation: Annotation): string {
     // This UI edits the visible comment and tags. Keep the original JSON bytes,

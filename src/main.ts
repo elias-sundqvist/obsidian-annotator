@@ -284,6 +284,7 @@ export default class AnnotatorPlugin extends Plugin {
         /** Calibre library folders, one to a line, where its book links are followed to. */ calibreLibraries: string;
         /** What a copied or dragged annotation link is, as a template; empty for the plain link. */ linkTemplate: string;
         /** The heading a new annotation note starts with. */ noteHeading: string;
+        /** The heading new annotations are written under, in any annotation note; empty for the end of the note. */ writeUnder: string;
         /** Whether where the reader was is written to the note on leaving a source. */ progressProperty: boolean;
         /** A note whose text a new annotation note starts as; empty for none. */ noteTemplate: string;
         /** Whether a tablet's drawer has been docked beside the page for the annotations once; after that the reader's own choice stands. */ tabletDocked: boolean;
@@ -300,6 +301,7 @@ export default class AnnotatorPlugin extends Plugin {
         calibreLibraries: '',
         linkTemplate: '',
         noteHeading: DEFAULT_NOTE_HEADING,
+        writeUnder: '',
         progressProperty: false,
         noteTemplate: '',
         tabletDocked: false,
@@ -330,13 +332,14 @@ export default class AnnotatorPlugin extends Plugin {
     /** The note codecs, answered off this thread. */
     private readonly codec = {
         readAll: (source: string) => this.logic.call('readAll', source),
+        // New annotations go under the heading named in the settings, when there is one.
         create: (source: string, annotation: Annotation, settings?: Record<string, boolean>) =>
-            this.logic.call('create', source, annotation, settings),
+            this.logic.call('createUnder', source, annotation, settings, this.display.writeUnder),
         createMany: (
             source: string,
             rows: { annotation: Annotation; ink?: string }[],
             settings?: Record<string, boolean>
-        ) => this.logic.call('createMany', source, rows, settings),
+        ) => this.logic.call('createMany', source, rows, settings, this.display.writeUnder),
         update: (source: string, annotation: Annotation) => this.logic.call('update', source, annotation),
         remove: (source: string, id: string) => this.logic.call('remove', source, id),
         recolor: (source: string, id: string, ink: string) => this.logic.call('recolor', source, id, ink),
@@ -449,6 +452,8 @@ export default class AnnotatorPlugin extends Plugin {
             calibreLibraries: typeof shown.calibreLibraries === 'string' ? shown.calibreLibraries.slice(0, 4000) : '',
             linkTemplate: typeof shown.linkTemplate === 'string' ? shown.linkTemplate.slice(0, 2000) : '',
             noteHeading: typeof shown.noteHeading === 'string' ? shown.noteHeading.slice(0, 200) : DEFAULT_NOTE_HEADING,
+            writeUnder:
+                typeof shown.writeUnder === 'string' ? shown.writeUnder.replace(/[\r\n]+/g, ' ').slice(0, 200) : '',
             progressProperty: shown.progressProperty === true,
             noteTemplate: typeof shown.noteTemplate === 'string' ? shown.noteTemplate.slice(0, 400) : '',
             tabletDocked: shown.tabletDocked === true,
@@ -6020,6 +6025,19 @@ class NativeSettings extends PluginSettingTab {
                     .setPlaceholder(DEFAULT_NOTE_HEADING)
                     .setValue(plugin.display.noteHeading)
                     .onChange(value => save(plugin.setDisplay({ noteHeading: value.slice(0, 200) })))
+            );
+        new Setting(root)
+            .setName('Write new annotations under this heading')
+            .setDesc(
+                'In any annotation note, new annotations go at the end of this heading\'s section, and the text after it stays after them. "## Highlights" means that level only, "Highlights" any level. A note without the heading gets it at its end. Empty: at the end of the note.'
+            )
+            .addText(control =>
+                control
+                    .setPlaceholder('## Highlights')
+                    .setValue(plugin.display.writeUnder)
+                    .onChange(value =>
+                        save(plugin.setDisplay({ writeUnder: value.replace(/[\r\n]+/g, ' ').slice(0, 200) }))
+                    )
             );
         new Setting(root)
             .setName('Template for new annotation notes')

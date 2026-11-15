@@ -6,6 +6,7 @@ import {
     readAll,
     readSome,
     create,
+    createUnder,
     update,
     remove,
     recolor,
@@ -41,11 +42,13 @@ const checked = cite as unknown as Checked & {
 function createMany(
     source: string,
     rows: { annotation: Annotation; ink?: string }[],
-    settings?: Record<string, boolean>
+    settings?: Record<string, boolean>,
+    /** The heading new annotations are written under; empty for the end of the note. */
+    under = ''
 ): string {
     let text = source;
     for (const { annotation, ink } of rows) {
-        text = create(text, annotation, settings);
+        text = createUnder(text, annotation, settings, under);
         if (ink) text = recolor(text, annotation.id, ink);
     }
     return text;
@@ -68,6 +71,7 @@ export const logic = {
     /** What can be read of a note, and what cannot, with its line. */
     readSome,
     create,
+    createUnder,
     update,
     remove,
     recolor,

@@ -5,6 +5,10 @@ What changed for someone using Annotator. How to use each thing is in
 
 ## Unreleased
 
+- New annotations can be written under a heading of your choosing (setting
+  **Write new annotations under this heading**, for example
+  `## Highlights`), so your own prose after that section stays after them.
+  A note without the heading gets it at its end.
 - **Edit quote.** A passage's quoted words can be put right from the menu
   of its card or highlight: a scan's misread letters, a formula written as
   `$…$`, a passage cut down to what matters. Your cards, copies, summaries
