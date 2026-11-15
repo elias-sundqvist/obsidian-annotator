@@ -482,6 +482,14 @@ export class AnnotationView extends ItemView {
                         if (file) void plugin.exportSummary(file).catch(error => new Notice(String(error)));
                     })
             );
+            // Every place a word or phrase occurs, highlighted in one step: for coding a text, and for collecting passages by keyword.
+            if (file && plugin.canHighlightMatches(file))
+                menu.addItem(item =>
+                    item
+                        .setTitle('Highlight every match…')
+                        .setIcon('highlighter')
+                        .onClick(() => plugin.highlightEveryMatch(file))
+                );
             // A PDF can also carry its annotations inside itself, for any PDF reader; and those another program put there can be taken in.
             if (file && plugin.canExportPdf(file))
                 menu.addItem(item =>

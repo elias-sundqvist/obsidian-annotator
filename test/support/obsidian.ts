@@ -30,7 +30,20 @@ export class Notice { static messages:string[]=[];constructor(message:string){No
 export class Modal {contentEl!:HTMLElement;modalEl!:HTMLElement;constructor(public app:any){}open(){}close(){} }
 export class FuzzySuggestModal<T> extends Modal { emptyStateText='';limit=0;setPlaceholder(_text:string){} setInstructions(_items:unknown[]){} getItems():T[]{return [];} }
 export class PluginSettingTab {containerEl!:HTMLElement;constructor(public app:any,_plugin:any){} }
-export class Setting {constructor(_element:HTMLElement){} }
+// A setting row as the host builds it, as far as the dialogs under test use one: a name, a description and controls that are real elements.
+export class Setting {
+    settingEl!:HTMLElement; infoEl!:HTMLElement; nameEl!:HTMLElement; descEl!:HTMLElement; controlEl!:HTMLElement;
+    constructor(container:HTMLElement){
+        const doc=container?.ownerDocument;if(!doc)return;
+        const make=(cls:string,parent:HTMLElement)=>{const el=doc.createElement('div');el.className=cls;parent.append(el);return el;};
+        this.settingEl=make('setting-item',container);this.infoEl=make('setting-item-info',this.settingEl);this.nameEl=make('setting-item-name',this.infoEl);this.descEl=make('setting-item-description',this.infoEl);this.controlEl=make('setting-item-control',this.settingEl);
+    }
+    setName(text:string){this.nameEl.textContent=text;return this;} setDesc(text:string){this.descEl.textContent=text;return this;} setClass(name:string){this.settingEl.classList.add(name);return this;}
+    private field(tag:'input'|'textarea',build:(control:any)=>void){const inputEl=this.controlEl.ownerDocument.createElement(tag) as HTMLInputElement;if(tag==='input')inputEl.type='text';this.controlEl.append(inputEl);let changed=(_value:string)=>{};const control:any={inputEl,setValue(value:string){inputEl.value=value;return control;},getValue:()=>inputEl.value,setPlaceholder(value:string){inputEl.placeholder=value;return control;},onChange(fn:(value:string)=>void){changed=fn;return control;}};inputEl.addEventListener('input',()=>changed(inputEl.value));build(control);return this;}
+    addText(build:(control:any)=>void){return this.field('input',build);} addTextArea(build:(control:any)=>void){return this.field('textarea',build);}
+    addToggle(build:(control:any)=>void){const toggleEl=this.controlEl.ownerDocument.createElement('div');toggleEl.className='checkbox-container';this.controlEl.append(toggleEl);let on=false,changed=(_value:boolean)=>{};const control:any={toggleEl,setValue(value:boolean){on=!!value;toggleEl.classList.toggle('is-enabled',on);return control;},getValue:()=>on,onChange(fn:(value:boolean)=>void){changed=fn;return control;}};toggleEl.addEventListener('click',()=>{control.setValue(!on);changed(on);});build(control);return this;}
+    addButton(build:(control:any)=>void){const buttonEl=this.controlEl.ownerDocument.createElement('button');this.controlEl.append(buttonEl);const control:any={buttonEl,setButtonText(text:string){buttonEl.textContent=text;return control;},setCta(){buttonEl.classList.add('mod-cta');return control;},setDisabled(off:boolean){buttonEl.disabled=!!off;return control;},onClick(fn:()=>void){buttonEl.addEventListener('click',()=>fn());return control;}};build(control);return this;}
+}
 export const MarkdownRenderer={render:async()=>{}};
 export function setIcon(_element:HTMLElement,_icon:string){}
 export function normalizePath(path:string){return path.replace(/\\/g,'/').replace(/\/+/g,'/').replace(/^\/|\/$/g,'');}

@@ -5,13 +5,16 @@ import { FileView, Notice, TFile, WorkspaceLeaf, setIcon } from 'obsidian';
 import type { Annotation } from './codec';
 import {
     describeRange,
+    originalTextIndex,
     projectHtml,
     RangePainter,
+    rangeOffsets,
     resolveHtml,
     revealDisclosures,
     type SafeProjection,
     type Selector
 } from './dom-source';
+import { matcher, matchPattern, type MatchOptions, type Occurrence, type Occurrences } from './every-match';
 import { fileRevision, type ReaderCallbacks, type SourceCapture, type SourceIdentity } from './source';
 import { openPublication, archivePath, type Publication } from './epub-book';
 import { EpubResolver, publicationSections } from './epub-resolver';
@@ -657,10 +660,10 @@ export class EpubView extends FileView {
         text: string,
         limit = 200
     ): { chapter: number; nth: number; before: string; match: string; after: string }[] {
-        const wanted = text.trim();
-        if (!wanted || !this.resolver) return [];
-        const pattern = new RegExp(wanted.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'), 'giu'),
+        // The same pattern "Highlight every match" looks with, so what is listed here is what would be highlighted.
+        const pattern = matchPattern(text),
             out: ReturnType<EpubView['matches']> = [];
+        if (!pattern || !this.resolver) return [];
         this.resolver.sections.forEach((section, chapter) => {
             if (section.chapter.linear === false || out.length >= limit) return;
             const { text: whole, breaks } = this.searchable(section.root);
@@ -686,17 +689,125 @@ export class EpubView extends FileView {
         });
         return out;
     }
+    /** Where the highlights there are lie, as "chapter:start:end" in the chapter's words; worked out once for each set of annotations. */
+    private covered: { records: Annotation[]; resolver: EpubResolver; keys: Set<string> } | null = null;
+    private coveredPassages(resolver: EpubResolver): Set<string> {
+        if (this.covered?.records === this.records && this.covered.resolver === resolver) return this.covered.keys;
+        const keys = new Set<string>();
+        for (const row of this.records) {
+            const found = resolver.resolve(row, this.records);
+            if (found.error || found.chapter === undefined || !found.range) continue;
+            try {
+                const at = rangeOffsets(resolver.sections[found.chapter].root, found.range);
+                keys.add(`${found.chapter}:${at.start}:${at.end}`);
+            } catch {
+                /* A passage that cannot be measured covers nothing. */
+            }
+        }
+        this.covered = { records: this.records, resolver, keys };
+        return keys;
+    }
+    /**
+     * Every place the words occur in the book, for "Highlight every match": chapter by chapter, in the words and with
+     * the pattern the find above uses, so the two agree. A place an existing highlight covers exactly is counted
+     * apart and not offered again. Null until the book has been read in. A chapter is one slice of the work; `still`
+     * is asked between slices and ends the search.
+     */
+    async occurrences(
+        query: string,
+        options: MatchOptions,
+        limit: number,
+        still: () => boolean = () => true
+    ): Promise<Occurrences | null> {
+        const resolver = this.resolver,
+            find = matcher(query, options),
+            fresh: Occurrence[] = [];
+        let already = 0;
+        if (!resolver) return null;
+        if (!find) return { fresh, already };
+        const taken = this.coveredPassages(resolver);
+        let since = Date.now();
+        for (const [chapter, section] of resolver.sections.entries()) {
+            if (section.chapter.linear === false) continue;
+            for (const found of find(this.searchable(section.root).text)) {
+                if (taken.has(`${chapter}:${found.start}:${found.end}`)) already++;
+                else fresh.push({ part: chapter, start: found.start, end: found.end });
+                if (fresh.length > limit) return { fresh, already };
+            }
+            if (Date.now() - since > 8) {
+                await new Promise(resolve => setTimeout(resolve, 0));
+                if (!still() || this.stopped || resolver !== this.resolver) return null;
+                since = Date.now();
+            }
+        }
+        return { fresh, already };
+    }
+    /**
+     * Those places as highlights of this reader, each described and verified in its chapter as a selection is
+     * (`capture` and `payload`), whether or not the chapter is on screen. A place that cannot be anchored is counted
+     * and left out. Nothing is saved here.
+     */
+    async occurrenceAnnotations(
+        found: readonly Occurrence[],
+        note: string
+    ): Promise<{ rows: Annotation[]; skipped: number }> {
+        const resolver = this.resolver;
+        if (!resolver) throw new Error('Wait for the book to load.');
+        const rows: Annotation[] = [],
+            indexes = new Map<number, ReturnType<typeof originalTextIndex>>(),
+            now = new Date().toISOString();
+        let skipped = 0,
+            since = Date.now();
+        for (const each of found) {
+            try {
+                const root = resolver.sections[each.part].root;
+                let index = indexes.get(each.part);
+                if (!index) indexes.set(each.part, (index = originalTextIndex(root)));
+                const range = domRange(index, each.start, each.end);
+                if (!range) throw new Error('No text lies there.');
+                const selectors = describeRange(root, range),
+                    back = rangeOffsets(root, resolveHtml(root, selectors));
+                if (back.start !== each.start || back.end !== each.end)
+                    throw new Error('The passage is found elsewhere.');
+                const identity = resolver.identity(each.part);
+                rows.push({
+                    id: uuid().replaceAll('-', ''),
+                    text: note,
+                    tags: [],
+                    ...identity,
+                    target: [{ source: identity.uri, selector: selectors }],
+                    created: now,
+                    updated: now
+                });
+            } catch {
+                skipped++;
+            }
+            if (Date.now() - since > 8) {
+                await new Promise(resolve => setTimeout(resolve, 0));
+                if (this.stopped || resolver !== this.resolver)
+                    throw new Error('The book changed while its matches were being read; nothing was highlighted.');
+                since = Date.now();
+            }
+        }
+        return { rows, skipped };
+    }
+    /** The words selected in the book now; empty when nothing is selected. */
+    selectedWords(): string {
+        const selection = this.contentEl.ownerDocument.getSelection();
+        if (
+            !selection ||
+            selection.isCollapsed ||
+            !selection.rangeCount ||
+            !this.contentEl.contains(selection.getRangeAt(0).commonAncestorContainer)
+        )
+            return '';
+        return selection.toString().replace(/\s+/g, ' ').trim();
+    }
     /** Bring the nth occurrence of the words in the chapter now showing into view. */
     private revealMatch(text: string, nth: number): boolean {
-        if (!this.projection) return false;
-        const index = this.projection.renderedIndex(),
-            pattern = new RegExp(
-                text
-                    .trim()
-                    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-                    .replace(/\s+/g, '\\s+'),
-                'giu'
-            );
+        const pattern = matchPattern(text);
+        if (!this.projection || !pattern) return false;
+        const index = this.projection.renderedIndex();
         const found = [...index.text.matchAll(pattern)][nth] ?? [...index.text.matchAll(pattern)][0];
         if (!found) return false;
         const at = found.index ?? 0,

@@ -83,6 +83,7 @@ import type { Progress } from './progress';
 import type { PdfTextMemory } from './pdf-text-memory';
 import { selectionOffsets, type SelectionLink } from './selection-links';
 import { PdfCitations, type CiteLogic } from './pdf-citations';
+import { matcher, type MatchOptions, type Occurrence, type Occurrences } from './every-match';
 import type { Link, Rect, Run } from './citations';
 import { ownTextBoxes, type OwnTextRun } from './scan-words';
 /** What the reader says while it reads the document's text. Highlights are painted meanwhile; everything else waits. */
@@ -718,6 +719,126 @@ export class NativePdf {
         return { rows, skipped, known: already };
     }
     /**
+     * Every place the words occur in the document's text, for "Highlight every match": page by page, as the reader
+     * holds each page's text, with a line end read as the page shows it (see every-match.ts). A place an existing
+     * highlight covers exactly is counted apart and not offered again. Null while the text is still being read.
+     * The pages are gone through a few milliseconds at a time, so a long document does not hold the interface up;
+     * `still` is asked between those slices and ends the search.
+     */
+    async occurrences(
+        query: string,
+        options: MatchOptions,
+        limit: number,
+        still: () => boolean = () => true
+    ): Promise<Occurrences | null> {
+        this.checkDocument();
+        // Text that could not be read will not be read by waiting; anything else that is in the way is still coming.
+        if (this.error.startsWith('PDF text indexing failed')) throw new Error(this.error);
+        if (this.error || !this.document) return null;
+        const find = matcher(query, options),
+            generation = this.generation,
+            pages = this.pages,
+            fresh: Occurrence[] = [];
+        let already = 0;
+        if (!find) return { fresh, already };
+        // Where the highlights there are lie: one stretch of one page each.
+        const taken = new Set<string>();
+        for (const row of this.records) {
+            const at = this.matches.get(row.id);
+            if (Array.isArray(at) && at.length === 1 && annotationQuote(row))
+                taken.add(`${at[0].page}:${at[0].start}:${at[0].end}`);
+        }
+        let since = Date.now();
+        for (const page of pages) {
+            for (const found of find(page.text, this.lineEnds.get(page.number))) {
+                if (taken.has(`${page.number}:${found.start}:${found.end}`)) already++;
+                else fresh.push({ part: page.number, start: found.start, end: found.end });
+                if (fresh.length > limit) return { fresh, already };
+            }
+            if (Date.now() - since > 8) {
+                await new Promise(resolve => setTimeout(resolve, 0));
+                if (!still() || this.disposed || generation !== this.generation) return null;
+                since = Date.now();
+            }
+        }
+        return { fresh, already };
+    }
+    /**
+     * Those places as highlights of this reader, each saved with the same verified anchors as a selection (`payload`).
+     * A place that cannot be anchored is counted and left out. Nothing is saved here.
+     */
+    async occurrenceAnnotations(
+        found: readonly Occurrence[],
+        note: string
+    ): Promise<{ rows: Annotation[]; skipped: number }> {
+        await this.loading;
+        const file = this.view.file;
+        if (!file || !this.document || this.error) throw new Error(this.error || 'The PDF is still loading.');
+        const rows: Annotation[] = [],
+            pages = new Map(this.pages.map(page => [page.number, page] as const)),
+            stamp = `${revision(this.view)}:${this.generation}`;
+        let skipped = 0,
+            since = Date.now();
+        for (const each of found) {
+            const page = pages.get(each.part),
+                exact = page?.text.slice(each.start, each.end) || '';
+            try {
+                if (!page || !normalize(exact).text) throw new Error('No text lies there.');
+                rows.push(
+                    await this.payload(
+                        {
+                            file: file.path,
+                            page: each.part,
+                            exact,
+                            start: each.start,
+                            end: each.end,
+                            prefix: page.text.slice(Math.max(0, each.start - 64), each.start),
+                            suffix: page.text.slice(each.end, each.end + 64),
+                            revision: stamp
+                        },
+                        note,
+                        uuid().replaceAll('-', '')
+                    )
+                );
+            } catch {
+                skipped++;
+            }
+            if (Date.now() - since > 8) {
+                await new Promise(resolve => setTimeout(resolve, 0));
+                if (this.disposed || stamp !== `${revision(this.view)}:${this.generation}`)
+                    throw new Error('The PDF changed while its matches were being read; nothing was highlighted.');
+                since = Date.now();
+            }
+        }
+        return { rows, skipped };
+    }
+    /** The words selected on a page now, as they read there; empty when nothing is selected. */
+    selectedWords(): string {
+        const captured = this.capture();
+        if (typeof captured === 'string') return '';
+        const text = this.pages.find(page => page.number === captured.page)?.text;
+        return (
+            text && text.slice(captured.start, captured.end) === captured.exact
+                ? this.asRead(captured.page, text, captured.start, captured.end)
+                : captured.exact
+        )
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+    /** A stretch of a page's text as it reads on the page: words parted by a line end get their space back. */
+    private asRead(page: number, text: string, start: number, end: number): string {
+        let out = '',
+            from = start;
+        for (const at of this.lineEnds.get(page) || []) {
+            if (at <= start || at >= end) continue;
+            out += text.slice(from, at);
+            from = at;
+            // A hyphen at a line end may be a real hyphen; leave it, and add nothing after it.
+            if (!/[\s-]/.test(text[at - 1]) && !/\s/.test(text[at])) out += ' ';
+        }
+        return out + text.slice(from, end);
+    }
+    /**
      * Where each annotation goes when it is written into the PDF file itself:
      * the plan for `annotatePdf`, with the page objects the PDF library knows.
      * Uses the same page text the highlights on screen are placed by.
@@ -1003,17 +1124,7 @@ export class NativePdf {
         const parts = found
             .map(part => {
                 const text = this.pages.find(page => page.number === part.page)?.text;
-                if (!text) return '';
-                let out = '',
-                    from = part.start;
-                for (const at of this.lineEnds.get(part.page) || []) {
-                    if (at <= part.start || at >= part.end) continue;
-                    out += text.slice(from, at);
-                    from = at;
-                    // A hyphen at a line end may be a real hyphen; leave it, and add nothing after it.
-                    if (!/[\s-]/.test(text[at - 1]) && !/\s/.test(text[at])) out += ' ';
-                }
-                return out + text.slice(from, part.end);
+                return text ? this.asRead(part.page, text, part.start, part.end) : '';
             })
             .filter(Boolean);
         return parts.length ? parts.join(' ') : null;

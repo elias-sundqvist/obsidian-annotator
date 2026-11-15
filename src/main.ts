@@ -110,6 +110,8 @@ import { refreshSnapshotEditors, snapshotEditorExtension } from './snapshot-edit
 import { noteFolding, refold } from './note-folding';
 import { appLink, calibreFile, followedLinks, zoteroFile } from './app-links';
 import { selectionLink, type SelectionLink } from './selection-links';
+import { MATCH_LIMIT, matchWords, type MatchOptions, type MatchSource } from './every-match';
+import { EveryMatchModal, type MatchCount, type MatchRequest } from './every-match-dialog';
 import type { EditorView } from '@codemirror/view';
 import { LiveWebHost, type GuestElement, type WebFigureCapture } from './live-web';
 import {
@@ -355,6 +357,7 @@ export default class AnnotatorPlugin extends Plugin {
         ) => this.logic.call('createMany', source, rows, settings, this.display.writeUnder),
         update: (source: string, annotation: Annotation) => this.logic.call('update', source, annotation),
         remove: (source: string, id: string) => this.logic.call('remove', source, id),
+        removeMany: (source: string, ids: string[]) => this.logic.call('removeMany', source, ids),
         recolor: (source: string, id: string, ink: string) => this.logic.call('recolor', source, id, ink),
         requote: (source: string, id: string, text: string | null) => this.logic.call('requote', source, id, text),
         replaceFragment: (source: string, id: string, from: string, to: string) =>
@@ -844,6 +847,11 @@ export default class AnnotatorPlugin extends Plugin {
             }
         });
         this.register(() => this.scanRun?.stop());
+        this.addCommand({
+            id: 'highlight-every-match',
+            name: 'Highlight every match…',
+            callback: () => this.highlightEveryMatch()
+        });
         this.addCommand({
             id: 'export-annotated-pdf',
             name: 'Export PDF with annotations',
@@ -4303,6 +4311,249 @@ export default class AnnotatorPlugin extends Plugin {
         }
         const stored = added && last ? this.notes.get(key)?.records.find(row => row.id === last) : undefined;
         if (stored && !this.stopped) this.selectAnnotation(key, stored);
+    }
+    /** The source as something every match can be highlighted in: a PDF or a book. Null for anything else. */
+    private matchSource(key: string | null): { source: MatchSource; kind: 'pdf' | 'book' } | null {
+        const host: unknown = key ? this.bindingFor(key)?.host : undefined;
+        return host instanceof NativePdf
+            ? { source: host, kind: 'pdf' }
+            : host instanceof EpubView
+              ? { source: host, kind: 'book' }
+              : null;
+    }
+    /** Whether "Highlight every match" is offered for this source: for PDFs and books. */
+    canHighlightMatches(key: string): boolean {
+        return !!this.matchSource(key);
+    }
+    /**
+     * "Highlight every match…": ask for a word or phrase, show how many places it occurs in, and make each place an
+     * ordinary highlight in one step. Where that cannot work (a video, a web page, a PDF that is pictures of pages,
+     * nothing open) it says so and does nothing. Nothing is looked for before the dialog is open.
+     */
+    highlightEveryMatch(key?: string | null) {
+        if (key === undefined) {
+            const recent = this.app.workspace.getMostRecentLeaf()?.view;
+            if (recent instanceof VideoView) {
+                new Notice(
+                    'Every match can be highlighted in PDFs and books. A video has no text to look through.',
+                    8000
+                );
+                return;
+            }
+            key = (recent && this.sourceKey(recent)) || this.currentFile;
+        }
+        const found = this.matchSource(key);
+        if (!key || !found) {
+            new Notice(
+                key && this.bindingFor(key)
+                    ? 'Every match can be highlighted in PDFs and books; web pages are not looked through yet.'
+                    : 'Open a PDF or a book to highlight every match of a word or phrase.',
+                8000
+            );
+            return;
+        }
+        if (this.sourceWithoutText(key)) {
+            new Notice(
+                'This PDF has no text to look through: its pages are pictures (a scan). Mark an area or draw on it instead.',
+                8000
+            );
+            return;
+        }
+        if (this.damaged(key)) return;
+        const source = key;
+        let words = '';
+        try {
+            words = found.source.selectedWords();
+        } catch {
+            words = '';
+        }
+        new EveryMatchModal(this.app, {
+            kind: found.kind,
+            // A selected word or phrase is what is looked for; a selected paragraph is not.
+            words: words.length <= 120 ? words : '',
+            ink: this.lastInk,
+            labels: this.inkLabels,
+            count: (query, options, still) => this.countMatches(source, query, options, still),
+            highlight: request => {
+                void this.highlightMatches(source, request).catch(error => this.fail(error));
+            }
+        }).open();
+    }
+    /** How many places the words occur in a PDF or book, for the dialog. Changes nothing. */
+    async countMatches(
+        key: string,
+        query: string,
+        options: MatchOptions,
+        still: () => boolean = () => true
+    ): Promise<MatchCount> {
+        const found = this.matchSource(key),
+            words = matchWords(query);
+        if (!found) throw new Error('The source was closed.');
+        if (!words) return { state: 'found', fresh: 0, already: 0, parts: 0, over: false };
+        const places = await found.source.occurrences(words, options, MATCH_LIMIT, still);
+        if (!places) return { state: 'reading' };
+        return {
+            state: 'found',
+            fresh: Math.min(places.fresh.length, MATCH_LIMIT),
+            already: places.already,
+            parts: new Set(places.fresh.map(place => place.part)).size,
+            over: places.fresh.length > MATCH_LIMIT
+        };
+    }
+    /**
+     * Make every place the words occur in a PDF or book a highlight: all of them in one write to the annotation note,
+     * each an ordinary highlight with verified anchors, in the chosen ink and with the given tags and note. A place a
+     * highlight covers exactly already is not made again; one that cannot be anchored is left out and counted. More
+     * than the limit, or words too short to look for, change nothing. The notice afterwards carries an Undo that
+     * takes back exactly what was made. Returns the IDs of the highlights made.
+     */
+    async highlightMatches(key: string, request: MatchRequest): Promise<string[]> {
+        const found = this.matchSource(key),
+            words = matchWords(request.query);
+        if (!found) {
+            new Notice('Open a PDF or a book to highlight every match of a word or phrase.', 8000);
+            return [];
+        }
+        if (!words) return [];
+        if (this.damaged(key)) return [];
+        if (this.busy) {
+            new Notice('Still saving the last change; try again in a moment.');
+            return [];
+        }
+        const working = new Notice(`Looking for “${words}”…`, 0);
+        this.busy = true;
+        let made: string[] = [];
+        try {
+            const places = await found.source.occurrences(words, request.options, MATCH_LIMIT);
+            if (this.stopped) return [];
+            if (!places) {
+                new Notice('The document’s text is still being read; try again in a moment.', 8000);
+                return [];
+            }
+            if (places.fresh.length > MATCH_LIMIT) {
+                new Notice(
+                    `“${words}” occurs in more than ${MATCH_LIMIT} places: too many to highlight in one step. Nothing was highlighted.`,
+                    10000
+                );
+                return [];
+            }
+            if (!places.fresh.length) {
+                new Notice(
+                    places.already
+                        ? `Every match of “${words}” is highlighted already.`
+                        : `No match of “${words}” here.`,
+                    8000
+                );
+                return [];
+            }
+            const plan = await found.source.occurrenceAnnotations(places.fresh, request.note);
+            if (this.stopped) return [];
+            if (!plan.rows.length) {
+                new Notice(
+                    `None of the ${places.fresh.length} matches of “${words}” could be anchored; nothing was highlighted.`,
+                    10000
+                );
+                return [];
+            }
+            const tags = [...new Set(request.tags)],
+                ink = isInk(request.ink) ? request.ink : DEFAULT_INK,
+                rows = plan.rows.map(row =>
+                    ink !== DEFAULT_INK ? { annotation: { ...row, tags }, ink } : { annotation: { ...row, tags } }
+                );
+            const note = await this.ensureNote(key);
+            await this.rewrite(note, async text => {
+                if (this.stopped) throw new Error('The reader was closed before the highlights were saved.');
+                if (!this.noteMatchesSource(note, key))
+                    throw new Error('The annotation note target changed; nothing was highlighted.');
+                return this.codec.createMany(text, rows, { ...this.markdown });
+            });
+            made = rows.map(row => row.annotation.id);
+            // The ink of a new highlight is the one remembered for the next.
+            if (ink !== this.lastInk) {
+                this.lastInk = ink;
+                this.queueDraftSave();
+            }
+            await this.loadNote(key);
+            const count = made.length,
+                document = this.app.workspace.containerEl.ownerDocument,
+                message = document.createDocumentFragment(),
+                undo = document.createElement('button'),
+                ids = made;
+            undo.textContent = 'Undo';
+            undo.className = 'annotator-notice-undo';
+            message.append(
+                `${count} ${count === 1 ? 'match' : 'matches'} of “${words}” highlighted.${plan.skipped ? ` ${plan.skipped} could not be anchored and ${plan.skipped === 1 ? 'was' : 'were'} left out.` : ''}${places.already ? ` ${places.already} ${places.already === 1 ? 'was' : 'were'} highlighted already.` : ''}`,
+                undo
+            );
+            const notice = new Notice(message, 15000) as Notice & { hide?(): void };
+            undo.onclick = () => {
+                notice.hide?.();
+                void this.undoMatches(key, ids, { text: request.note, tags, ink }).catch(error => this.fail(error));
+            };
+        } catch (error) {
+            this.fail(error);
+        } finally {
+            working.hide();
+            this.busy = false;
+            this.refresh();
+        }
+        return made;
+    }
+    /**
+     * Take back what one "Highlight every match" made: those highlights and nothing else, in one write. A highlight
+     * that has been worked on since (its note, tags or ink changed, it was answered, or it is open for writing) is
+     * the reader's own by now and is kept; the notice says how many were.
+     */
+    async undoMatches(key: string, ids: readonly string[], as: { text: string; tags: string[]; ink: Ink }) {
+        if (this.busy) throw new Error('An annotation operation is already running.');
+        this.busy = true;
+        let removed = 0,
+            kept = 0;
+        try {
+            const note = this.notes.get(key)?.note;
+            if (!note) throw new Error('Annotation note is unavailable.');
+            const wanted = new Set(ids),
+                open = this.editMode && this.editing?.file === key ? this.editing.annotation.id : null;
+            let gone: string[] = [];
+            await this.rewrite(note, async source => {
+                if (this.stopped) throw new Error('Plugin was unloaded before the highlights were removed.');
+                if (!this.noteMatchesSource(note, key)) throw new Error('The annotation note target changed.');
+                const rows = await this.codec.readAll(source),
+                    answered = new Set(rows.flatMap(row => row.references || []));
+                gone = [];
+                kept = 0;
+                for (const row of rows) {
+                    if (!wanted.has(row.id)) continue;
+                    if (
+                        row.id !== open &&
+                        !answered.has(row.id) &&
+                        row.text === as.text &&
+                        inkOf(row) === as.ink &&
+                        JSON.stringify(row.tags) === JSON.stringify(as.tags)
+                    )
+                        gone.push(row.id);
+                    else kept++;
+                }
+                return gone.length ? this.codec.removeMany(source, gone) : source;
+            });
+            removed = gone.length;
+            // A removed highlight that was the one selected is no longer there to be shown.
+            if (this.editing?.file === key && gone.includes(this.editing.annotation.id)) {
+                this.editing = null;
+                this.comment = '';
+                this.tags = [];
+                this.tagInput = '';
+            }
+            await this.loadNote(key);
+            new Notice(
+                `${removed} ${removed === 1 ? 'highlight' : 'highlights'} removed.${kept ? ` ${kept} ${kept === 1 ? 'was' : 'were'} changed since and ${kept === 1 ? 'was' : 'were'} kept.` : ''}`,
+                8000
+            );
+        } finally {
+            this.busy = false;
+            this.refresh();
+        }
+        return removed;
     }
     /** Write what the PDF says about itself (title, authors, year, DOI, subject, keywords) into its annotation note's properties. Properties the note already has are left as they are. */
     async addPdfDetails(key: string | null = this.currentFile) {

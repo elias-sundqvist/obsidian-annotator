@@ -165,6 +165,27 @@ To search every annotation in the vault at once, run **Search all
 annotations…**: type a few letters of a quote, a note, a `#tag` or a source's
 title, and choosing a result opens its source at the passage.
 
+### Highlight every match
+
+To mark every place a word or phrase occurs (to collect the passages on a
+topic, or to code a text for qualitative research), run **Highlight every
+match…** from the command palette or the sidebar's **More actions** menu, in a
+PDF or a book. Type the words, or select them first. The dialog counts the
+matches as you type; choose **Whole words** or **Match case** to narrow them,
+an ink, and if you like a tag and a note for every highlight. The button says
+what it will do ("Highlight 37 matches"), and every match becomes an ordinary
+highlight, in one change to the note. **Undo** in the notice afterwards takes
+back exactly those highlights, except any you have worked on since.
+
+- A phrase is found across a line end in a PDF ("machine" at the end of one
+  line, "translation" at the start of the next), and a word the page
+  hyphenated at a line end is found as the word.
+- A place already highlighted is not highlighted again.
+- More than 500 matches are not highlighted: the dialog says so, and a longer
+  phrase or whole words will narrow them.
+- A book is looked through exactly as its **Find** looks, so the two agree.
+- It needs text: a scanned PDF, a web page or a video is not looked through.
+
 ## PDFs
 
 The reader works on Obsidian's built-in PDF view. Three buttons are added to

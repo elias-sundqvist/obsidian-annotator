@@ -897,6 +897,15 @@ body:is(.annotator-compact, .annotator-compact-setting) { --annotator-quote-line
 .annotator-draft-recovery p { margin: 4px 0; }
 .annotator-draft-recovery p:first-of-type { padding-inline-start: 11px; border-inline-start: 3px solid rgb(var(--annotator-ink)); color: var(--text-muted); }
 .annotator-draft-recovery button { margin: 6px 6px 0 0; }
+/* Highlight every match: the host's dialog and setting rows. The reader's own are the count line and the ink swatches. */
+.annotator-matches .annotator-matches-status { min-height: calc(var(--line-height-tight, 1.3) * 1em); margin-block: var(--size-4-2, 8px); color: var(--text-muted); font-size: var(--font-ui-small); line-height: var(--line-height-tight, 1.3); font-variant-numeric: tabular-nums; }
+.annotator-matches .annotator-matches-status.is-over { color: var(--text-warning, var(--color-orange)); }
+.annotator-matches .annotator-editor-inks { --annotator-swatch-size: 18px; --annotator-swatch-ring: var(--modal-background, var(--background-primary)); gap: 11px; }
+.is-mobile .annotator-matches .annotator-editor-inks { --annotator-swatch-size: 28px; gap: 12px; }
+.annotator-matches :is(.annotator-matches-words, .annotator-matches-note) { flex-wrap: wrap; }
+.annotator-matches :is(.annotator-matches-words, .annotator-matches-note) .setting-item-control { flex: 1 1 100%; margin-top: var(--size-4-2, 8px); }
+.annotator-matches :is(.annotator-matches-words, .annotator-matches-note) :is(input, textarea) { width: 100%; }
+.annotator-matches .annotator-matches-note textarea { resize: vertical; }
 .annotator-epub-reader > p { color: var(--text-faint); }
 
 /* Video page: a title bar with the one primary action, quiet tools beside it. */

@@ -74,6 +74,11 @@ body {
   colour is `--annotator-citation-flash`, set on `body` (the accent where it
   is not set).
 
+- The **Highlight every match** dialog is `.annotator-matches`, made of the
+  host's setting rows. Its own: the count `.annotator-matches-status`
+  (`.is-over` when there are too many), and the inks
+  `.annotator-editor-inks` with their `.annotator-ink-swatch` buttons.
+
 ## Colour names
 
 Settings → Highlight colours lets each ink be named ("Key idea", "Question").
