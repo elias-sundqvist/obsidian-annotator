@@ -1260,11 +1260,11 @@
     {
       "id": "page-text-boxes",
       "title": "Typed text that stays visible on the PDF page",
-      "status": "todo",
+      "status": "done",
       "parent": "community",
       "dependsOn": ["community-review"],
       "estimate": 3,
-      "notes": "From COMMUNITY_REVIEW.md 3.2. A text box placed anywhere on the page with the typed words shown on the page, as in Acrobat's free-text tool. About 2 people (Discord, 2024): weak evidence, so only if more people ask. Would be a new annotation kind with its card and export as a FreeText PDF annotation. Needs the owner's yes before it is started."
+      "notes": "From COMMUNITY_REVIEW.md 3.2. A text box placed anywhere on the page with the typed words shown on the page, as in Acrobat's free-text tool. About 2 people (Discord, 2024): weak evidence, so only if more people ask. Would be a new annotation kind with its card and export as a FreeText PDF annotation. Needs the owner's yes before it is started.\n\nDone 2026-11-15: Built 2026-11-15 by a subagent on feature/text-boxes, fast-forwarded into next (not released). A text box is an area with one member pageText (small/medium/large), written by checked Bend (proofs/pagetext.bend); older versions see an area note. Words typed in the composer, shown on the page in the page's ink with the annotation's ink as a rule; grips move and resize; menus give sizes. PDF export writes a FreeText with an appearance; import makes FreeText a text box. Tried in Obsidian 1.13.7: placed by the header tool, typed, saved, shown on the page; the exported FreeText is read and drawn the same by Apple's PDFKit. Not tried on phones."
     },
     {
       "id": "check-canvas",
