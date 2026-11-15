@@ -3,7 +3,7 @@
 What changed for someone using Annotator. How to use each thing is in
 [README.md](README.md).
 
-## Unreleased
+## 0.3.2 (2026-11-15)
 
 - A note's source can be a DEVONthink item link (`x-devonthink-item://…`).
   On a Mac the reader asks DEVONthink where the item's PDF or EPUB is, after
