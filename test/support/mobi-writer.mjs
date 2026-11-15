@@ -232,7 +232,7 @@ export function mobi6(options) {
     if (huff) { huffAt = list.length; huffCount = 1 + huff.cdics.length; list.push(huff.huff, ...huff.cdics); }
     let ncx = NONE;
     if (contents.length) { ncx = list.length; list.push(...ncxIndex(contents.map(entry => ({ ...entry, filepos: typeof entry.at === 'string' ? byteAt(entry.at) : entry.at }))).records); }
-    list[0] = header({ compression, textLength: text.length, textRecords: records.length, encryption, encoding, title, firstResource, huff: huffAt, huffCount, flags, ncx, exth: metadata({ ...options, title }), locale: options.locale ?? 9 });
+    list[0] = header({ compression, textLength: text.length, textRecords: records.length, encryption, encoding, title, firstResource, huff: huffAt, huffCount, flags, ncx, exth: metadata({ ...options, title }), locale: options.locale ?? 9, version: options.version ?? 6 });
     list.push(Uint8Array.from([...ascii('FLIS'), 0, 0, 0, 8]), Uint8Array.from([...ascii('FCIS'), 0, 0, 0, 20]));
     return palmDatabase(title.replace(/\W/g, '_'), 'BOOKMOBI', list);
 }
@@ -265,12 +265,19 @@ function kf8Records(options, firstResource) {
             start += pieces[piece].length;
             if (!reverse) insert += pieces[piece].length;
         }
-        skeletons.push({ skelPos, length: skeleton.length, count: pieces.length });
+        skeletons.push({ skelPos, length: skeleton.length, count: pieces.length, file, aid: /<body\b[^>]*\said="([^"]+)"/.exec(file)?.[1] ?? '0' });
+        // A file listed in `misplaced` says to set its fragments inside its body tag, as some books do; its selector still names the body.
+        if (options.misplaced?.includes(fileIndex)) for (const item of fragments.filter(item => item.file === fileIndex)) item.insert = skelPos + open - 2;
     });
     const where = name => {
         const pattern = new RegExp(`<[^<>]*\\s(?:id|name|aid)="${name}"`), fragment = fragments.find(item => pattern.test(item.text));
         if (!fragment) throw new Error(`no element named ${name} in a fragment`);
         return [fragment.seq, fragment.text.search(pattern)];
+    };
+    // Where an element stands in the text once its file is put together: its file's place, and its place in the file.
+    const absolute = name => {
+        const pattern = new RegExp(`<[^<>]*\\s(?:id|name|aid)="${name}"`), file = skeletons.find(item => pattern.test(item.file.replace(/\u0001/g, '')));
+        return file.skelPos + file.file.replace(/\u0001/g, '').search(pattern);
     };
     markup = markup.replace(/kindle:pos:fid:ZZZZ:off:Z*(\d+)/g, (_whole, k) => { const [fid, off] = where(names[Number(k)]); return `kindle:pos:fid:${base32(fid, 4)}:off:${base32(off, 10)}`; });
     const markupBytes = unbin(markup), flowTexts = flows.map(utf8);
@@ -286,11 +293,11 @@ function kf8Records(options, firstResource) {
     const skelAt = list.length, skel = index({ table: [[1, 1, 0x03, 0], [6, 2, 0x0c, 0], [0, 0, 0, 1]], entries: skeletons.map((file, k) => ({ name: `SKEL${String(k).padStart(10, '0')}`, tags: { 1: [file.count], 6: [file.skelPos, file.length] } })) }).records;
     if (options.broken) skel[0].set(ascii('XXXX'));
     list.push(...skel);
-    const fragAt = list.length, table = [[2, 1, 0x01, 0], [3, 1, 0x02, 0], [4, 1, 0x04, 0], [6, 2, 0x08, 0], [0, 0, 0, 1]], selectors = fragments.map(item => `P-//*[@aid='${item.seq}']`);
+    const fragAt = list.length, table = [[2, 1, 0x01, 0], [3, 1, 0x02, 0], [4, 1, 0x04, 0], [6, 2, 0x08, 0], [0, 0, 0, 1]], selectors = fragments.map(item => `P-//*[@aid='${skeletons[item.file].aid}']`);
     const offsets = index({ table, strings: selectors, entries: [] }).offsets;
     list.push(...index({ table, strings: selectors, entries: fragments.map((item, k) => ({ name: String(item.insert).padStart(10, '0'), tags: { 2: [offsets[k]], 3: [item.file], 4: [item.seq], 6: [item.start, item.text.length] } })) }).records);
     let ncx = NONE;
-    if (contents.length) { ncx = list.length; list.push(...ncxIndex(contents.map(entry => ({ ...entry, pos: where(entry.at) }))).records); }
+    if (contents.length) { ncx = list.length; list.push(...ncxIndex(contents.map(entry => (entry.absolute ? { ...entry, filepos: absolute(entry.at) } : { ...entry, pos: where(entry.at) }))).records); }
     list[0] = header({ compression, textLength: text.length, textRecords: records.length, encryption, title, version: 8, firstResource, huff: huffAt, huffCount, flags, ncx, fdst: fdstAt, fdstCount: ranges.length / 2, skel: skelAt, frag: fragAt, exth: metadata({ ...options, title }) });
     return list;
 }

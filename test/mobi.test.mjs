@@ -232,9 +232,42 @@ test('a KF8 book\'s chapters are its files, rebuilt from skeleton and fragments;
         const styles = await applyPublisherStyles(book, 'part0001.xhtml', projection, () => true);
         assert.equal(projection.elements.get(sections[1].root.querySelector('.drop')).style.textIndent, '2em'); styles.dispose();
     } finally { win.close(); }
+    // A book that says to set its fragments inside a tag has them set, in order, in the element their selector names;
+    // a contents entry that gives only a place in the text leads there too.
+    const three = [XHTML('One', '\u0001<h1 id="one" aid="3">Chapter One</h1>\u0001<p aid="4">First words.</p>\u0001<p aid="5">More words.</p>')];
+    const misplaced = await read(kf8({ files: three, misplaced: [0], contents: [{ label: 'By place', at: '4', absolute: true }] }));
+    assert.deepEqual(misplaced.texts, (await read(kf8({ files: three }))).texts); assert.equal(misplaced.texts[0], 'Chapter OneFirst words.More words.');
+    assert.equal(misplaced.sections[0].root.querySelector('body > h1').textContent, 'Chapter One');
+    assert.deepEqual(misplaced.book.nav, [{ title: 'By place', path: 'part0000.xhtml', fragment: 'aid-4', depth: 0 }]);
+    // An id that could not stand in an address leads to the top of its file.
+    const odd = await read(kf8({ files: [XHTML('A', "\u0001<p>Go <a href=\"kindle:pos:@b\">on</a>.</p>"), XHTML('B', "\u0001<p id='a \" b' name=\"b\">There.</p>")] }));
+    assert.deepEqual(links(odd.sections[0].root), [['on', 'part0001.xhtml']]);
     // A file the contents do not name is called by its first heading, else by how it begins.
     const unnamed = await open(kf8({ files: [XHTML('A', '\u0001<h2>Heading</h2><p>Words.</p>'), XHTML('B', '\u0001<p>Only words here.</p>')] }));
     assert.deepEqual(unnamed.chapters.map(chapter => [chapter.title, chapter.idref]), [['Heading', 'part0000'], ['Only words here.', 'part0001']]);
+});
+
+test('a font a KF8 book embeds is given to its stylesheet: unmasked and inflated, and only if it is a font', async () => {
+    const { deflateSync } = await import('node:zlib');
+    const ttf = Uint8Array.from({ length: 3000 }, (_unused, at) => (at < 4 ? [0, 1, 0, 0][at] : (at * 7) % 251));
+    // A FONT record as Kindle tools write one: its size, its flags, where its data and its key begin, then the key and the data.
+    const record = (data, flags, key = new Uint8Array(0)) => {
+        const body = Uint8Array.from(data);
+        if (flags & 2) for (let at = 0; at < Math.min(1040, body.length); at++) body[at] ^= key[at % key.length];
+        const head = new Uint8Array(24), view = new DataView(head.buffer);
+        head.set(new TextEncoder().encode('FONT')); view.setUint32(4, ttf.length); view.setUint32(8, flags); view.setUint32(12, 24 + key.length); view.setUint32(16, key.length); view.setUint32(20, 24);
+        return new Uint8Array([...head, ...key, ...body]);
+    };
+    const key = Uint8Array.from({ length: 20 }, (_unused, at) => 200 - at * 3), packed = record(deflateSync(ttf), 3, key);
+    const files = [XHTML('A', '\u0001<p class="set">Words in the book\'s own face.</p>', '<link href="kindle:flow:0001?mime=text/css" rel="stylesheet" type="text/css"/>')];
+    const book = await open(kf8({ files, flows: ['@font-face { font-family: "Book Face"; src: url(kindle:embed:0001?mime=application/x-font-ttf); } .set { font-family: "Book Face"; }'], images: [packed, record(ttf, 0), record(new TextEncoder().encode('not a font at all'), 0), PNG('picture')] }));
+    assert.match(await book.text('flows/1.css'), /src: url\(\.\.\/images\/1\)/);
+    assert.deepEqual([...(await book.font('images/1'))], [...ttf]); assert.deepEqual([...(await book.font('images/2'))], [...ttf]);
+    for (const path of ['images/3', 'images/4', 'images/9', 'flows/1.css']) assert.equal(await book.font(path), null, path);
+    // Where the platform cannot inflate, the font is not given, and the reader's typeface is used.
+    const inflate = globalThis.DecompressionStream;
+    globalThis.DecompressionStream = undefined;
+    try { assert.equal(await book.font('images/1'), null); assert.ok(await book.font('images/2')); } finally { globalThis.DecompressionStream = inflate; }
 });
 
 test('fixed-layout KF8 pages keep the size their page or the book gives', async () => {
@@ -276,6 +309,14 @@ test('a book that cannot be read is refused with a reason: DRM, another kind of 
     const cut = new Uint8Array(mobi6({ html: '<p>x</p>' })).slice(0, 90);
     await assert.rejects(open(cut.buffer), /damaged and cannot be read \(its record list is cut short\)/);
     await assert.rejects(open(new ArrayBuffer(65 * 1024 * 1024)), /exceeds the 64 MiB limit/);
+    // A Print Replica book holds a PDF where the text would be.
+    const replica = recordsOf(mobi6({ html: '<p>x</p>', compression: 1 }));
+    replica[1] = new TextEncoder().encode('%MOP %PDF-1.4 ...');
+    await assert.rejects(open(palmDatabase('Doc', 'BOOKMOBI', replica)), /Print Replica book .* cannot be read here/);
+    // A book older than version 5 has no trailing entries, whatever its header holds where newer ones say which.
+    const old = recordsOf(mobi6({ html: '<p>Old words.</p>', compression: 1, version: 4 }));
+    old[0][242] = 0xff; old[0][243] = 0xff;
+    assert.deepEqual((await read(palmDatabase('Doc', 'BOOKMOBI', old))).texts, ['Old words.']);
 });
 
 test('a large book is decompressed a slice at a time, so the interface can draw while it opens', async () => {

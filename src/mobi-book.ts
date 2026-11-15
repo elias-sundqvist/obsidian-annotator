@@ -27,7 +27,7 @@
  * second reading of what the wiki leaves open (the index entries' tags, how fragments are set into skeletons). No
  * code was taken from it or from any other reader.
  */
-import { pictureMime, type Chapter, type Publication } from './epub-book';
+import { EPUB_FONT_BYTE_LIMIT, pictureMime, type Chapter, type Publication } from './epub-book';
 import { fixedPageViewport, type PageViewport } from './epub-layout';
 import { inertHtml, passiveSvgImage } from './dom-source';
 import { digest } from './source';
@@ -146,7 +146,8 @@ function readHeader(record: Uint8Array): Header {
         huff: u32(record, 112),
         huffCount: u32(record, 116),
         // The extra bytes at the end of each text record are only described by a long enough header.
-        trailing: length >= 0xe4 ? u32(record, 240) : 0,
+        // (They are 16 bits, and only books of version 5 and later have them.)
+        trailing: length >= 0xe4 && u32(record, 36) >= 5 ? u16(record, 242) : 0,
         ncx: field(244, 0xe8),
         fdst: field(192, 0xe8),
         skel: field(252, 0xf8),
@@ -485,8 +486,14 @@ async function convertMobi6(
     const LINK = 'data-mobi-filepos';
     for (let page = 0; page < starts.length; page++) {
         let raw = text.slice(starts[page], page + 1 < starts.length ? starts[page + 1] : text.length);
-        for (const local of [...(marks.get(page) || [])].sort((a, b) => b - a))
-            raw = `${raw.slice(0, local)}<span id="filepos${starts[page] + local}"></span>${raw.slice(local)}`;
+        // The marks are written in one pass: a page with thousands of them is not copied once for each.
+        const pieces: string[] = [];
+        let done = 0;
+        for (const local of [...(marks.get(page) || [])].sort((a, b) => a - b)) {
+            pieces.push(raw.slice(done, local), `<span id="filepos${starts[page] + local}"></span>`);
+            done = local;
+        }
+        raw = pieces.join('') + raw.slice(done);
         // The page break and the guide are not text. A tag closed as XML closes it (`<a filepos=12/>`, `<mbp:nu/>`),
         // which an HTML parser would otherwise read as the start of an element holding everything after it.
         raw = raw
@@ -597,11 +604,16 @@ function ordered(entries: IndexEntry[]): IndexEntry[] {
     });
     const out: IndexEntry[] = [],
         seen = new Set<number>();
-    const visit = (index: number) => {
-        if (seen.has(index)) return;
-        seen.add(index);
-        out.push(entries[index]);
-        for (const child of children.get(index) || []) visit(child);
+    // Depth first, without recursion: a long chain of entries cannot exhaust the stack.
+    const visit = (root: number) => {
+        const stack = [root];
+        while (stack.length) {
+            const index = stack.pop()!;
+            if (seen.has(index)) continue;
+            seen.add(index);
+            out.push(entries[index]);
+            stack.push(...(children.get(index) || []).slice().reverse());
+        }
     };
     roots.forEach(visit);
     entries.forEach((_entry, index) => visit(index));
@@ -686,8 +698,9 @@ async function convertKf8(
         for (let item = 0, count = u32(fdst, 8); item < count; item++) {
             const start = u32(fdst, 12 + item * 8),
                 end = u32(fdst, 16 + item * 8);
-            if (start > end || end > text.length) throw damaged('a flow lies outside the text');
-            flows.push([start, end]);
+            // A flow said to run past the text ends with it, as other readers take it.
+            if (start > end || start > text.length) throw damaged('a flow lies outside the text');
+            flows.push([start, Math.min(end, text.length)]);
         }
     }
     if (!flows.length) flows.push([0, text.length]);
@@ -699,7 +712,7 @@ async function convertKf8(
     if (skeletons.length > CHAPTER_LIMIT) throw new Error('This Kindle book has more files than can be listed (2000).');
     // Each file: its skeleton with its fragments set in, in order. Where each fragment ends up is kept, because a link
     // names a fragment and a place in it.
-    const parts: { html: string }[] = [],
+    const parts: { html: string; start: number }[] = [],
         placed = new Map<number, { part: number; at: number }>();
     let next = 0;
     for (const [index, skeleton] of skeletons.entries()) {
@@ -713,28 +726,43 @@ async function convertKf8(
         for (let item = 0; item < count; item++, next++) {
             const fragment = fragments.entries[next];
             if (!fragment) throw damaged('a file has fewer parts than it says');
-            const size = fragment.tags.get(6)?.[1] ?? 0,
-                at = Number(fragment.name) - start;
+            const [offset = 0, size = 0] = fragment.tags.get(6) || [];
+            let at = Number(fragment.name) - start;
             if (!/^\d+$/.test(fragment.name) || at < 0 || at > html.length || from + size > markup.length)
                 throw damaged('a part of a file lies outside it');
+            // Some books say to set a fragment inside a tag. Like other readers, it is then set in the element its
+            // selector names (`P-//*[@aid='0']`), as far in as the fragments before it in this file reach.
+            if (
+                at > 0 &&
+                (html.lastIndexOf('<', at - 1) > html.lastIndexOf('>', at - 1) ||
+                    /^[^<]*>/.test(html.slice(at, at + 4096)))
+            ) {
+                const aid = /@aid='([\w-]{1,64})'/.exec(
+                        fragments.strings.get(fragment.tags.get(2)?.[0] ?? -1) || ''
+                    )?.[1],
+                    parent = aid ? new RegExp(`<[^<>]*\\said\\s*=\\s*["']${aid}["'][^<>]*>`).exec(html) : null;
+                if (!parent) throw damaged('a part of a file is set inside a tag');
+                at = Math.min(html.length, parent.index + parent[0].length + offset);
+            }
             html = html.slice(0, at) + markup.slice(from, from + size) + html.slice(at);
             for (const earlier of here) if (earlier.at >= at) earlier.at += size;
             here.push({ id: fragment.tags.get(4)?.[0] ?? next, at });
             from += size;
         }
         for (const item of here) placed.set(item.id, { part: index, at: item.at });
-        parts.push({ html });
+        parts.push({ html, start });
         if (index % 8 === 7) await pause();
     }
     // Where a link lands: the element at that place, or the first after it, that has an id (or a name or an aid,
     // which is then made an id).
     const ids = new Map<number, Map<number, string>>();
-    const land = (fid: number, offset: number): { part: number; fragment: string } | null => {
+    const land = (fid: number, offset: number) => {
         const found = placed.get(fid);
-        if (!found) return null;
-        const html = parts[found.part].html,
-            at = found.at + offset;
-        if (at > html.length) return { part: found.part, fragment: '' };
+        return found ? landAt(found.part, found.at + offset) : null;
+    };
+    const landAt = (part: number, at: number): { part: number; fragment: string } => {
+        const html = parts[part].html;
+        if (at > html.length) return { part, fragment: '' };
         let from = html.lastIndexOf('<', at);
         if (from < 0 || html.lastIndexOf('>', at - 1) >= from) from = at;
         const tag = /<([A-Za-z][\w:-]*)\b[^>]*>/g;
@@ -743,19 +771,20 @@ async function convertKf8(
             const attribute = (name: string) =>
                 new RegExp(`\\s${name}\\s*=\\s*(?:"([^"<>&]{1,200})"|'([^'<>&]{1,200})')`, 'i').exec(match![0]);
             const id = attribute('id');
-            if (id) return { part: found.part, fragment: id[1] ?? id[2] };
+            // An id that could not stand in an address as it is leads to the top of its file.
+            if (id) return { part, fragment: /^[^\s"'<>&#%]+$/.test(id[1] ?? id[2]) ? (id[1] ?? id[2]) : '' };
             const other = attribute('name') || attribute('aid');
             if (other) {
                 const made = `${attribute('name') ? 'name' : 'aid'}-${other[1] ?? other[2]}`;
                 if (/^[\w.:-]+$/.test(made)) {
-                    const list = ids.get(found.part) || new Map<number, string>();
+                    const list = ids.get(part) || new Map<number, string>();
                     list.set(match.index + 1 + match[1].length, made);
-                    ids.set(found.part, list);
-                    return { part: found.part, fragment: made };
+                    ids.set(part, list);
+                    return { part: part, fragment: made };
                 }
             }
         }
-        return { part: found.part, fragment: '' };
+        return { part: part, fragment: '' };
     };
     const position = /kindle:pos:fid:([0-9A-Va-v]{1,8}):off:([0-9A-Va-v]{1,12})/g,
         hrefs = new Map<string, string>();
@@ -776,8 +805,17 @@ async function convertKf8(
     }
     const contents: Contents[] = [];
     for (const entry of ncx ? ordered(ncx.entries) : []) {
+        // An entry names a fragment and a place in it, or else (in some books) only a place in the text.
         const [fid, offset] = entry.tags.get(6) || [],
-            found = fid === undefined ? null : land(fid, offset ?? 0),
+            at = entry.tags.get(1)?.[0],
+            holder =
+                at === undefined ? -1 : parts.findIndex(part => at >= part.start && at < part.start + part.html.length),
+            found =
+                fid !== undefined
+                    ? land(fid, offset ?? 0)
+                    : holder >= 0
+                      ? landAt(holder, at! - parts[holder].start)
+                      : null,
             title = ncx!.strings
                 .get(entry.tags.get(3)?.[0] ?? -1)
                 ?.replace(/\s+/g, ' ')
@@ -785,9 +823,16 @@ async function convertKf8(
         if (found && title) contents.push({ title, ...found, depth: depthOf(entry, ncx!.entries) });
     }
     // The ids a link needs, written into their elements (from the end, so the places of the others hold).
-    for (const [part, list] of ids)
-        for (const [at, id] of [...list].sort((a, b) => b[0] - a[0]))
-            parts[part].html = `${parts[part].html.slice(0, at)} id="${id}"${parts[part].html.slice(at)}`;
+    for (const [part, list] of ids) {
+        const html = parts[part].html,
+            pieces: string[] = [];
+        let done = 0;
+        for (const [at, id] of [...list].sort((a, b) => a[0] - b[0])) {
+            pieces.push(html.slice(done, at), ` id="${id}"`);
+            done = at;
+        }
+        parts[part].html = pieces.join('') + html.slice(done);
+    }
     // The book's own addresses become paths: pictures under images/, stylesheets and SVG under flows/.
     const resource =
         (from: string) =>
@@ -897,6 +942,9 @@ export async function openMobi(source: ArrayBuffer, doc: Document): Promise<Publ
         }
         return latin1(whole);
     };
+    // A Print Replica book (`.azw4`, sometimes renamed) holds a PDF where the text would be.
+    if (ascii(records[base + 1] || new Uint8Array(0), 0, 4) === '%MOP')
+        throw new Error('This is a Kindle Print Replica book (a PDF inside a Kindle file), which cannot be read here.');
     let converted: Converted;
     try {
         converted = kf8
@@ -997,8 +1045,72 @@ export async function openMobi(source: ArrayBuffer, doc: Document): Promise<Publ
             const found = texts.get(path);
             return found === undefined ? Promise.reject(new Error('Missing book resource')) : Promise.resolve(found);
         },
-        image: path => Promise.resolve(picture(path))
+        image: path => Promise.resolve(picture(path)),
+        font: async path => {
+            const number = /^images\/([1-9]\d{0,5})$/.exec(path),
+                record =
+                    number && first.firstResource !== NONE
+                        ? records[first.firstResource + Number(number[1]) - 1]
+                        : null;
+            return record ? kindleFont(record) : null;
+        }
     };
+}
+/**
+ * A font a KF8 book embeds: a FONT record (its size, flags, where its data and its key begin), the first 1,040 bytes
+ * XORed with the key where flag 2 says so, then zlib-compressed where flag 1 does. Inflating needs the platform's
+ * DecompressionStream; where there is none (iOS before 16.4) the reader's own typeface is used. Only a font the
+ * bytes show to be one is given.
+ */
+export async function kindleFont(record: Uint8Array): Promise<Uint8Array | null> {
+    let data: Uint8Array;
+    if (ascii(record, 0, 4) === 'FONT') {
+        const size = u32(record, 4),
+            flags = u32(record, 8),
+            start = u32(record, 12),
+            keyLength = u32(record, 16),
+            keyStart = u32(record, 20);
+        if (start > record.length || size > EPUB_FONT_BYTE_LIMIT) return null;
+        data = record.slice(start);
+        if (flags & 2) {
+            if (!keyLength || keyStart + keyLength > record.length) return null;
+            for (let at = 0; at < Math.min(1040, data.length); at++) data[at] ^= record[keyStart + (at % keyLength)];
+        }
+        if (flags & 1) {
+            const Inflate = (globalThis as { DecompressionStream?: new (format: string) => TransformStream })
+                .DecompressionStream;
+            if (!Inflate) return null;
+            try {
+                const reader = new Blob([data.slice().buffer as ArrayBuffer])
+                        .stream()
+                        .pipeThrough(new Inflate('deflate'))
+                        .getReader(),
+                    parts: Uint8Array[] = [];
+                let total = 0;
+                for (let step = await reader.read(); !step.done; step = await reader.read()) {
+                    total += (step.value as Uint8Array).length;
+                    if (total > EPUB_FONT_BYTE_LIMIT) {
+                        void reader.cancel();
+                        return null;
+                    }
+                    parts.push(step.value as Uint8Array);
+                }
+                data = new Uint8Array(total);
+                total = 0;
+                for (const part of parts) {
+                    data.set(part, total);
+                    total += part.length;
+                }
+            } catch {
+                return null;
+            }
+        }
+    } else data = record.slice();
+    const signature = ascii(data, 0, 4);
+    return ['wOFF', 'wOF2', 'OTTO', 'true', 'ttcf'].includes(signature) ||
+        (data[0] === 0 && data[1] === 1 && data[2] === 0 && data[3] === 0)
+        ? data
+        : null;
 }
 const escapes: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' };
 const esc = (text: string) => text.replace(/[&<>]/g, char => escapes[char]);

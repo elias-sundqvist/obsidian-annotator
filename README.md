@@ -684,9 +684,10 @@ text does not show it already.
 - If another plugin already opens `.mobi` (or `.prc`, `.azw3`) files,
   Annotator leaves them to it; **Annotate** in the file's menu and the book's
   annotation note still open it here.
-- Not read: embedded fonts (your typeface is used), sound and video, a
-  dictionary's look-up index (its text is read as a book), and the panel view
-  of comics. Fixed-layout Kindle books keep their pages' size; they have been
+- A font the book embeds is used as an EPUB's is; on iOS before 16.4, which
+  cannot unpack it, your typeface is used instead.
+- Not read: sound and video, a dictionary's look-up index (its text is read
+  as a book), and the panel view of comics. Fixed-layout Kindle books keep their pages' size; they have been
   tried only with books made for the tests. `.azw` and older PalmDOC `.pdb`
   or `.prc` texts are not read; Calibre converts them to EPUB.
 
