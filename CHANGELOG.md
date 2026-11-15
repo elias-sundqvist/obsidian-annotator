@@ -194,6 +194,11 @@ What changed for someone using Annotator. How to use each thing is in
   now has its words apart ("a large", not "alarge"), as the card shows it.
   The passage kept in the note's data is the PDF's text as before, so the
   highlight is found as it was, and older versions read the note as before.
+- Annotator's settings are grouped by what they are about: **Sidebar**,
+  **Annotation notes** (what a new note starts with, where and how
+  annotations are written in it), **Copying and exporting**, **Opening**,
+  **Sources outside the vault** (the Zotero and Calibre folders) and
+  **Reading**. Each setting does what it did and keeps its value.
 
 ## 0.3.1 (2026-11-13)
 

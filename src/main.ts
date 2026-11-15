@@ -8183,6 +8183,26 @@ class NativeSettings extends PluginSettingTab {
                 control.setValue(plugin.display.compact).onChange(value => save(plugin.setDisplay({ compact: value })))
             );
         new Setting(root)
+            .setName('Open the sidebar when a source opens')
+            .setDesc(
+                'Brings the annotations forward whenever a PDF, book, page or video is opened from its note. When off, open them with the ribbon icon or the command "Show or hide the annotations sidebar"; following a link to an annotation still shows it.'
+            )
+            .addToggle(control =>
+                control
+                    .setValue(plugin.display.sidebarOnOpen)
+                    .onChange(value => save(plugin.setDisplay({ sidebarOnOpen: value })))
+            );
+        new Setting(root)
+            .setName('Always show card actions')
+            .setDesc('Show colour, edit, reply, link and delete under every card rather than on hover.')
+            .addToggle(control =>
+                control
+                    .setValue(plugin.display.alwaysActions)
+                    .onChange(value => save(plugin.setDisplay({ alwaysActions: value })))
+            );
+
+        new Setting(root).setName('Annotation notes').setHeading();
+        new Setting(root)
             .setName('New annotation notes start with')
             .setDesc('The heading under which a new annotation note keeps its annotations. Empty for none.')
             .addText(control =>
@@ -8190,6 +8210,17 @@ class NativeSettings extends PluginSettingTab {
                     .setPlaceholder(DEFAULT_NOTE_HEADING)
                     .setValue(plugin.display.noteHeading)
                     .onChange(value => save(plugin.setDisplay({ noteHeading: value.slice(0, 200) })))
+            );
+        new Setting(root)
+            .setName('Template for new annotation notes')
+            .setDesc(
+                'A note whose text a new annotation note starts as, instead of the heading: its properties are kept, and {{title}}, {{date}} and {{target}} are filled in. Annotations are added at the end.'
+            )
+            .addText(control =>
+                control
+                    .setPlaceholder('Templates/Annotation note')
+                    .setValue(plugin.display.noteTemplate)
+                    .onChange(value => save(plugin.setDisplay({ noteTemplate: value.slice(0, 400) })))
             );
         new Setting(root)
             .setName('Write new annotations under this heading')
@@ -8225,122 +8256,6 @@ class NativeSettings extends PluginSettingTab {
                     .setValue(String(plugin.display.headingLevel))
                     .onChange(value => save(plugin.setDisplay({ headingLevel: headingLevel(Number(value)) })))
             );
-        new Setting(root)
-            .setName('Template for new annotation notes')
-            .setDesc(
-                'A note whose text a new annotation note starts as, instead of the heading: its properties are kept, and {{title}}, {{date}} and {{target}} are filled in. Annotations are added at the end.'
-            )
-            .addText(control =>
-                control
-                    .setPlaceholder('Templates/Annotation note')
-                    .setValue(plugin.display.noteTemplate)
-                    .onChange(value => save(plugin.setDisplay({ noteTemplate: value.slice(0, 400) })))
-            );
-        new Setting(root)
-            .setName('Folder for reference notes')
-            .setDesc('Where the Citations view makes a note for a cited work. Empty: where Obsidian puts new notes.')
-            .addText(control =>
-                control
-                    .setPlaceholder('References')
-                    .setValue(plugin.display.referenceFolder)
-                    .onChange(value => save(plugin.setDisplay({ referenceFolder: value.slice(0, 400) })))
-            );
-        new Setting(root)
-            .setName('Keep reading progress in the note')
-            .setDesc(
-                'When a PDF, book or video is left, write where you were to its annotation note as the property annotation-progress ("12/340", "37%", "12:34"), for lists and Bases, and so that another device opens there. Off by default, because it changes the note each time.'
-            )
-            .addToggle(control =>
-                control
-                    .setValue(plugin.display.progressProperty)
-                    .onChange(value => save(plugin.setDisplay({ progressProperty: value })))
-            );
-        new Setting(root)
-            .setName('Copied link')
-            .setDesc(
-                'What is copied or dragged from a card\'s link button. Empty copies the plain link. A template may use {{link}} (the plain link) with {{quote}}, {{note}}, {{location}}, {{date}}, {{tags}}, {{title}}, {{author}} and {{year}}: for example "{{quote}}" ({{author}} {{year}}, {{location}}) {{link}}'
-            )
-            .addTextArea(control =>
-                control
-                    .setPlaceholder('{{link}}')
-                    .setValue(plugin.display.linkTemplate)
-                    .onChange(value => save(plugin.setDisplay({ linkTemplate: value.slice(0, 2000) })))
-            );
-        new Setting(root)
-            .setName('Open the sidebar when a source opens')
-            .setDesc(
-                'Brings the annotations forward whenever a PDF, book, page or video is opened from its note. When off, open them with the ribbon icon or the command "Show or hide the annotations sidebar"; following a link to an annotation still shows it.'
-            )
-            .addToggle(control =>
-                control
-                    .setValue(plugin.display.sidebarOnOpen)
-                    .onChange(value => save(plugin.setDisplay({ sidebarOnOpen: value })))
-            );
-        new Setting(root)
-            .setName('Zotero data folder')
-            .setDesc(
-                'A note may name its source by a Zotero link to a PDF (zotero://open-pdf/library/items/…). The file is looked for in this folder, under "storage". Leave empty for Zotero\'s usual place, the folder Zotero in your home folder. Computers only.'
-            )
-            .addText(control =>
-                control
-                    .setPlaceholder('~/Zotero')
-                    .setValue(plugin.display.zoteroFolder)
-                    .onChange(value => save(plugin.setDisplay({ zoteroFolder: value.trim().slice(0, 1000) })))
-            );
-        new Setting(root)
-            .setName('Calibre library folders')
-            .setDesc(
-                "A note may name its source by a Calibre book link (calibre://show-book/Library/42). Name each library's folder here, one to a line: the book is looked for there, and its EPUB or PDF is the source. Computers only."
-            )
-            .addTextArea(control =>
-                control
-                    .setPlaceholder('/Users/me/Calibre Library')
-                    .setValue(plugin.display.calibreLibraries)
-                    .onChange(value => save(plugin.setDisplay({ calibreLibraries: value.slice(0, 4000) })))
-            );
-        new Setting(root)
-            .setName('Also read the source from this property')
-            .setDesc(
-                'A note names its source in the property annotation-target. If your notes already name it in another property (source, pdf, file), write that name here: a note without annotation-target is then read by it. New annotation notes are still written with annotation-target, and Annotator 0.2 on another device reads only that.'
-            )
-            .addText(control =>
-                control
-                    .setPlaceholder('none')
-                    .setValue(plugin.display.targetAlias)
-                    .onChange(value => save(plugin.setDisplay({ targetAlias: targetAliasName(value) })))
-            );
-        new Setting(root)
-            .setName('Show highlights in embedded PDFs')
-            .setDesc(
-                "A PDF embedded in a note or placed on a Canvas is shown with its highlights, and a click on one opens it in the sidebar. Highlights are made in the PDF's own tab. Applies to embeds shown from now on."
-            )
-            .addToggle(control =>
-                control.setValue(plugin.display.embeddedHighlights).onChange(value => {
-                    save(plugin.setDisplay({ embeddedHighlights: value }));
-                    if (!value) plugin.releaseEmbedded();
-                })
-            );
-        new Setting(root)
-            .setName('Fold annotation data in Live Preview')
-            .setDesc(
-                'In an annotation note, shows each annotation as its passage, link, note and tags, with the stored data folded to a small mark. Put the cursor in an annotation to see it as written. Nothing in the file changes; Source mode shows everything.'
-            )
-            .addToggle(control =>
-                control.setValue(plugin.display.foldData).onChange(value => {
-                    save(plugin.setDisplay({ foldData: value }));
-                    plugin.refold();
-                })
-            );
-        new Setting(root)
-            .setName('Always show card actions')
-            .setDesc('Show colour, edit, reply, link and delete under every card rather than on hover.')
-            .addToggle(control =>
-                control
-                    .setValue(plugin.display.alwaysActions)
-                    .onChange(value => save(plugin.setDisplay({ alwaysActions: value })))
-            );
-
-        new Setting(root).setName('Notes in Markdown').setHeading();
         for (const [key, label, description] of [
             [
                 'highlightHighlightedText',
@@ -8363,6 +8278,40 @@ class NativeSettings extends PluginSettingTab {
                         save(plugin.savePreferences());
                     })
                 );
+        new Setting(root)
+            .setName('Keep reading progress in the note')
+            .setDesc(
+                'When a PDF, book or video is left, write where you were to its annotation note as the property annotation-progress ("12/340", "37%", "12:34"), for lists and Bases, and so that another device opens there. Off by default, because it changes the note each time.'
+            )
+            .addToggle(control =>
+                control
+                    .setValue(plugin.display.progressProperty)
+                    .onChange(value => save(plugin.setDisplay({ progressProperty: value })))
+            );
+        new Setting(root)
+            .setName('Fold annotation data in Live Preview')
+            .setDesc(
+                'In an annotation note, shows each annotation as its passage, link, note and tags, with the stored data folded to a small mark. Put the cursor in an annotation to see it as written. Nothing in the file changes; Source mode shows everything.'
+            )
+            .addToggle(control =>
+                control.setValue(plugin.display.foldData).onChange(value => {
+                    save(plugin.setDisplay({ foldData: value }));
+                    plugin.refold();
+                })
+            );
+
+        new Setting(root).setName('Copying and exporting').setHeading();
+        new Setting(root)
+            .setName('Copied link')
+            .setDesc(
+                'What is copied or dragged from a card\'s link button. Empty copies the plain link. A template may use {{link}} (the plain link) with {{quote}}, {{note}}, {{location}}, {{date}}, {{tags}}, {{title}}, {{author}} and {{year}}: for example "{{quote}}" ({{author}} {{year}}, {{location}}) {{link}}'
+            )
+            .addTextArea(control =>
+                control
+                    .setPlaceholder('{{link}}')
+                    .setValue(plugin.display.linkTemplate)
+                    .onChange(value => save(plugin.setDisplay({ linkTemplate: value.slice(0, 2000) })))
+            );
         new Setting(root)
             .setName('Export style')
             .setDesc('How “Copy as Markdown” and “Export summary note” write each annotation.')
@@ -8433,6 +8382,41 @@ class NativeSettings extends PluginSettingTab {
                         save(plugin.savePreferences());
                     })
             );
+        new Setting(root)
+            .setName('Also read the source from this property')
+            .setDesc(
+                'A note names its source in the property annotation-target. If your notes already name it in another property (source, pdf, file), write that name here: a note without annotation-target is then read by it. New annotation notes are still written with annotation-target, and Annotator 0.2 on another device reads only that.'
+            )
+            .addText(control =>
+                control
+                    .setPlaceholder('none')
+                    .setValue(plugin.display.targetAlias)
+                    .onChange(value => save(plugin.setDisplay({ targetAlias: targetAliasName(value) })))
+            );
+
+        new Setting(root).setName('Sources outside the vault').setHeading();
+        new Setting(root)
+            .setName('Zotero data folder')
+            .setDesc(
+                'A note may name its source by a Zotero link to a PDF (zotero://open-pdf/library/items/…). The file is looked for in this folder, under "storage". Leave empty for Zotero\'s usual place, the folder Zotero in your home folder. Computers only.'
+            )
+            .addText(control =>
+                control
+                    .setPlaceholder('~/Zotero')
+                    .setValue(plugin.display.zoteroFolder)
+                    .onChange(value => save(plugin.setDisplay({ zoteroFolder: value.trim().slice(0, 1000) })))
+            );
+        new Setting(root)
+            .setName('Calibre library folders')
+            .setDesc(
+                "A note may name its source by a Calibre book link (calibre://show-book/Library/42). Name each library's folder here, one to a line: the book is looked for there, and its EPUB or PDF is the source. Computers only."
+            )
+            .addTextArea(control =>
+                control
+                    .setPlaceholder('/Users/me/Calibre Library')
+                    .setValue(plugin.display.calibreLibraries)
+                    .onChange(value => save(plugin.setDisplay({ calibreLibraries: value.slice(0, 4000) })))
+            );
 
         new Setting(root).setName('Reading').setHeading();
         new Setting(root)
@@ -8472,6 +8456,26 @@ class NativeSettings extends PluginSettingTab {
                     .setValue(plugin.reader[key])
                     .setDynamicTooltip()
                     .onChange(value => save(plugin.setReader({ ...plugin.reader, [key]: value })))
+            );
+        new Setting(root)
+            .setName('Show highlights in embedded PDFs')
+            .setDesc(
+                "A PDF embedded in a note or placed on a Canvas is shown with its highlights, and a click on one opens it in the sidebar. Highlights are made in the PDF's own tab. Applies to embeds shown from now on."
+            )
+            .addToggle(control =>
+                control.setValue(plugin.display.embeddedHighlights).onChange(value => {
+                    save(plugin.setDisplay({ embeddedHighlights: value }));
+                    if (!value) plugin.releaseEmbedded();
+                })
+            );
+        new Setting(root)
+            .setName('Folder for reference notes')
+            .setDesc('Where the Citations view makes a note for a cited work. Empty: where Obsidian puts new notes.')
+            .addText(control =>
+                control
+                    .setPlaceholder('References')
+                    .setValue(plugin.display.referenceFolder)
+                    .onChange(value => save(plugin.setDisplay({ referenceFolder: value.slice(0, 400) })))
             );
 
         this.openWith(root);

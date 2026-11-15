@@ -377,6 +377,38 @@ test('the keys on a selection are chosen in the settings: refused with the reaso
     try { again.plugin.data = { nativeSelectionKeys: { mark: 'a', note: 'a', style: 's' } }; await again.plugin.onload(); assert.deepEqual(again.plugin.selectionKeys, { mark: 'h', note: 'a', style: 's' }); } finally { again.dispose(); }
 });
 
+test('the settings are grouped under headings that say what they are about, in sentence case and without "settings", each setting doing what it did', async () => {
+    const h = host();
+    try {
+        await h.plugin.onload();
+        const tab = h.plugin.settingTabs[0]; tab.display();
+        // Each heading with the settings under it, in order.
+        const groups = [];
+        for (const row of tab.containerEl.querySelectorAll('.setting-item')) {
+            const name = row.querySelector('.setting-item-name')?.textContent || '';
+            if (row.classList.contains('setting-item-heading')) groups.push([name]);
+            else groups.at(-1)?.push(name);
+        }
+        const under = heading => groups.find(group => group[0] === heading)?.slice(1);
+        assert.deepEqual(groups.map(group => group[0]), ['Highlight colours', 'Writing notes', 'Keys on a selection', 'Sidebar', 'Annotation notes', 'Copying and exporting', 'Opening', 'Sources outside the vault', 'Reading', 'Open from outside Obsidian', 'Text recognition', 'Coming from Annotator 0.2']);
+        assert.deepEqual(under('Sidebar'), ['Compact cards', 'Open the sidebar when a source opens', 'Always show card actions']);
+        assert.deepEqual(under('Annotation notes'), ['New annotation notes start with', 'Template for new annotation notes', 'Write new annotations under this heading', 'Give each annotation a heading', 'Level of annotation headings', 'Highlight quotes in the note', 'Keep text before the quote', 'Keep text after the quote', 'Keep reading progress in the note', 'Fold annotation data in Live Preview']);
+        assert.deepEqual(under('Copying and exporting'), ['Copied link', 'Export style', 'Link exports back to the passage']);
+        assert.deepEqual(under('Opening'), ['Open annotation notes in the reader', 'Default target folders', 'Also read the source from this property']);
+        assert.deepEqual(under('Sources outside the vault'), ['Zotero data folder', 'Calibre library folders']);
+        assert.ok(under('Reading').includes('Show highlights in embedded PDFs') && under('Reading').includes('Folder for reference notes'));
+        // Obsidian's guidelines for headings: sentence case, and no "settings" in them.
+        for (const [heading] of groups) { assert.doesNotMatch(heading, /setting/i, heading); assert.equal(heading.slice(1), heading.slice(1).replace(/\b[A-Z][a-z]/g, word => (['Annotator', 'Obsidian'].some(name => heading.includes(name)) ? word : word.toLowerCase())), heading); }
+        // A setting moved does what it did: it is kept under the same name.
+        const field = name => [...tab.containerEl.querySelectorAll('.setting-item')].find(row => row.querySelector('.setting-item-name')?.textContent === name).querySelector('input, textarea');
+        field('Zotero data folder').value = '~/Elsewhere'; field('Zotero data folder').dispatchEvent(new h.dom.window.Event('input'));
+        field('Write new annotations under this heading').value = '## Highlights'; field('Write new annotations under this heading').dispatchEvent(new h.dom.window.Event('input'));
+        for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0));
+        assert.equal(h.plugin.display.zoteroFolder, '~/Elsewhere'); assert.equal(h.plugin.display.writeUnder, '## Highlights');
+        assert.equal(h.plugin.data.nativeDisplay.zoteroFolder, '~/Elsewhere'); assert.equal(h.plugin.data.nativeDisplay.writeUnder, '## Highlights');
+    } finally { h.dispose(); }
+});
+
 test('a new passage is marked in the style last chosen, as a tag the note shows; the style is remembered with the inks', async () => {
     const h = await collection([quoted('a', 'Passage')]);
     try {
