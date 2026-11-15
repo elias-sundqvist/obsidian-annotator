@@ -5,6 +5,11 @@ What changed for someone using Annotator. How to use each thing is in
 
 ## Unreleased
 
+- A PDF or book on a server that asks for a user name and password (HTTP
+  Basic, for example a Calibre-Web library behind nginx) can be downloaded:
+  the reader asks for them when the server does, and keeps them only until
+  Obsidian is closed. An address with them written in it is still refused,
+  now saying what to do instead.
 - **Take in links to this PDF's passages** also takes in PDF++ links to a
   rectangle of a page (`#page=3&rect=…`): each becomes a marked area with
   its picture.

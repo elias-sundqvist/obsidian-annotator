@@ -1303,3 +1303,50 @@ test('the recogniser\'s dialog says what it will do, which pages a choice comes 
  // Reading again in the language it was read in is no reading again.
  const again={...question,what:'again',copy:null,before:'English'};assert.deepEqual([scanStanding(again,'eng',[1],false).ready,scanStanding(again,'eng',[1],false).caution],[false,'The pages were read in English already.']);assert.deepEqual([scanStanding(again,'swe',[1],false).ready,scanStanding(again,'swe',[1],false).button],[true,'Download and recognise again']);
 });
+test('a source kept behind a user name and password is downloaded after the reader signs in, and the sign-in is kept only in memory, for that server',async()=>{
+ const {SignInModal}=await import('./.generated/plugin-boundary.mjs');const open=SignInModal.prototype.open;
+ const h=host();try{
+  const url='https://books.example.org/download/5003/pdf/5003.pdf',note=h.add('Book.md','Kept',{'annotation-target':url}),other=h.add('Other.md','',{'annotation-target':'https://books.example.org/download/7/pdf/7.pdf'});
+  const right=`Basic ${Buffer.from('reader:sésame','utf8').toString('base64')}`,seen=[];
+  globalThis.__annotatorTestRequest=async options=>{seen.push(options.headers?.Authorization||null);return options.headers?.Authorization===right?{status:200,headers:{},arrayBuffer:new TextEncoder().encode('%PDF-1.7\n').buffer}:{status:401,headers:{'WWW-Authenticate':'Basic realm="Calibre library"'},arrayBuffer:new ArrayBuffer(0)};};
+  // The reader's answers, one per question: a wrong password first, then the right one.
+  const answers=[{user:'reader',password:'wrong'},{user:'reader',password:'sésame'}],questions=[];
+  SignInModal.prototype.open=function(){questions.push(this.question);this.answer(answers.shift()??null);};
+  await h.plugin.onload();await h.plugin.openNoteTarget(note);
+  assert.deepEqual(questions,[{origin:'https://books.example.org',realm:'Calibre library',clear:false,again:false},{origin:'https://books.example.org',realm:'Calibre library',clear:false,again:true}]);
+  assert.deepEqual(seen,[null,`Basic ${Buffer.from('reader:wrong','utf8').toString('base64')}`,right]);assert.ok(h.opened[0]?.file.path.startsWith('Annotator sources/'));
+  // Nothing of it is written anywhere: not in the note, not in the plugin's data.
+  assert.equal(h.contents.get(note.path),'Kept');const saved=JSON.stringify(h.plugin.data)+JSON.stringify(h.plugin.writes);assert.ok(!saved.includes('sésame')&&!saved.includes(right.slice(6)));
+  // Another file from the same server: the sign-in is sent at once, and nothing is asked.
+  seen.length=0;await h.plugin.openNoteTarget(other);assert.deepEqual(seen,[right]);assert.equal(questions.length,2);
+  // A server that asks for something else than Basic is not asked about; saying no to the question downloads nothing.
+  globalThis.__annotatorTestRequest=async()=>({status:401,headers:{'www-authenticate':'Bearer realm="api"'},arrayBuffer:new ArrayBuffer(0)});
+  await assert.rejects(h.plugin.sourceBytes('https://api.example.org/a.pdf','pdf'),/answered 401 \(it needs a sign-in the reader does not have\)\. Nothing was downloaded\./);assert.equal(questions.length,2);
+  globalThis.__annotatorTestRequest=async()=>({status:401,headers:{'www-authenticate':'Basic realm="x"'},arrayBuffer:new ArrayBuffer(0)});
+  await assert.rejects(h.plugin.sourceBytes('http://files.example.org/b.pdf','pdf'),/asks for a user name and password, and none was given\. Nothing was downloaded\./);
+  assert.deepEqual(questions.at(-1),{origin:'http://files.example.org',realm:'x',clear:true,again:false});
+  // Given, but never right: asked three times at most, then the server's answer is said.
+  let asked=0;SignInModal.prototype.open=function(){asked++;this.answer({user:'u',password:'p'});};
+  await assert.rejects(h.plugin.sourceBytes('https://wrong.example.org/c.pdf','pdf'),/answered 401/);assert.equal(asked,3);
+  // Gone with the plugin.
+  h.app.workspace.detachLeavesOfType=()=>{};h.plugin.onunload();assert.equal(h.plugin.signIns.size,0);
+ }finally{SignInModal.prototype.open=open;h.dispose();}
+});
+test('the sign-in dialog: two labelled fields, a warning for an unencrypted address, Enter signs in, and closing is no',async()=>{
+ const {SignInModal}=await import('./.generated/plugin-boundary.mjs');
+ const h=host();try{const w=h.dom.window,proto=w.HTMLElement.prototype;proto.addClass??=function(...names){this.classList.add(...names);};proto.empty??=function(){this.replaceChildren();};
+  proto.createEl??=function(tag,options={}){const el=w.document.createElement(tag);if(options.text)el.textContent=options.text;if(options.cls)el.className=options.cls;for(const [k,v] of Object.entries(options.attr||{}))el.setAttribute(k,v);this.append(el);return el;};proto.createDiv??=function(options){return this.createEl('div',options);};
+  const show=(question,answer)=>{const modal=new SignInModal(h.app,question,answer),el=w.document.createElement('div');w.document.body.append(el);modal.contentEl=el;modal.modalEl=el;modal.close=()=>modal.onClose();modal.onOpen();return {modal,el};};
+  const given=[];let {el}=show({origin:'http://files.example.org',realm:'Files',clear:true,again:false},value=>given.push(value));
+  assert.match(el.textContent,/http:\/\/files\.example\.org \("Files"\) asks for a user name and password/);assert.match(el.querySelector('.mod-warning').textContent,/not encrypted/);
+  const [user,password]=el.querySelectorAll('input');assert.equal(user.getAttribute('autocomplete'),'username');assert.equal(password.type,'password');
+  assert.deepEqual([...el.querySelectorAll('label')].map(label=>[label.textContent,label.htmlFor]),[['User name',user.id],['Password',password.id]]);
+  const sign=[...el.querySelectorAll('button')].find(button=>button.textContent==='Sign in');assert.equal(sign.disabled,true,'no user name, no sign-in');
+  user.value='reader';user.dispatchEvent(new w.Event('input'));assert.equal(sign.disabled,false);password.value='secret';
+  password.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter'}));assert.deepEqual(given,[{user:'reader',password:'secret'}]);assert.equal(user.value,'');assert.equal(password.value,'','nothing of the password stays in the page');
+  // Closed without signing in: no. A second try says the first was refused, and an encrypted address has no warning.
+  ({el}=show({origin:'https://books.example.org',realm:'',clear:false,again:true},value=>given.push(value)));
+  assert.match(el.textContent,/did not accept that user name and password/);assert.equal(el.querySelector('.mod-warning'),null);
+  [...el.querySelectorAll('button')].find(button=>button.textContent==='Cancel').click();assert.deepEqual(given.at(-1),null);assert.equal(given.length,2);
+ }finally{h.dispose();}
+});

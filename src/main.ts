@@ -13,6 +13,8 @@ import { retainUpgradeBackup } from './upgrade-backup';
 import { LogicHost } from './logic-host';
 import { ReadingCopyModal } from './reading-copy';
 import { QuoteModal } from './quote-dialog';
+import { SignInModal, type SignInQuestion } from './sign-in-dialog';
+import { basicAuthorization, basicChallenge, sentInTheClear, signInOrigin } from './web-auth';
 import { LegacyAnnotationView, LEGACY_VIEW } from './legacy-view';
 import { loadYouTubeTranscript, parseTranscript } from './video-transcript';
 import {
@@ -1283,6 +1285,8 @@ export default class AnnotatorPlugin extends Plugin {
         });
     }
     onunload() {
+        // What was given to sign in to a source's server goes with the plugin.
+        this.signIns.clear();
         this.app.workspace.detachLeavesOfType(VIEW);
         this.app.workspace.detachLeavesOfType(EPUB_VIEW);
         this.app.workspace.detachLeavesOfType(VIDEO_VIEW);
@@ -5995,6 +5999,12 @@ export default class AnnotatorPlugin extends Plugin {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         return require('fs').promises;
     }
+    /** Sign-ins given for sources' servers, by origin: in memory only, gone when the plugin is. */
+    private readonly signIns = new Map<string, string>();
+    /** Ask for a user name and password for a server; null when the reader says no. */
+    private askSignIn(question: SignInQuestion): Promise<{ user: string; password: string } | null> {
+        return new Promise(resolve => new SignInModal(this.app, question, resolve).open());
+    }
     private async sourceBytes(url: string, kind: 'pdf' | 'epub', refresh = false): Promise<ArrayBuffer> {
         if (url.startsWith('file:')) {
             if (Platform.isMobile)
@@ -6011,19 +6021,52 @@ export default class AnnotatorPlugin extends Plugin {
         // What is true afterwards is said with the reason: a first download leaves nothing behind, a refresh leaves the copy in hand as it was.
         const after = refresh ? 'The copy you have is unchanged.' : 'Nothing was downloaded.';
         let response: Awaited<ReturnType<typeof requestUrl>>;
-        try {
-            response = await requestUrl({
-                url,
-                throw: false,
-                ...(refresh ? { headers: { 'Cache-Control': 'no-cache' } } : {})
+        // A server that keeps the file behind a user name and password (HTTP Basic) is asked for them, a few times
+        // at most; what was given is sent to that origin only and kept for it until Obsidian is closed.
+        const origin = signInOrigin(url);
+        let authorization = this.signIns.get(origin),
+            asked = 0;
+        for (;;) {
+            const headers: Record<string, string> = {
+                ...(refresh ? { 'Cache-Control': 'no-cache' } : {}),
+                ...(authorization ? { Authorization: authorization } : {})
+            };
+            try {
+                response = await requestUrl({ url, throw: false, ...(Object.keys(headers).length ? { headers } : {}) });
+            } catch (error) {
+                throw new Error(
+                    `The source could not be reached (${String((error as Error)?.message || error)
+                        .replace(/^Error:\s*/, '')
+                        .slice(0, 120)}). Check the address and your connection. ${after}`
+                );
+            }
+            const challenge =
+                response.status === 401
+                    ? basicChallenge(
+                          Object.entries(response.headers || {}).find(
+                              ([name]) => name.toLowerCase() === 'www-authenticate'
+                          )?.[1]
+                      )
+                    : null;
+            if (!challenge || asked >= 3 || this.stopped) break;
+            const refused = !!authorization;
+            if (refused) this.signIns.delete(origin);
+            const given = await this.askSignIn({
+                origin,
+                realm: challenge.realm,
+                clear: sentInTheClear(url),
+                again: refused
             });
-        } catch (error) {
-            throw new Error(
-                `The source could not be reached (${String((error as Error)?.message || error)
-                    .replace(/^Error:\s*/, '')
-                    .slice(0, 120)}). Check the address and your connection. ${after}`
-            );
+            asked++;
+            if (!given) throw new Error(`The server asks for a user name and password, and none was given. ${after}`);
+            try {
+                authorization = basicAuthorization(given.user, given.password);
+            } catch (error) {
+                new Notice(String((error as Error)?.message || error));
+                authorization = undefined;
+            }
         }
+        if (authorization && response.status >= 200 && response.status < 300) this.signIns.set(origin, authorization);
         if (response.status < 200 || response.status >= 300) {
             const why =
                 response.status === 404

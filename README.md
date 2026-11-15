@@ -535,6 +535,13 @@ first time, the reader asks, then downloads or copies it once into
 `Annotator sources` in your vault and reads it from there. If that fails it
 says why, and nothing is left behind.
 
+A server that keeps the file behind a user name and password (HTTP Basic, as
+nginx or Apache put in front of a Calibre-Web library) is signed in to when
+it asks: write the address without them, and the reader asks for the user
+name and password in a dialog of its own. They are sent to that server only
+and kept until Obsidian is closed, never in your notes, the settings or sync.
+An address with them written in it (`https://user:password@…`) is refused.
+
 A file that Obsidian itself opened from outside the vault (for example with
 "Open with") is shown without annotations: the reader writes nothing beside
 a file that is not in your vault. Name it in a note's `annotation-target`

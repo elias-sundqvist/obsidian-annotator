@@ -9,6 +9,7 @@ export {SnapshotHost} from '../../src/snapshot';
 export {LiveWebHost} from '../../src/live-web';
 export {ReadingCopyModal} from '../../src/reading-copy';
 export {QuoteModal} from '../../src/quote-dialog';
+export {SignInModal} from '../../src/sign-in-dialog';
 
 export {bindMarkdownLinks} from '../../src/markdown-links';
 

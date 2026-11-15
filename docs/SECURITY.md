@@ -60,6 +60,12 @@ assets…" (`readers.test.mjs`), "network CSS, dynamic selectors…"
   not asked about again. A Zotero or Calibre link is first followed to a
   path inside the folder the settings name, and that path is then asked
   about in the same way.
+- **A user name and password for a source's server are asked for, never
+  stored.** An address with them in it is refused, so they cannot end up in a
+  note that syncs. When a server answers a download with a Basic challenge,
+  the reader asks in a dialog of its own (warning when the address is plain
+  http), sends them only to that address's origin, and keeps them in memory
+  until the plugin is unloaded. It asks three times at most per download.
 - **Nothing is written beside a file outside the vault.** Since 1.14.4
   Obsidian can open a file that is not in the vault, and its file functions
   then write wherever that file's path says. The reader names its notes and

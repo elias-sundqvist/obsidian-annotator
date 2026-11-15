@@ -1755,3 +1755,9 @@ body.annotator-reading-fullscreen .workspace-leaf.mod-active > .workspace-leaf-c
 .annotator-citation-flash-box { position: absolute; border-radius: 3px; outline: 2px solid var(--annotator-citation-flash, var(--text-accent)); background: color-mix(in srgb, var(--annotator-citation-flash, var(--text-accent)) 22%, transparent); animation: annotator-citation-flash 1.8s var(--annotator-ease, ease-out) forwards; }
 @keyframes annotator-citation-flash { 0%, 55% { opacity: 1; } 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .annotator-citation-flash-box { animation-duration: .01s; animation-delay: 1.7s; } }
+
+/* Signing in to a source's server: two fields, labelled, as wide as the dialog. */
+.annotator-sign-in .annotator-sign-in-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: var(--size-4-3, 12px); }
+.annotator-sign-in .annotator-sign-in-field label { font-size: var(--font-ui-small); color: var(--text-muted); }
+.annotator-sign-in .annotator-sign-in-field input { width: 100%; }
+.annotator-sign-in .mod-warning { color: var(--text-error); }

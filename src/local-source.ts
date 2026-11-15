@@ -51,7 +51,11 @@ export function cachedSourceUrl(raw: string): string {
     if (local) return local.uri;
     const url = new URL(raw);
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password)
-        throw new Error('Unsupported source URL.');
+        throw new Error(
+            url.username || url.password
+                ? 'Write the address without a user name and password in it: the reader asks for them when the server wants them, and keeps them only while Obsidian is open.'
+                : 'Unsupported source URL.'
+        );
     url.hash = '';
     return url.href;
 }

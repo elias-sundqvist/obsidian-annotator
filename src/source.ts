@@ -64,7 +64,9 @@ export function fileRevision(file: { path: string; stat: { mtime: number; size: 
 export function httpUrl(raw: string): string {
     const url = new URL(raw);
     if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password)
-        throw new Error('Use an HTTP(S) URL without embedded credentials.');
+        throw new Error(
+            'Write the address without a user name and password in it: the reader asks for them when the server wants them, and keeps them only while Obsidian is open.'
+        );
     url.hash = '';
     return url.href;
 }
