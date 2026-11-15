@@ -109,7 +109,7 @@ import { makeSnapshot, SnapshotHost } from './snapshot';
 import { refreshSnapshotEditors, snapshotEditorExtension } from './snapshot-editor';
 import { noteFolding, refold } from './note-folding';
 import { appLink, calibreFile, followedLinks, zoteroFile } from './app-links';
-import { selectionLink, type SelectionLink } from './selection-links';
+import { rectLink, selectionLink, type RectLink, type SelectionLink } from './selection-links';
 import { MATCH_LIMIT, matchWords, type MatchOptions, type MatchSource } from './every-match';
 import { EveryMatchModal, type MatchCount, type MatchRequest } from './every-match-dialog';
 import type { EditorView } from '@codemirror/view';
@@ -4232,9 +4232,20 @@ export default class AnnotatorPlugin extends Plugin {
             new Notice('Still saving the last change; try again in a moment.');
             return;
         }
-        // Every link in the vault's notes that names this file and a selection on one of its pages.
+        // Every link in the vault's notes that names this file and a selection, or a rectangle, on one of its pages.
         const found = new Map<string, { link: SelectionLink; notes: string[] }>(),
+            boxes = new Map<string, { link: RectLink; notes: string[] }>(),
             own = this.notes.get(key)?.note?.path;
+        const keep = <T extends { key: string; path: string }>(
+            into: Map<string, { link: T; notes: string[] }>,
+            link: T | null,
+            note: TFile
+        ) => {
+            if (!link || this.app.metadataCache.getFirstLinkpathDest(link.path, note.path) !== source) return;
+            const entry = into.get(link.key) || { link, notes: [] };
+            if (!entry.notes.includes(note.path)) entry.notes.push(note.path);
+            into.set(link.key, entry);
+        };
         for (const note of this.app.vault.getMarkdownFiles()) {
             if (note.path === own) continue;
             const cache = this.app.metadataCache.getFileCache(note) as {
@@ -4247,62 +4258,134 @@ export default class AnnotatorPlugin extends Plugin {
                 ...(cache?.embeds || []),
                 ...(cache?.frontmatterLinks || [])
             ]) {
-                const link = typeof made?.link === 'string' ? selectionLink(made.link) : null;
-                if (!link || this.app.metadataCache.getFirstLinkpathDest(link.path, note.path) !== source) continue;
-                const entry = found.get(link.key) || { link, notes: [] };
-                if (!entry.notes.includes(note.path)) entry.notes.push(note.path);
-                found.set(link.key, entry);
+                if (typeof made?.link !== 'string') continue;
+                keep(found, selectionLink(made.link), note);
+                keep(boxes, rectLink(made.link), note);
             }
         }
-        if (!found.size) {
+        if (!found.size && !boxes.size) {
             new Notice('No note links to a passage of this PDF.', 8000);
             return;
         }
+        const linkedFrom = (notes: string[]) =>
+            `Linked from ${notes.map(path => `[[${path.replace(/\.md$/i, '')}]]`).join(', ')}.`;
         const working = new Notice('Reading the links to this PDF…', 0);
         this.busy = true;
         let added = 0,
             last = '';
+        const pictures: string[] = [];
         try {
-            const plan = await host.selectionPlan(
-                [...found.values()].map(({ link, notes }) => ({
-                    link,
-                    text: `Linked from ${notes.map(path => `[[${path.replace(/\.md$/i, '')}]]`).join(', ')}.`
-                })),
-                this.importedKeys(key)
-            );
+            const imported = this.importedKeys(key),
+                plan = found.size
+                    ? await host.selectionPlan(
+                          [...found.values()].map(({ link, notes }) => ({ link, text: linkedFrom(notes) })),
+                          imported
+                      )
+                    : { rows: [], skipped: [], known: 0 },
+                regions = boxes.size
+                    ? await host.rectPlan(
+                          [...boxes.values()].map(({ link }) => link),
+                          imported
+                      )
+                    : { areas: [], skipped: [], known: 0 };
             if (this.stopped) return;
-            const already = plan.known,
-                left = plan.skipped.length;
-            if (!plan.rows.length) {
+            const already = plan.known + regions.known,
+                skipped = [...plan.skipped, ...regions.skipped],
+                left = skipped.length;
+            if (!plan.rows.length && !regions.areas.length) {
                 new Notice(
                     already && !left
-                        ? `All ${already} linked ${already === 1 ? 'passage is' : 'passages are'} in your notes already.`
-                        : `None of the ${left} linked ${left === 1 ? 'passage' : 'passages'} could be placed: ${plan.skipped[0]?.reason || ''}`,
+                        ? `All ${already} linked ${already === 1 ? 'place is' : 'places are'} in your notes already.`
+                        : `None of the ${left} linked ${left === 1 ? 'place' : 'places'} could be placed: ${skipped[0]?.reason || ''}`,
                     10000
                 );
                 return;
             }
-            const note = await this.ensureNote(key);
+            const note = await this.ensureNote(key),
+                identity = host.identity(),
+                now = new Date().toISOString(),
+                title =
+                    (collectionSource(key).split('/').pop() || 'page')
+                        .replace(/\.[^.]+$/, '')
+                        .replace(/[\\/:*?"<>|#^[\]]/g, ' ')
+                        .trim()
+                        .slice(0, 60) || 'page';
+            // A rectangle is an area, with its picture as a marked area has one, and the links to it beneath.
+            const areaRows: { annotation: Annotation; ink: Ink }[] = [];
+            for (const { link, area, words } of regions.areas) {
+                const image = await host.areaPictureDrawn(area);
+                let picture = '';
+                if (image) {
+                    const path = await this.attachmentPath(`${title} p${area.page} area.png`, note.path);
+                    await this.app.vault.createBinary(path, await image.arrayBuffer());
+                    pictures.push(path);
+                    picture = `![[${path}]]\n\n`;
+                }
+                areaRows.push({
+                    annotation: {
+                        id: uuid().replaceAll('-', ''),
+                        text: `${picture}${linkedFrom(boxes.get(link.key)!.notes)}`,
+                        tags: [],
+                        created: now,
+                        updated: now,
+                        ...identity,
+                        target: [{ source: identity.uri, selector: [areaSelector(area)] }],
+                        nativePdf: { version: 1, page: area.page, ...(words ? { words } : {}), from: link.key }
+                    },
+                    ink: link.ink
+                });
+            }
+            const rows = [...plan.rows, ...areaRows];
             await this.rewrite(note, async text => {
                 if (this.stopped) throw new Error('The reader was closed before the annotations were saved.');
                 if (!this.noteMatchesSource(note, key))
                     throw new Error('The annotation note target changed; nothing was taken in.');
                 return this.codec.createMany(
                     text,
-                    plan.rows.map(({ annotation, ink }) =>
-                        ink !== DEFAULT_INK ? { annotation, ink } : { annotation }
-                    ),
+                    rows.map(({ annotation, ink }) => (ink !== DEFAULT_INK ? { annotation, ink } : { annotation })),
                     { ...this.markdown }
                 );
             });
-            added = plan.rows.length;
-            last = plan.rows[0].annotation.id;
+            pictures.length = 0;
+            added = rows.length;
+            last = rows[0].annotation.id;
             await this.loadNote(key);
+            const passages = plan.rows.length,
+                areas = areaRows.length,
+                taken = [
+                    passages ? `${passages} linked ${passages === 1 ? 'passage' : 'passages'}` : '',
+                    areas ? `${areas} linked ${areas === 1 ? 'region' : 'regions'}` : ''
+                ]
+                    .filter(Boolean)
+                    .join(' and '),
+                said = `${taken} taken in as ${
+                    passages && areas
+                        ? 'highlights and areas'
+                        : passages
+                          ? passages === 1
+                              ? 'a highlight'
+                              : 'highlights'
+                          : areas === 1
+                            ? 'an area'
+                            : 'areas'
+                }`;
             new Notice(
-                `${added} linked ${added === 1 ? 'passage' : 'passages'} taken in as ${added === 1 ? 'a highlight' : 'highlights'}.${already ? ` ${already} ${already === 1 ? 'was' : 'were'} here already.` : ''}${left ? ` ${left} could not be placed.` : ''}`,
+                `${said}.${already ? ` ${already} ${already === 1 ? 'was' : 'were'} here already.` : ''}${left ? ` ${left} could not be placed.` : ''}`,
                 10000
             );
         } catch (error) {
+            // Pictures written for areas whose note was not written are orphans: they go to the trash.
+            for (const path of pictures) {
+                const orphan = this.app.vault.getAbstractFileByPath(path);
+                if (orphan)
+                    try {
+                        await (
+                            this.app.vault as unknown as { trash?(file: unknown, system: boolean): Promise<void> }
+                        ).trash?.(orphan, false);
+                    } catch {
+                        /* A stray picture is better than a second error. */
+                    }
+            }
             this.fail(error);
         } finally {
             working.hide();

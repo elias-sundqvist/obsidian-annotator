@@ -426,7 +426,10 @@ keeps working beside it.
 - Taking in again adds only what is new; the same passage linked from
   several notes comes in once and names them all.
 - A link that marks nothing on its page as the page is read now is counted
-  and left out. Links to a rectangle (`rect=`) are not taken yet.
+  and left out.
+- A PDF++ link to a rectangle of a page (`[[paper.pdf#page=3&rect=72,400,300,600]]`,
+  for a figure or a table) becomes a marked area there, with its picture and
+  the same note. One that lies off its page is left out.
 
 ## Books (EPUB)
 

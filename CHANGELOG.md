@@ -5,6 +5,9 @@ What changed for someone using Annotator. How to use each thing is in
 
 ## Unreleased
 
+- **Take in links to this PDF's passages** also takes in PDF++ links to a
+  rectangle of a page (`#page=3&rect=…`): each becomes a marked area with
+  its picture.
 - Highlight and copy its link in one step: `Shift+H`, `Shift+1`–`6` or a
   Shift-click on a colour in the selection bar, or the command **Highlight
   selection and copy its link**. The link is ready to paste into a note.

@@ -58,3 +58,30 @@ test('a ligature is one letter in a link and two in the reader\'s text', () => {
     assert.equal(selectionOffsets(read, shown.slice(0, 2), [0, 3, 0, 8]), null);
     assert.equal(selectionOffsets(read, ['Something else', 'efﬁcient ﬂows', ' ﬂat'], [0, 3, 0, 8]), null);
 });
+
+const { rectLink, rectCorners } = await import('./.generated/readers/selection-links.js');
+
+test('which link texts are links to a rectangle of a page, and what they say', () => {
+    assert.deepEqual(rectLink('Papers/Attention.pdf#page=3&rect=72,400.5,300,600'), { path: 'Papers/Attention.pdf', page: 3, rect: [72, 400.5, 300, 600], ink: 'yellow', key: 'rect:3:72,400.5,300,600' });
+    // Corners in either order are the same rectangle, with the same key; PDF++'s colour is read as for a selection.
+    assert.deepEqual(rectLink('a.pdf#page=2&rect=300,600,72,400&color=blue').rect, [72, 400, 300, 600]); assert.equal(rectLink('a.pdf#page=2&rect=300,600,72,400').key, rectLink('a.pdf#rect=72,400,300,600&page=2').key);
+    assert.equal(rectLink('a.pdf#page=2&rect=72,400,300,600&color=blue').ink, 'blue'); assert.deepEqual(rectLink('a.pdf#page=1&rect=-10,-5,20,30').rect, [-10, -5, 20, 30]);
+    // Not such links: no file or page, a selection, too few or odd numbers, no extent one way.
+    for (const text of ['a.pdf#rect=1,2,3,4', '#page=1&rect=1,2,3,4', 'a.pdf#page=1', 'a.pdf#page=1&selection=0,0,1,4', 'a.pdf#page=1&rect=1,2,3', 'a.pdf#page=1&rect=1,2,3,x', 'a.pdf#page=1&rect=1,2,1,9', 'a.pdf#page=1&rect=1,2,9,2', 'a.pdf#page=1&rect=1e3,2,3,4', 'a.pdf#page=0&rect=1,2,3,4'])
+        assert.equal(rectLink(text), null, text);
+    // A link to a selection is not a rectangle, and a rectangle not a selection.
+    assert.equal(selectionLink('a.pdf#page=1&rect=1,2,3,4'), null);
+});
+
+test('a rectangle in the page\'s units lies where the page\'s own conversion puts it, as fractions of the shown page', () => {
+    // A US Letter page as pdf.js turns it at scale 1: the page's units run up from the bottom left; the shown page down from the top left.
+    const upright = ([x1, y1, x2, y2]) => [x1, 792 - y1, x2, 792 - y2];
+    assert.deepEqual(rectCorners([61.2, 396, 306, 712.8], upright, 612, 792).map(value => Math.round(value * 1000) / 1000), [0.1, 0.5, 0.5, 0.1]);
+    // A page with its box offset (a crop box not at nought) and a page turned a quarter: the conversion knows; the result is still fractions of what is shown.
+    const offset = ([x1, y1, x2, y2]) => [x1 - 50, 842 - y1, x2 - 50, 842 - y2];
+    assert.deepEqual(rectCorners([50, 842, 645, 0], offset, 595, 842), [0, 0, 1, 1]);
+    const turned = ([x1, y1, x2, y2]) => [y1, x1, y2, x2];
+    assert.deepEqual(rectCorners([0, 0, 612, 396], turned, 792, 612), [0, 0, 0.5, 1]);
+    // Nothing to place on a page with no size, or when the conversion gives no numbers.
+    assert.equal(rectCorners([1, 2, 3, 4], upright, 0, 792), null); assert.equal(rectCorners([1, 2, 3, 4], () => [1, 2, NaN, 4], 612, 792), null); assert.equal(rectCorners([1, 2, 3, 4], () => [1, 2], 612, 792), null);
+});

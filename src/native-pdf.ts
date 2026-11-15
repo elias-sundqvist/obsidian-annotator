@@ -81,7 +81,7 @@ export { annotationQuote } from './pdf-annotation';
 import { annotationQuote, otherCopy, resolvePdfAnnotation, resolvePdfAnnotationEarly } from './pdf-annotation';
 import type { Progress } from './progress';
 import type { PdfTextMemory } from './pdf-text-memory';
-import { selectionOffsets, type SelectionLink } from './selection-links';
+import { rectCorners, selectionOffsets, type RectLink, type SelectionLink } from './selection-links';
 import { PdfCitations, type CiteLogic } from './pdf-citations';
 import { matcher, type MatchOptions, type Occurrence, type Occurrences } from './every-match';
 import type { Link, Rect, Run } from './citations';
@@ -717,6 +717,86 @@ export class NativePdf {
             }
         }
         return { rows, skipped, known: already };
+    }
+    /**
+     * Links to rectangles of this PDF's pages (rect-links in selection-links.ts) as areas: each placed on its page
+     * through the page's own conversion from its units to the shown page, fitted to the page by the checked
+     * geometry, with the words the page shows inside it when the page is on screen. A link already taken in
+     * (`known`) is counted apart; one that lies off its page, or is too small to be a region, is left out and said.
+     */
+    async rectPlan(
+        links: readonly RectLink[],
+        known: ReadonlySet<string> = new Set()
+    ): Promise<{
+        areas: { link: RectLink; area: PageArea; words: string }[];
+        skipped: { key: string; reason: string }[];
+        known: number;
+    }> {
+        await this.loading;
+        const doc = this.document as unknown as {
+            getPage(number: number): Promise<{
+                rotate?: number;
+                getViewport(options: { scale: number; rotation?: number }): {
+                    width: number;
+                    height: number;
+                    convertToViewportRectangle?(rect: number[]): number[];
+                };
+            }>;
+        } | null;
+        if (!doc || !this.view.file || this.error) throw new Error(this.error || 'The PDF is still loading.');
+        const areas: { link: RectLink; area: PageArea; words: string }[] = [],
+            skipped: { key: string; reason: string }[] = [],
+            seen = new Set<string>();
+        let already = 0;
+        for (const link of links) {
+            if (seen.has(link.key)) continue;
+            seen.add(link.key);
+            if (known.has(link.key)) {
+                already++;
+                continue;
+            }
+            if (!this.pages.some(item => item.number === link.page)) {
+                skipped.push({ key: link.key, reason: `The PDF has no page ${link.page}.` });
+                continue;
+            }
+            try {
+                const page = await doc.getPage(link.page),
+                    rotation = (((page.rotate || 0) % 360) + 360) % 360,
+                    viewport = page.getViewport({ scale: 1, rotation }),
+                    convert = viewport.convertToViewportRectangle?.bind(viewport),
+                    corners = convert ? rectCorners(link.rect, convert, viewport.width, viewport.height) : null,
+                    area = corners ? fitArea(link.page, ...corners) : null;
+                if (!area) {
+                    skipped.push({ key: link.key, reason: 'The rectangle lies off its page or is too small to mark.' });
+                    continue;
+                }
+                areas.push({ link, area, words: this.areaWords(area) || '' });
+            } catch (error) {
+                skipped.push({ key: link.key, reason: String(error instanceof Error ? error.message : error) });
+            }
+        }
+        return { areas, skipped, known: already };
+    }
+    /** The picture of a region drawn afresh from the PDF, wherever its page is: for an area made without the page on screen. */
+    async areaPictureDrawn(area: PageArea): Promise<Blob | null> {
+        const picture = await this.pagePicture(area.page, 2400, area);
+        if (!picture) return null;
+        const canvas = this.view.contentEl.ownerDocument.createElement('canvas');
+        canvas.width = picture.width;
+        canvas.height = picture.height;
+        const context = canvas.getContext('2d');
+        if (!context) return null;
+        if ('data' in picture) context.putImageData(picture, 0, 0);
+        else {
+            context.drawImage(picture, 0, 0);
+            picture.close?.();
+        }
+        try {
+            return await new Promise<Blob | null>(resolve => canvas.toBlob(blob => resolve(blob), 'image/png'));
+        } finally {
+            canvas.width = 0;
+            canvas.height = 0;
+        }
     }
     /**
      * Every place the words occur in the document's text, for "Highlight every match": page by page, as the reader

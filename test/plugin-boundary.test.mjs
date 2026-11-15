@@ -835,6 +835,34 @@ test('links to passages of a PDF in other notes are taken in as highlights, once
   h.metadata.set(first,{frontmatter:{}});h.metadata.set(second,{frontmatter:{}});const quiet=Notice.messages.length;await h.plugin.importSelectionLinks('Papers/Paper.pdf');assert.match(String(Notice.messages.slice(quiet).at(-1)),/No note links to a passage of this PDF/);
  }finally{h.dispose();}
 });
+test('links to rectangles of a PDF\'s pages are taken in as areas, once, with the notes that link to them',async()=>{
+ const {Notice}=await import('./.generated/plugin-boundary.mjs');
+ const h=host();try{h.plugin.manifest={id:'obsidian-annotator'};h.dom.window.ResizeObserver=class{observe(){}unobserve(){}disconnect(){}};
+  const pdf=h.add('Papers/Paper.pdf'),settle=async()=>{for(let turn=0;turn<40;turn++)await new Promise(resolve=>setTimeout(resolve,0));};
+  // A page as pdf.js gives it at scale 1: US Letter, its units up from the bottom left, the shown page down from the top left.
+  const page={rotate:0,getTextContent:async()=>({items:[{str:'A figure'}]}),getViewport:()=>({width:612,height:792,convertToViewportRectangle:([x1,y1,x2,y2])=>[x1,792-y1,x2,792-y2]})};
+  const leaf=new WorkspaceLeaf();leaf.contentEl=h.dom.window.document.createElement('div');h.dom.window.document.body.append(leaf.contentEl);leaf.app=h.app;leaf.view=new FileView(leaf);leaf.view.file=pdf;leaf.view.getViewType=()=>'pdf';leaf.view.getState=()=>({file:pdf.path,page:1});
+  leaf.view.viewer={child:{pdfViewer:{pdfViewer:{currentPageNumber:1,pdfDocument:{fingerprints:['rectfixture'],numPages:1,getPage:async()=>page}}}}};
+  h.app.workspace.getLeavesOfType=type=>type==='pdf'?[leaf]:type==='annotator-sidebar'?[{}]:[];h.app.workspace.getMostRecentLeaf=()=>leaf;h.app.workspace.iterateAllLeaves=fn=>{fn(leaf);};
+  h.app.vault.process=async(file,change)=>{const next=change(h.contents.get(file.path));h.contents.set(file.path,next);return next;};h.app.vault.create=async(path,text)=>h.add(path,text,{'annotation-target':'Papers/Paper.pdf'});
+  h.app.metadataCache.getFirstLinkpathDest=path=>path==='Paper.pdf'||path==='Papers/Paper.pdf'?pdf:h.files.get(path)||null;
+  // Two notes link to one rectangle (corners written either way round), one to a rectangle off the page, one to a page the PDF has not; and one to a passage.
+  h.add('Figures.md','kept',{});h.metadata.set('Figures.md',{frontmatter:{},embeds:[{link:'Paper.pdf#page=1&rect=61.2,396,306,712.8&color=blue'}],links:[{link:'Paper.pdf#page=1&rect=2000,2000,2100,2100'},{link:'Paper.pdf#page=4&rect=1,2,300,400'}]});
+  h.add('More.md','also kept',{});h.metadata.set('More.md',{frontmatter:{},links:[{link:'Paper.pdf#page=1&rect=306,712.8,61.2,396'},{link:'Paper.pdf#page=1&selection=0,0,0,8'}]});
+  await h.plugin.onload();h.plugin.bindSources();await settle();const binding=h.plugin.bindings.get(leaf.view);await binding.host.loading;await settle();
+  const before=Notice.messages.length;await h.plugin.importSelectionLinks('Papers/Paper.pdf');await settle();
+  const rows=h.plugin.notes.get('Papers/Paper.pdf').records,area=rows.find(row=>row.nativePdf?.from?.startsWith('rect:')),passage=rows.find(row=>row.nativePdf?.from?.startsWith('selection:'));
+  assert.equal(rows.length,2);assert.ok(passage);
+  // The area is where the rectangle is, as a fraction of the page from its top left: x 10%, y 10%, 40% wide, 40% tall.
+  assert.equal(area.target[0].selector[0].value,'page=1&xywh=percent:10,10,40,40');assert.equal(area.color,'blue');assert.equal(area.nativePdf.page,1);
+  assert.equal(area.text,'Linked from [[Figures]], [[More]].','no picture can be drawn here, so the note is the links alone');
+  assert.match(String(Notice.messages.slice(before).at(-1)),/^1 linked passage and 1 linked region taken in as highlights and areas\. 2 could not be placed\.$/);
+  assert.equal(h.contents.get('Figures.md'),'kept');assert.equal(h.contents.get('More.md'),'also kept');
+  // Again: nothing new.
+  const stored=h.contents.get(h.plugin.notes.get('Papers/Paper.pdf').note.path),again=Notice.messages.length;await h.plugin.importSelectionLinks('Papers/Paper.pdf');await settle();
+  assert.equal(h.contents.get(h.plugin.notes.get('Papers/Paper.pdf').note.path),stored);assert.match(String(Notice.messages.slice(again).at(-1)),/already|could be placed/);
+ }finally{h.dispose();}
+});
 test('a source tied to a note that is gone finds the note that names it, or is simply unannotated',async()=>{
  const h=host();try{h.plugin.manifest={id:'obsidian-annotator'};let saves=0;const persist=h.plugin.persist.bind(h.plugin);h.plugin.persist=async()=>{saves++;return persist();};
   h.add('Paper.pdf');h.add('Lone.pdf');h.add('Twice.pdf');const real=h.add('Real notes.md','',{'annotation-target':'Paper.pdf'});h.add('One.md','',{'annotation-target':'Twice.pdf'});h.add('Two.md','',{'annotation-target':'Twice.pdf'});

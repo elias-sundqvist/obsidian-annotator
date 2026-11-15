@@ -122,3 +122,71 @@ export function selectionOffsets(
     }
     return start >= 0 && end > start ? { start, end } : null;
 }
+
+/**
+ * A link to a rectangle of a page, as PDF++ writes one for a region it
+ * copies (`paper.pdf#page=3&rect=72,400,300,600`, maybe with a colour):
+ * the left, bottom, right and top edges in the page's own units (points,
+ * from its bottom left corner, as the PDF itself measures). Obsidian shows
+ * such a link as the whole PDF; read here, it becomes a marked area.
+ */
+export interface RectLink {
+    path: string;
+    page: number;
+    rect: [number, number, number, number];
+    ink: Ink;
+    key: string;
+}
+const number = (text: string) => (/^-?\d{1,7}(?:\.\d{1,6})?$/.test(text.trim()) ? Number(text.trim()) : NaN);
+
+/** The link a link text is, when it is a link to a rectangle of a page; else null. */
+export function rectLink(linktext: string): RectLink | null {
+    const at = linktext.indexOf('#');
+    if (at < 1) return null;
+    const path = linktext.slice(0, at).trim(),
+        fields = new Map<string, string>();
+    for (const part of linktext.slice(at + 1).split('&')) {
+        const equals = part.indexOf('=');
+        if (equals > 0) fields.set(part.slice(0, equals).trim().toLowerCase(), part.slice(equals + 1).trim());
+    }
+    const page = whole(fields.get('page') || ''),
+        edges = (fields.get('rect') || '').split(',').map(number);
+    if (!path || !(page >= 1) || edges.length !== 4 || edges.some(edge => Number.isNaN(edge))) return null;
+    const [left, bottom, right, top] = edges;
+    // Some extent each way, whichever corners were written first.
+    if (left === right || bottom === top) return null;
+    let colour = fields.get('color') ?? fields.get('colour') ?? null;
+    if (colour)
+        try {
+            colour = decodeURIComponent(colour);
+        } catch {
+            /* Taken as written. */
+        }
+    const rect: [number, number, number, number] = [
+        Math.min(left, right),
+        Math.min(bottom, top),
+        Math.max(left, right),
+        Math.max(bottom, top)
+    ];
+    return { path, page, rect, ink: linkInk(colour), key: `rect:${page}:${rect.join(',')}` };
+}
+
+/**
+ * Where a rectangle of a page lies on the page as it is shown: its corners as
+ * fractions of the shown page's width and height, from its top left.
+ * `toShown` is the page's own conversion from its units to the shown page's
+ * pixels (pdf.js `viewport.convertToViewportRectangle`), which knows the
+ * page's box and how it is turned; `width` and `height` are the shown page's.
+ * The corners come back in any order; the caller fits them to the page.
+ */
+export function rectCorners(
+    rect: readonly [number, number, number, number],
+    toShown: (rect: [number, number, number, number]) => number[],
+    width: number,
+    height: number
+): [number, number, number, number] | null {
+    if (!(width > 0) || !(height > 0)) return null;
+    const shown = toShown([rect[0], rect[1], rect[2], rect[3]]);
+    if (shown.length !== 4 || shown.some(value => !Number.isFinite(value))) return null;
+    return [shown[0] / width, shown[1] / height, shown[2] / width, shown[3] / height];
+}
