@@ -1531,11 +1531,11 @@
     {
       "id": "fb3-support",
       "title": "FB3 books in the book reader",
-      "status": "todo",
+      "status": "done",
       "parent": "community",
       "dependsOn": [],
       "estimate": 3,
-      "notes": "Owner's decision 2026-11-15: FB3 is to be supported (asked in the FB2 issue). FB3 is a zip of XML parts (OPC-like: description, body, images); the FB2 work (src/fb2*, chapters.bend) is the starting point. Then reply on that issue and close it."
+      "notes": "Owner's decision 2026-11-15: FB3 is to be supported (asked in the FB2 issue). FB3 is a zip of XML parts (OPC-like: description, body, images); the FB2 work (src/fb2*, chapters.bend) is the starting point. Then reply on that issue and close it.\n\nDone 2026-11-15: Built 2026-11-15 by a subagent on feature/fb3-books, fast-forwarded into next (not released). FB3 (OPC package) read by relationships with fallbacks, body translated to the FB2 path; chapters named by section UUID. Tried in Obsidian 1.15.1: a hand-made FB3 opened with its contents and two-line titles, and a highlight was saved. To do on release: reply on the FB2/FB3 issue and close it."
     },
     {
       "id": "mobi-support",
