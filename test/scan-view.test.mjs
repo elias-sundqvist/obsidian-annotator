@@ -4,7 +4,7 @@ import { JSDOM } from 'jsdom';
 import { NativePdf } from './.generated/readers/native-pdf.js';
 
 /** Obsidian's PDF view, as far as the reader's recogniser side needs it: pages with or without text, each drawable. */
-function view(texts, { rotate = 0, size = [612, 792], runs = null } = {}) {
+function view(texts, { rotate = 0, size = [612, 792], runs = null, pictured = null } = {}) {
     const dom = new JSDOM('<div id="root"></div>', { pretendToBeVisual: true }), win = dom.window, root = win.document.querySelector('#root'), frames = new Map(), drawn = [];
     let serial = 0;
     win.requestAnimationFrame = fn => { frames.set(++serial, fn); return serial; }; win.cancelAnimationFrame = id => frames.delete(id);
@@ -19,6 +19,7 @@ function view(texts, { rotate = 0, size = [612, 792], runs = null } = {}) {
         async getPage(number) {
             return {
                 rotate, async getTextContent() { return { items: runs?.[number] || [{ str: texts[number - 1] }] }; },
+                async getOperatorList() { return { fnArray: pictured?.includes(number) ? [1, 85, 2] : [1, 44, 2] }; },
                 getViewport({ scale, rotation }) { const turned = rotation % 180 !== 0; return { width: (turned ? size[1] : size[0]) * scale, height: (turned ? size[0] : size[1]) * scale, scale, rotation, convertToViewportPoint: (x, y) => rotation === 90 ? [y * scale, x * scale] : [x * scale, (size[1] - y) * scale] }; },
                 render(options) { drawn.push({ number, ...options, canvas: [options.canvasContext.done.slice()] }); return { promise: Promise.resolve() }; },
                 cleanup() { drawn.push({ cleaned: number }); }
@@ -85,13 +86,14 @@ test('a run says how far it is in a strip over the page, with one way to stop it
         h.adapter.showRun('Three', stop); assert.equal(h.root.querySelector('.annotator-scan-strip'), null);
     } finally { h.close(); }
 });
-test('pages with only a little text of their own are known, and where that text is', async () => {
+test('pages with only a little text of their own, over a picture, are known, and where that text is', async () => {
     const stamp = { str: 'Downloaded from a library on 12 March', transform: [10, 0, 0, 10, 61.2, 752.4], width: 244.8, height: 10 };
-    const h = view(['', 'Downloaded from a library on 12 March', 'x'.repeat(301), '  '], { runs: { 2: [stamp, { str: '' }] } });
+    // Page 2: a stamp over the picture of a page. Page 5: a short page of text (a title page), with no picture. Page 3: too much text.
+    const h = view(['', 'Downloaded from a library on 12 March', 'x'.repeat(301), '  ', 'A short title page'], { runs: { 2: [stamp, { str: '' }] }, pictured: [1, 2, 3] });
     try {
         assert.equal(h.adapter.pagesWithLittleText, null, 'not said before the pages are read');
-        h.adapter.setAnnotations([]); await h.flush();
-        assert.deepEqual(h.adapter.pagesWithoutText, [1, 4]); assert.deepEqual(h.adapter.pagesWithLittleText, [2], 'a page of text is not a scan with a stamp');
+        h.adapter.setAnnotations([]); await h.flush(); await h.flush();
+        assert.deepEqual(h.adapter.pagesWithoutText, [1, 4]); assert.deepEqual(h.adapter.pagesWithLittleText, [2], 'a short page of text that draws no picture is not a scan; nor is a page of text');
         // The stamp: a tenth in from the left, four tenths wide, at the page's top.
         assert.deepEqual(await h.adapter.ownText(2), [{ page: 2, x: 1000, y: 374, w: 4000, h: 126 }]);
         assert.deepEqual(await h.adapter.ownText(1), [], 'a page with no text has none to keep clear of');

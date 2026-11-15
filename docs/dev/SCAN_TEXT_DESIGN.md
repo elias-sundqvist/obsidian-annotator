@@ -647,7 +647,8 @@ recorded with what was built on them:
 Built since section 15:
 
 - **Pages with a little text of their own** (300 letters at most: a stamp, a
-  header) are offered, and taken by default when a PDF has no page without
+  header) that also draw a picture are offered (a short page of text, such
+  as a title page, draws none and is not), and taken by default when a PDF has no page without
   text. Where the page has its text comes from the PDF library's runs of
   text (`ownTextBoxes`), and the checked sifting (`apart`, section 9) leaves
   out what is read there again. Seen in Obsidian: a stamped scan's copy has
@@ -689,25 +690,43 @@ a test that fails without its fix:
 
 ## 17. Where it was tried, in full
 
-| | Obsidian 1.15.1, desktop (a separate instance, a throwaway vault) | iOS WebKit in the Simulator (harness) | Chromium (harness) |
-| --- | --- | --- | --- |
-| The dialog; a run; the copy written; the original byte for byte unchanged | yes | yes | yes |
-| The copy opened: its pages have their text | yes | yes | yes |
-| A highlight on recognised words, the first one on a new note included | yes | not tried | yes |
-| A second run on the copy for the remaining pages | not tried | yes | not tried |
-| A stamped scan read around its stamp | yes | not tried | not tried |
-| Pages kept from an interrupted run taken as read (the kept file was written by hand, the app was not actually closed mid-run) | yes | not tried | not tried |
-| *Annotate the copy from now on*: the note points at the copy and the area made on the original is on it | yes | not tried | not tried |
-| Read again in another language (Swedish, then German); a highlight keeps its place | yes | not tried | not tried |
-| The words of a marked area read and kept, shown on its card | yes | not tried | not tried |
-| The recogniser's files listed and one removed (through the plugin, not by clicking in the settings window) | yes | not tried | not tried |
+| | Obsidian 1.15.1, desktop (a separate instance, a throwaway vault) | Obsidian for Android 0.3.1's test vault on the Android 16 emulator (phone) | iOS WebKit in the Simulator (harness) | Chromium (harness) |
+| --- | --- | --- | --- | --- |
+| The dialog; a run; the copy written; the original byte for byte unchanged | yes | yes (both pages in 3.6 s; the interface never held longer than 28 ms) | yes | yes |
+| The copy opened: its pages have their text | yes | yes | yes | yes |
+| A highlight on recognised words, the first one on a new note included | yes | yes (painted on its words) | not tried | yes |
+| A second run on the copy for the remaining pages | not tried | not tried | yes | not tried |
+| A run on a PDF whose copy has every page already: says so, offers the copy | not tried | yes | not tried | not tried |
+| A stamped scan read around its stamp | yes | not tried | not tried | not tried |
+| Pages kept from an interrupted run taken as read (the kept file was written by hand) | yes | not tried | not tried | not tried |
+| *Annotate the copy from now on* | yes | not tried | not tried | not tried |
+| Read again in another language; a highlight keeps its place | yes | not tried | not tried | not tried |
+| The words of a marked area read and kept | yes | yes | not tried | not tried |
+| The recogniser's files listed and one removed (through the plugin) | yes | not tried | not tried | not tried |
 
-The files were put into the plugin's folder by hand everywhere: nothing is
-at the address yet. **Not tried anywhere:** fetching; Stop in the middle of
-a long run; a long document; the settings rows clicked by hand; Obsidian on
-Android or iOS (the Android emulator's Obsidian could be reached, but the
-attempt to connect to it was refused by the permission system of the
-session that did this work, and was not pressed).
+On Android the phone layout was in use (`is-phone`): the dialog started at
+"This page", as designed for a phone. The emulator's vault is a shared test
+vault: the installed plugin files were saved first, the build and the
+recogniser's files were put in through Obsidian's own file access, the trial
+worked in a folder of its own, and afterwards everything it added was
+removed and the plugin's files were put back; each was compared with what
+was saved, byte for byte, and the PDF that had been open was opened again.
+
+The recogniser's files were put into the plugin's folder by hand everywhere:
+nothing is at the address yet. **Not tried anywhere:** fetching; Stop in the
+middle of a long run; a long document; the settings rows clicked by hand;
+Obsidian for iOS.
+
+Two things the Android trial brought out, both put right:
+
+- The fixture's third page, a short page of real text, was offered as a
+  "page with a little text". Such a page is now offered only if it also
+  draws a picture (pdf.js's drawing instructions are looked at once, after
+  the text has been read).
+- Running **Recognise text…** again on a PDF whose copy has every page
+  already read them again and then said "This page already has recognised
+  text". Pages the copy has are now left out of the dialog, and when none
+  are left it says the copy has them, with *Open the copy*.
 
 ## 18. Not built
 
