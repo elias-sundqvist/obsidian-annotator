@@ -5,6 +5,13 @@ What changed for someone using Annotator. How to use each thing is in
 
 ## Unreleased
 
+- **Keys on a selection.** The selection bar's letter keys (`H` to mark,
+  `A` for a note, `S` for the next mark style) can be changed in the
+  settings; a key is one character, not a number, and no two are the same,
+  and **Reset** brings the old ones back. The bar's labels, and those of a
+  video transcript's bar, name the keys chosen. **Next mark style** is now a
+  command, so every action on a selection can also have a hotkey of
+  Obsidian's.
 - A PDF or book on a server that asks for a user name and password (HTTP
   Basic, for example a Calibre-Web library behind nginx) can be downloaded:
   the reader asks for them when the server does, and keeps them only until

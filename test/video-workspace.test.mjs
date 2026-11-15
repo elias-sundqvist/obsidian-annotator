@@ -425,3 +425,18 @@ test('words selected in the transcript get a bar: Highlight keeps them at their 
   select(spans()[1].firstChild,0,spans()[1].firstChild,6);await h.view.onClose();assert.equal(bar(),null);
  }finally{h.dispose();}
 });
+test('the bar of a transcript answers the keys chosen for the selection bar, and names them',async()=>{
+ const h=host();try{h.callbacks.keys=()=>({mark:'m',note:'n',style:'y'});await h.view.onLoadFile(h.file);const doc=h.content.ownerDocument,win=doc.defaultView;
+  h.view.showTranscript({source:'Synthetic VTT',language:'en',cues:[{start:12.5,end:16,text:'First passage here'},{start:20.25,end:25,text:'Second passage'}]});
+  const spans=()=>[...h.content.querySelectorAll('[data-transcript-cue]')],bar=()=>doc.querySelector('.annotator-transcript-actions'),select=(a,from,b,to)=>{const r=doc.createRange();r.setStart(a,from);r.setEnd(b,to);const s=doc.getSelection();s.removeAllRanges();s.addRange(r);doc.dispatchEvent(new win.Event('selectionchange'));};
+  const press=key=>{const event=new win.KeyboardEvent('keydown',{key,bubbles:true,cancelable:true});doc.dispatchEvent(event);return event.defaultPrevented;};
+  select(spans()[0].firstChild,6,spans()[0].firstChild,13);
+  assert.deepEqual([...bar().querySelectorAll('button')].map(button=>button.getAttribute('aria-label')),['Highlight (m)','Note (n)']);
+  // The keys they replace do nothing here.
+  const before=h.source;assert.equal(press('h'),false);assert.equal(press('a'),false);await new Promise(resolve=>setTimeout(resolve,20));assert.equal(h.source,before);assert.ok(bar());
+  // The chosen ones act, a capital as well.
+  assert.equal(press('M'),true);await new Promise(resolve=>setTimeout(resolve,20));assert.ok(published.loadVideoAnnotationsAtUriFromFileText(null,h.source).some(row=>row.content==='> passage'));
+  select(spans()[1].firstChild,0,spans()[1].firstChild,6);assert.equal(press('n'),true);await new Promise(resolve=>setTimeout(resolve,20));
+  assert.equal(h.content.querySelector('textarea').value,'> Second');
+ }finally{h.dispose();}
+});

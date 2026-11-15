@@ -180,6 +180,17 @@ Select text. A small bar appears with the mark style, six inks and **Note**.
 
 - A colour marks the passage. `H` marks it in the last colour used,
   `1`–`6` pick a colour, `A` opens a note on the passage.
+- **The letter keys can be changed**: Settings → Annotator → **Keys on a
+  selection** gives marking, the note and the next mark style a key each (one
+  character that is not a number; no two the same; **Reset** brings back `H`,
+  `A` and `S`). The bar's labels name the keys chosen, and so does the bar of
+  a video's transcript. `Shift` with the mark key copies the link as before
+  when that key is a letter; `Shift` turns most other keys into another
+  character. Every action of the bar is also a command (**Highlight
+  selection**, **Highlight selection: Yellow** and the other colours,
+  **Highlight selection and copy its link**, **Add note to selection**,
+  **Next mark style**), so Obsidian's own Hotkeys settings can give any of
+  them a key of their own, with `Ctrl/Cmd` too.
 - To quote a passage in a note you are writing, hold `Shift`: `Shift+H`,
   `Shift+1`–`6` or a Shift-click on a colour highlights it and copies the
   highlight's link, ready to paste. The command **Highlight selection and
@@ -832,7 +843,7 @@ each with its own annotations.
 
 | Where | Keys |
 | --- | --- |
-| Text selected | `H` mark, `1`–`6` ink, `S` next mark style, `A` note; with `Shift`, mark and copy its link |
+| Text selected | `H` mark, `1`–`6` ink, `S` next mark style, `A` note; with `Shift`, mark and copy its link. The letters can be changed in the settings, under **Keys on a selection** |
 | Writing a note | `Ctrl/Cmd+Enter` save, `Escape` cancel |
 | Marking an area | `Enter` place or keep, arrows move, `Shift`+arrows resize, `Escape` leave |
 | A saved area, focused | arrows move, `Shift`+arrows resize, `Alt` for fine steps |
@@ -843,7 +854,10 @@ each with its own annotations.
 | Book | `Ctrl/Cmd+F` find |
 | Video | `K`/`Space` play, `J`/`L` ±10 s, arrows ±5 s, `N` note, `S` frame note |
 
-Every command is in the command palette and can be given a hotkey.
+Every command is in the command palette and can be given a hotkey. That
+includes each action on a selection (marking, each colour, marking and copying
+the link, the note, the next mark style), for a key of your own beyond the
+letters the settings offer.
 
 ## Making it yours
 

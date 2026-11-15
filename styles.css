@@ -712,6 +712,10 @@ body:is(.annotator-compact, .annotator-compact-setting) { --annotator-quote-line
 /* ── Settings, library and migration (all built from host components) ───── */
 .annotator-ink-setting .setting-item-name { display: flex; align-items: center; gap: 8px; }
 .annotator-ink-setting .annotator-ink-swatch { cursor: default; }
+.annotator-key-setting input.annotator-key-field { width: 3.5em; text-align: center; font-family: var(--font-monospace); }
+.annotator-key-setting input.annotator-key-field.is-invalid { border-color: var(--text-error); }
+.annotator-key-problem { display: block; color: var(--text-error); }
+.annotator-key-problem:empty { display: none; }
 .annotator-library-item { display: flex; align-items: center; gap: var(--size-4-3, 12px); }
 .annotator-library-kind { display: flex; color: var(--text-muted); }
 .annotator-library-item .suggestion-content { flex: 1; min-width: 0; }

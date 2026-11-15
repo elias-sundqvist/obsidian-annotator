@@ -19,6 +19,7 @@ import { createCommentEditor, type CommentEditor } from './rich-editor';
 import { chooseFrame, cropStill, type FrameChoice } from './video-frame';
 import { leadingImage, type PageArea } from './area';
 import { noteGist } from './ink';
+import { DEFAULT_SELECTION_KEYS, pressed, type SelectionKeys } from './selection-keys';
 
 export const VIDEO_VIEW = 'annotator-native-video';
 export interface VideoCallbacks {
@@ -46,6 +47,8 @@ export interface VideoCallbacks {
     /** The video is being left: where playback stood, as a clock time ("12:34"). */
     left?(file: TFile, where: string): void;
     changed?(): void;
+    /** The keys chosen for the selection bar: the transcript's bar answers the same keys for Highlight and Note. */
+    keys?(): SelectionKeys;
 }
 /** Native timestamp collection. Embedded playback is a separate host capability;
  * this view never loads provider scripts in Obsidian's privileged document. */
@@ -603,11 +606,11 @@ export class VideoView extends FileView {
                 this.hideTranscriptBar();
                 document.getSelection()?.removeAllRanges();
             } else if (typing) return;
-            else if (event.key === 'h' || event.key === 'H') {
+            else if (pressed(event, this.selectionKeys().mark)) {
                 event.preventDefault();
                 event.stopPropagation();
                 void this.highlightTranscript();
-            } else if (event.key === 'a' || event.key === 'A') {
+            } else if (pressed(event, this.selectionKeys().note)) {
                 event.preventDefault();
                 event.stopPropagation();
                 void this.annotateTranscript();
@@ -627,6 +630,9 @@ export class VideoView extends FileView {
     }
     private transcriptBar: HTMLElement | null = null;
     private releaseTranscriptBar: (() => void) | null = null;
+    private selectionKeys(): SelectionKeys {
+        return this.callbacks.keys?.() || DEFAULT_SELECTION_KEYS;
+    }
     private hideTranscriptBar() {
         this.transcriptBar?.remove();
         this.transcriptBar = null;
@@ -677,10 +683,11 @@ export class VideoView extends FileView {
                 bar!.appendChild(each);
                 return each;
             };
-            button('Highlight', 'h', 'highlighter', () => {
+            const keys = this.selectionKeys();
+            button('Highlight', keys.mark, 'highlighter', () => {
                 void this.highlightTranscript();
             });
-            button('Note', 'a', 'message-square-plus', () => {
+            button('Note', keys.note, 'message-square-plus', () => {
                 void this.annotateTranscript();
             });
             document.body.appendChild(bar);
