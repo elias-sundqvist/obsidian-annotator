@@ -576,6 +576,8 @@ button.annotator-ink-swatch:focus-visible { outline: 2px solid var(--interactive
 .annotator-native-card:has(.annotator-native-card:hover) > .annotator-card-foot > .annotator-card-actions:not(:focus-within):not(.is-confirming):not(.is-choosing),
 .annotator-native-card:has(.annotator-native-card:focus-within) > .annotator-card-foot > .annotator-card-actions:not(:focus-within):not(.is-confirming):not(.is-choosing) { opacity: 0; pointer-events: none; }
 .annotator-card-list > .annotator-native-card:first-child > .annotator-card-foot > .annotator-card-actions { inset-block-start: -6px; }
+/* Nor over a section's label (a chapter, a page): the first card under one leaves the actions room above it. */
+.annotator-card-list > .annotator-group + .annotator-native-card { margin-block-start: 16px; }
 .annotator-ui .annotator-card-actions .annotator-icon-button { width: 24px; height: 24px; }
 .annotator-ui .annotator-card-actions .annotator-icon-button svg { width: 14px; height: 14px; }
 .annotator-ui .annotator-card-actions .annotator-icon-button[aria-label="Delete annotation"] { margin-inline-start: 5px; }

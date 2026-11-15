@@ -142,3 +142,10 @@ test('the reader breaks a block that is wrong', () => {
     assert.throws(() => read('name: A\nsettings:\n    -\n       id: x'), /indent|options/);
     assert.throws(() => read('name: A\nsettings:\n        id: x'), /before the first setting/);
 });
+
+test('a card\'s actions ride on its top edge, but never over the list\'s top or a section label just above the card', () => {
+    // Above the card by default; lowered for the first card of the list; and the first card under a section's label (a chapter, a page) leaves them room.
+    assert.match(css, /\.annotator-card-actions \{\s*position: absolute; z-index: 3; inset-block-start: -20px;/);
+    assert.ok(css.includes('.annotator-card-list > .annotator-native-card:first-child > .annotator-card-foot > .annotator-card-actions { inset-block-start: -6px; }'));
+    assert.ok(css.includes('.annotator-card-list > .annotator-group + .annotator-native-card { margin-block-start: 16px; }'));
+});
