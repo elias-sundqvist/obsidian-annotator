@@ -946,9 +946,9 @@ and the PDF export is read back with two independent PDF readers. See
 - A picture note in a book is not shown by Annotator 0.2 (it has no passage
   to anchor to there); the note itself is kept.
 - Opening a file from outside Obsidian has been tried on macOS with
-  Obsidian 1.15.0. The recipes for Windows and Linux have not been run on
-  those systems (the Linux script was run on macOS), and the menu entry
-  after a share on Android has not been tried on a phone.
+  Obsidian 1.15.0, and the share route on the Android emulator. The recipes
+  for Windows and Linux have not been run on those systems (the Linux
+  script was run on macOS), and nothing of it has been tried on a phone.
 - Annotator 0.2 does not open FictionBook (FB2) files; their annotation notes
   are kept by it but not shown with the book.
 - A FictionBook whose sections are added to or taken out in a later version

@@ -182,5 +182,13 @@ A Shortcut can do both in one step. It has not been tried on a device yet:
   `bash`, with names holding quotes, `&`, `#`, `%` and accented letters. Not
   yet on a Linux desktop.
 - Windows: not yet run.
-- Android and iOS: the address is the same code; the menu entry after a
-  share, and the Shortcut, have not been tried on a device.
+- Android: tried on the Android 16 emulator with Obsidian 1.14.4. A PDF
+  shared from the Files app to Obsidian, then **Import into vault**, shows
+  **Open in Annotator** in Obsidian's menu after the import, and it opens
+  the PDF in the reader. The address
+  `obsidian://annotator-open?vault=…&file=…`, sent by Android itself (as an
+  automation app or a link would), opens a PDF of the vault in the reader.
+  Not yet tried on a phone, nor the book route through a vault in the
+  phone's storage.
+- iOS: the address is the same code; the Shortcut has not been tried on a
+  device.

@@ -1131,9 +1131,10 @@
     {
       "id": "release-writeup",
       "title": "Plan the release write-up for the updates channel",
-      "status": "todo",
+      "status": "done",
       "parent": "release",
-      "dependsOn": ["community-review"]
+      "dependsOn": ["community-review"],
+      "notes": "Done 2026-11-15: Drafted 2026-11-15 in docs/dev/RELEASE_ANNOUNCEMENT.md (untracked in the main checkout): the 0.3 Discord post and forum outline, plus drafts for the next release (A: 0.3 with everything folded in, 1,450 characters; B: a second post for 0.3.2, 982 characters) and what to check before posting. Posting is the owner's."
     },
     {
       "id": "fork-ideas",
@@ -1471,7 +1472,7 @@
       "parent": "community",
       "dependsOn": ["open-with-annotator"],
       "estimate": 2,
-      "notes": "What docs/OPEN_WITH.md says was not run. Windows 11 (the owner's machine, ask first): Obsidian's own Open with for a PDF and a book with a current installer; the PowerShell recipe, its flashing window, Smart App Control. Ubuntu (the owner's VM, ask first): the recipe under dash, GNOME Files' Open With, Obsidian as .deb, Flatpak and AppImage. Android emulator: share a PDF to Obsidian, Import, then the 'Open in Annotator' item; a file pushed into a device-storage vault then opened with file=. iPhone/iPad (owner's devices): Save to Files into the vault, and the Shortcut in OPEN_WITH.md. Also: Finder's 'Open With → Obsidian' with an installer from 1.14.4 on (this Mac's is 1.13.7). Correct OPEN_WITH.md and the README to what is found."
+      "notes": "What docs/OPEN_WITH.md says was not run. Windows 11 (the owner's machine, ask first): Obsidian's own Open with for a PDF and a book with a current installer; the PowerShell recipe, its flashing window, Smart App Control. Ubuntu (the owner's VM, ask first): the recipe under dash, GNOME Files' Open With, Obsidian as .deb, Flatpak and AppImage. Android emulator: share a PDF to Obsidian, Import, then the 'Open in Annotator' item; a file pushed into a device-storage vault then opened with file=. iPhone/iPad (owner's devices): Save to Files into the vault, and the Shortcut in OPEN_WITH.md. Also: Finder's 'Open With → Obsidian' with an installer from 1.14.4 on (this Mac's is 1.13.7). Correct OPEN_WITH.md and the README to what is found.\n\nAndroid emulator done 2026-11-15 (Android 16, Obsidian 1.14.4): Files > Share > Obsidian > Import into vault shows Open in Annotator, which opens the PDF in the reader; obsidian://annotator-open?file= sent through Android's VIEW intent opens a vault PDF. OPEN_WITH.md and the README say so. Left: Windows 11 and Ubuntu (the owner's machines, ask first), iPhone/iPad (the owner's devices), Finder's Open With on an installer from 1.14.4, a real phone."
     },
     {
       "id": "page-range-notes",
