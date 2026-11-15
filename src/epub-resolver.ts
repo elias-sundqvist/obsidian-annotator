@@ -33,7 +33,7 @@ export async function publicationSections(
         if (!current()) throw new Error('Publication changed while indexing.');
         const html = await book.text(chapter.path);
         total += html.length;
-        if (total > 32 * 1024 * 1024) throw new Error('EPUB text exceeds the 32 MiB annotation index limit.');
+        if (total > 32 * 1024 * 1024) throw new Error('This book’s text exceeds the 32 MiB annotation index limit.');
         const parsed =
                 chapter.mediaType === 'image/svg+xml'
                     ? parseSvgPage(html, document).document

@@ -536,7 +536,7 @@ export default class AnnotatorPlugin extends Plugin {
         });
         this.addCommand({
             id: 'toggle-reader-dark-appearance',
-            name: 'Toggle PDF and EPUB dark appearance',
+            name: 'Toggle PDF and book dark appearance',
             callback: () => {
                 const dark =
                     this.reader.theme === 'dark' ||
@@ -1802,7 +1802,7 @@ export default class AnnotatorPlugin extends Plugin {
         const key = view && this.sourceKey(view),
             host = key ? this.hostFor(key) : undefined;
         if (!host) {
-            new Notice('Open a PDF, EPUB, saved reading copy or core Web viewer first.');
+            new Notice('Open a PDF, a book, a saved reading copy or the core Web viewer first.');
             return;
         }
         try {
@@ -5165,7 +5165,7 @@ class NativeSettings extends PluginSettingTab {
         new Setting(root).setName('Reading').setHeading();
         new Setting(root)
             .setName('Page appearance')
-            .setDesc('For PDFs and EPUBs.')
+            .setDesc('For PDFs and books.')
             .addDropdown(control =>
                 control
                     .addOptions({ system: 'Follow Obsidian', light: 'Light', dark: 'Dark', sepia: 'Sepia' })
@@ -5174,7 +5174,7 @@ class NativeSettings extends PluginSettingTab {
                         save(plugin.setReader({ ...plugin.reader, theme: value as ReaderPreferences['theme'] }))
                     )
             );
-        new Setting(root).setName('EPUB layout').addDropdown(control =>
+        new Setting(root).setName('Book layout').addDropdown(control =>
             control
                 .addOptions({ scroll: 'Continuous scroll', pagination: 'Pages' })
                 .setValue(plugin.reader.readingMode)
@@ -5182,7 +5182,7 @@ class NativeSettings extends PluginSettingTab {
                     save(plugin.setReader({ ...plugin.reader, readingMode: value as ReaderPreferences['readingMode'] }))
                 )
         );
-        new Setting(root).setName('EPUB text size').addSlider(control =>
+        new Setting(root).setName('Book text size').addSlider(control =>
             control
                 .setLimits(50, 200, 5)
                 .setValue(plugin.reader.fontSize)

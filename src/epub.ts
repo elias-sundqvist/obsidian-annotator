@@ -209,7 +209,7 @@ export class EpubView extends FileView {
         return 'book-open';
     }
     getDisplayText() {
-        return this.book?.title || this.file?.basename || 'EPUB';
+        return this.book?.title || this.file?.basename || 'Book';
     }
     async onLoadFile(file: TFile) {
         this.opened = false;
@@ -231,7 +231,7 @@ export class EpubView extends FileView {
         this.contentEl.addClass('annotator-publication', 'annotator-epub-reader');
         // A FictionBook is read by its own converter, which is loaded when the first one is opened; from there on it is a book like any other.
         const fictionBook = fictionBookName(file.path);
-        this.statusEl = this.contentEl.createEl('p', { text: fictionBook ? 'Opening book…' : 'Opening EPUB…' });
+        this.statusEl = this.contentEl.createEl('p', { text: 'Opening book…' });
         try {
             const revision = fileRevision(file),
                 bytes = await this.app.vault.readBinary(file),
@@ -385,11 +385,11 @@ export class EpubView extends FileView {
     private buildToolbar(book: Publication) {
         const toolbar = this.contentEl.createDiv({
             cls: 'annotator-book-toolbar',
-            attr: { 'aria-label': 'EPUB reader controls' }
+            attr: { 'aria-label': 'Book reader controls' }
         });
         const primary = toolbar.createDiv({
             cls: 'annotator-book-primary',
-            attr: { role: 'group', 'aria-label': 'EPUB navigation' }
+            attr: { role: 'group', 'aria-label': 'Book navigation' }
         });
         const icon = (label: string, name: string, action: () => void, cls = '') => {
             const button = primary.createEl('button', {

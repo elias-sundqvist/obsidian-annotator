@@ -94,17 +94,28 @@ test('a FictionBook\'s chapters are its sections with text and no titled section
     // A section that says nothing but its heading (a part's title among its chapters) opens the chapter after it; an empty one is no chapter;
     // a heading with nothing after it closes the last chapter.
     const flat = await read(fb2('<body><section><title><p>PART ONE</p></title><epigraph><p>Motto.</p></epigraph><empty-line/><p> </p></section><section/><section><title><p>I</p></title><p>First.</p></section><section><title><p>THE END</p></title></section></body>'));
-    assert.deepEqual(flat.book.chapters.map(chapter => [chapter.href, chapter.title]), [['s3.xhtml', 'I']]); assert.equal(flat.texts[0], 'PART ONE\nMotto.\n \nI\nFirst.\nTHE END\n');
+    assert.deepEqual(flat.book.chapters.map(chapter => [chapter.href, chapter.title]), [['s3.xhtml', 'PART ONE · I']]); assert.equal(flat.texts[0], 'PART ONE\nMotto.\n \nI\nFirst.\nTHE END\n');
     assert.deepEqual(flat.book.nav, [{ title: 'PART ONE', path: 's3.xhtml', fragment: '', depth: 0 }, { title: 'I', path: 's3.xhtml', fragment: 'fb2-s3', depth: 0 }, { title: 'THE END', path: 's3.xhtml', fragment: 'fb2-s4', depth: 0 }]);
     // Words set after a section inside a larger one close the chapter before them; behind a heading that is waiting for the
     // next chapter they wait with it, so nothing changes places. (Which piece goes where is the checked gathering of proofs/chapters.bend.)
     const strays = await read(fb2('<body><section><title><p>Part</p></title><section><title><p>A</p></title><p>a</p></section>after A<section><title><p>Interlude</p></title></section>after the interlude<section><title><p>B</p></title><p>b</p></section>the end</section></body>'));
     assert.deepEqual(strays.texts, ['Part\nA\na\nafter A\n', 'Interlude\nafter the interlude\nB\nb\nthe end\n']);
-    assert.deepEqual(strays.book.chapters.map(chapter => [chapter.href, chapter.title]), [['s1-1.xhtml', 'Part · A'], ['s1-3.xhtml', 'Part · B']]);
+    assert.deepEqual(strays.book.chapters.map(chapter => [chapter.href, chapter.title]), [['s1-1.xhtml', 'Part · A'], ['s1-3.xhtml', 'Part · Interlude · B']]);
     // A book of headings alone is one chapter of them; a body with nothing in it is no book.
     const bare2 = await read(fb2('<body><title><p>Only</p></title><section><title><p>Headings</p></title></section></body>'));
     assert.deepEqual(bare2.book.chapters.map(chapter => chapter.href), ['s0.xhtml']); assert.equal(bare2.texts[0], 'Only\nHeadings\n');
     await assert.rejects(open(fb2('<body><section/></body>')), /has no text/);
+    // A chapter is named by the headings it stands under: the sections it is inside, and a heading-only section before it at its
+    // level or above (an act's title among its scenes), until the next such heading or the end of the section they are in.
+    const play = await read(fb2('<body><section><section><title><p>ACT I</p></title></section><section><title><p>SCENE I</p></title><p>a</p></section><section><title><p>SCENE II</p></title><p>b</p></section></section><section><section><title><p>ACT II</p></title></section><section><title><p>SCENE I</p></title><p>c</p></section></section><section><title><p>EPILOGUE</p></title><p>d</p></section><section><title><p>VOLUME</p></title></section><section><title><p>BOOK</p></title></section><section><title><p>One</p></title><p>e</p></section></body>'));
+    assert.deepEqual(play.book.chapters.map(chapter => chapter.title), ['ACT I · SCENE I', 'ACT I · SCENE II', 'ACT II · SCENE I', 'EPILOGUE', 'BOOK · One']);
+    assert.equal(new Set(play.book.chapters.map(chapter => chapter.idref)).size, 5);
+    // Chapters with no title of their own under one heading are told apart by how they begin.
+    const letters = await read(fb2('<body><section><title><p>LETTERS</p></title></section><section><p>Dear A, the first.</p></section><section><p>Dear B, the second.</p></section></body>'));
+    assert.deepEqual(letters.book.chapters.map(chapter => chapter.title), ['LETTERS · Dear A, the first.', 'LETTERS · Dear B, the second.']);
+    // A section of nothing but space, of whatever kind, is no chapter.
+    const spaced = await read(fb2('<body><section><p>\u00a0</p><empty-line/></section><section><p>Words.</p></section></body>'));
+    assert.deepEqual(spaced.book.chapters.map(chapter => chapter.href), ['s2.xhtml']); assert.equal(spaced.texts[0], '\u00a0\nWords.\n');
     // A titled section deep inside untitled ones still divides the book there.
     const deep = await read(fb2('<body><section><section><title><p>A</p></title><p>a</p></section><section><title><p>B</p></title><p>b</p></section></section></body>'));
     assert.deepEqual(deep.book.chapters.map(chapter => chapter.href), ['s1-1.xhtml', 's1-2.xhtml']);

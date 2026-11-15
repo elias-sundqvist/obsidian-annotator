@@ -135,15 +135,15 @@ const isText = (node: Node) => node.nodeType === 3 || node.nodeType === 4;
 const matters = (node: Node) => node.nodeType === 1 || (isText(node) && !blank(node.textContent || ''));
 /**
  * Whether a node of a section is text of the section itself: words, or something that holds words. Its heading
- * (title, epigraph, picture, annotation), empty lines and empty paragraphs are not.
+ * (title, epigraph, picture, annotation), empty lines and paragraphs of nothing but space (of any kind) are not.
  */
 const says = (node: Node): boolean =>
     isText(node)
-        ? !blank(node.textContent || '')
+        ? /\S/.test(node.textContent || '')
         : node.nodeType === 1 &&
           !HEADER.has((node as Element).localName) &&
           (node as Element).localName !== 'empty-line' &&
-          !blank(node.textContent || '');
+          /\S/.test(node.textContent || '');
 // (Child nodes, not `children`: the same elements, read without the by-name lookups an element collection carries.)
 const named = (element: Element, name: string) =>
     Array.from(element.childNodes).filter(
@@ -221,7 +221,8 @@ interface Draft {
     pieces: Piece[];
     linear: boolean;
     notes: boolean;
-    /** Titles of the sections around this chapter and its own, outermost first. */ trail: string[];
+    /** The headings this chapter stands under and its own title, outermost first. */ trail: string[];
+    /** Whether the last of them is the chapter's own title. */ titled: boolean;
 }
 
 export async function openFictionBook(source: ArrayBuffer, doc: Document): Promise<Publication> {
@@ -303,41 +304,65 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
         piece: Piece;
         place?: string;
         trail?: string[];
+        titled?: boolean;
     }
     const plan = (splitBelow: number): Draft[] => {
         const row: Row[] = [];
         const holds = (nodes: Node[], owner?: Element) => nodes.some(matters) || !!owner?.getAttribute('id');
-        const section = (element: Element, depth: number, trail: string[]) => {
+        // The headings a chapter stands under, outermost first: the titles of the sections it is inside, and of the
+        // heading-only sections before it at its own level or above (a part's title set among its chapters).
+        const above: { depth: number; title: string; around: boolean }[] = [];
+        const section = (element: Element, depth: number) => {
             const all = Array.from(element.childNodes),
-                here = plain(first(element, 'title')),
-                around = here ? [...trail, here] : trail;
+                here = plain(first(element, 'title'));
+            // Coming to a section, the headings of deeper levels are behind us, and so is a section of this level that held the last ones.
+            while (
+                above.length &&
+                (above[above.length - 1].depth > depth ||
+                    (above[above.length - 1].depth === depth && above[above.length - 1].around))
+            )
+                above.pop();
             if (divided.has(element) && depth < splitBelow) {
                 const at = all.indexOf(named(element, 'section')[0]),
                     head = all.slice(0, at);
                 if (holds(head, element)) row.push({ kind: 'waits', piece: { owner: element, nodes: head, depth } });
+                if (here) above.push({ depth, title: here, around: true });
                 for (const node of all.slice(at))
                     if (node.nodeType === 1 && (node as Element).localName === 'section')
-                        section(node as Element, depth + 1, around);
+                        section(node as Element, depth + 1);
                     else if (matters(node)) row.push({ kind: 'follows', piece: { nodes: [node], depth } });
             } else if (all.some(says))
                 row.push({
                     kind: 'opens',
                     piece: { owner: element, nodes: all, depth },
                     place: placeOfSection.get(element)!,
-                    trail: around
+                    trail: [...above.map(item => item.title), ...(here ? [here] : [])],
+                    titled: !!here
                 });
-            // A section that says nothing but its heading opens the chapter that follows it.
-            else if (holds(all, element)) row.push({ kind: 'waits', piece: { owner: element, nodes: all, depth } });
+            // A section that says nothing but its heading opens the chapter that follows it, and stands over the chapters after it.
+            else if (holds(all, element)) {
+                row.push({ kind: 'waits', piece: { owner: element, nodes: all, depth } });
+                if (here) {
+                    while (above.length && above[above.length - 1].depth >= depth) above.pop();
+                    above.push({ depth, title: here, around: false });
+                }
+            }
         };
         const all = Array.from(main.childNodes),
             sections = named(main, 'section');
         if (!sections.length)
-            row.push({ kind: 'opens', piece: { owner: main, nodes: all, depth: 0 }, place: 's0', trail: [] });
+            row.push({
+                kind: 'opens',
+                piece: { owner: main, nodes: all, depth: 0 },
+                place: 's0',
+                trail: [],
+                titled: false
+            });
         else {
             const head = all.slice(0, all.indexOf(sections[0]));
             if (holds(head)) row.push({ kind: 'waits', piece: { owner: main, nodes: head, depth: 0 } });
             for (const node of all.slice(all.indexOf(sections[0])))
-                if (node.nodeType === 1 && (node as Element).localName === 'section') section(node as Element, 1, []);
+                if (node.nodeType === 1 && (node as Element).localName === 'section') section(node as Element, 1);
                 else if (matters(node)) row.push({ kind: 'follows', piece: { nodes: [node], depth: 0 } });
         }
         let gathered: {
@@ -350,18 +375,24 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
             gathered = null;
         }
         if (!gathered) throw new Error('This book has more headings in a row than can be read.');
-        const draft = (ids: number[], place: string, trail: string[]): Draft => ({
+        const draft = (ids: number[], place: string, trail: string[], titled: boolean): Draft => ({
             place,
             idref: place,
             pieces: ids.map(id => row[id].piece),
             linear: true,
             notes: false,
-            trail
+            trail,
+            titled
         });
         // A book in which nothing opens a chapter (headings alone) is one chapter of what it has.
-        if (!gathered.chapters.length) return gathered.loose.length ? [draft(gathered.loose, 's0', [])] : [];
+        if (!gathered.chapters.length) return gathered.loose.length ? [draft(gathered.loose, 's0', [], false)] : [];
         return gathered.chapters.map(chapter =>
-            draft([...chapter.lead, chapter.open, ...chapter.tail], row[chapter.open].place!, row[chapter.open].trail!)
+            draft(
+                [...chapter.lead, chapter.open, ...chapter.tail],
+                row[chapter.open].place!,
+                row[chapter.open].trail!,
+                !!row[chapter.open].titled
+            )
         );
     };
     let drafts = plan(Infinity);
@@ -391,7 +422,8 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
             pieces: [{ owner: body, nodes: Array.from(body.childNodes), depth: 0 }],
             linear: false,
             notes: true,
-            trail: []
+            trail: [],
+            titled: false
         });
     });
 
@@ -659,14 +691,15 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
             name = plain(first(owner, 'title')) || (kind ? kind[0].toUpperCase() + kind.slice(1) : 'Notes');
             nav.push({ title: name, path: pathOf(draft), fragment: '', depth: 0 });
         } else {
-            // Named by the sections it is in; a chapter no section names is named by how it begins.
-            const begins = draft.pieces
-                .flatMap(piece => piece.nodes)
-                .map(node =>
-                    (node.nodeType === 1 || isText(node) ? node.textContent || '' : '').replace(/\s+/g, ' ').trim()
-                )
-                .find(Boolean);
-            name = draft.trail.join(' · ') || (begins ? begins.slice(0, 60) : `Section ${index + 1}`);
+            // Named by the headings it stands under and its own; a chapter with no title of its own, by how it begins as well.
+            const begins = draft.titled
+                ? ''
+                : draft.pieces
+                      .flatMap(piece => piece.nodes)
+                      .filter(says)
+                      .map(node => (node.textContent || '').replace(/\s+/g, ' ').trim())
+                      .find(Boolean) || '';
+            name = [...draft.trail, ...(begins ? [begins.slice(0, 60)] : [])].join(' · ') || `Section ${index + 1}`;
         }
         add(draft.place, draft.idref, name, draft.linear, body);
     });
