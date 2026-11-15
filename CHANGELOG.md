@@ -5,6 +5,14 @@ What changed for someone using Annotator. How to use each thing is in
 
 ## Unreleased
 
+- **Underline, strike-out and squiggly lines.** A button at the start of the
+  selection bar (or `S`) chooses how a passage is marked; the inks then show
+  the line they make, and the choice is remembered. PDFs, books and reading
+  copies draw the line in the passage's ink, and a card's quote shows it. A
+  card, or a highlight's menu on the page, changes the style afterwards. The
+  style is kept as a tag (`underline`, `strike-out`, `squiggly`), the one a
+  mark taken in from another PDF program already had, so nothing new is
+  stored and an older version shows a highlight with that tag.
 - In Live Preview, an annotation note now reads as passages, links, notes
   and tags: each annotation's stored data is folded to a small mark, and
   shown again when the cursor is in it. The file is not changed, and the

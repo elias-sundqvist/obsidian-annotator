@@ -1,5 +1,6 @@
 import type { SourceCapture } from './source';
 import { DEFAULT_INK, INKS, inkAt, inkLabel, type Ink, type InkLabels } from './ink';
+import { DEFAULT_STYLE, STYLE_ACTIONS, STYLE_NAMES, nextStyle, styleIcon, type MarkStyle } from './mark-style';
 // Match the self-contained guest helper; the editing-island regressions cover both.
 function editingContext(target: EventTarget | null): boolean {
     const element =
@@ -18,6 +19,8 @@ export type SelectionAction = 'annotate' | 'highlight';
 export interface SelectionInkState {
     ink: Ink;
     labels?: InkLabels;
+    /** How a passage is marked by `h`, a number or a swatch: the style last chosen. */
+    style?: MarkStyle;
 }
 const SVG = 'http://www.w3.org/2000/svg';
 /** Lucide "message-square-plus"; inlined so this module stays free of host APIs. */
@@ -26,10 +29,19 @@ export class SelectionActions {
     private menu: HTMLElement | null = null;
     private capture: SourceCapture | null = null;
     private source: HTMLElement | null = null;
+    /** What a swatch makes while this bar is open; the bar's own, so one press of a swatch is one mark of the style it shows. */
+    private style: MarkStyle = DEFAULT_STYLE;
+    private current: Ink = DEFAULT_INK;
+    private labels: InkLabels | undefined;
+    /**
+     * `choose` is told the style with every action, so a note's passage is marked the way the bar shows as well.
+     * `restyle` hears each change of style at once: the choice is remembered even when nothing is marked with it.
+     */
     constructor(
         private document: Document,
-        private choose: (capture: SourceCapture, action: SelectionAction, ink?: Ink) => void,
-        private inks: () => SelectionInkState = () => ({ ink: DEFAULT_INK })
+        private choose: (capture: SourceCapture, action: SelectionAction, ink?: Ink, style?: MarkStyle) => void,
+        private inks: () => SelectionInkState = () => ({ ink: DEFAULT_INK }),
+        private restyle: (style: MarkStyle) => void = () => {}
     ) {
         document.addEventListener('pointerdown', this.outside, true);
         document.addEventListener('keydown', this.key, true);
@@ -79,31 +91,44 @@ export class SelectionActions {
         this.capture = capture;
         this.source = source;
         this.offered = words !== undefined;
-        const { ink: current, labels } = this.inks();
+        const { ink: current, labels, style } = this.inks();
+        this.current = current;
+        this.labels = labels;
+        // A live web page draws every mark as a highlight, so its bar offers no other style and makes none.
+        this.style = this.offered ? DEFAULT_STYLE : style || DEFAULT_STYLE;
         const menu = this.document.createElement('div');
         this.menu = menu;
         menu.className = 'annotator-selection-actions';
         menu.setAttribute('role', 'toolbar');
         menu.setAttribute('aria-label', 'Annotation actions');
+        if (!this.offered) {
+            // One control for four styles: it shows the style in use, and a press takes the next. The swatches
+            // beside it then show as that kind of mark, so it is plain what a press of one will make.
+            const cycle = this.document.createElement('button');
+            cycle.className = 'annotator-selection-style';
+            cycle.onpointerdown = event => event.preventDefault();
+            cycle.onclick = () => this.cycle();
+            menu.appendChild(cycle);
+            // Said to a screen reader when the style changes; the button's new name alone is not announced.
+            const said = this.document.createElement('span');
+            said.className = 'annotator-selection-said';
+            said.setAttribute('role', 'status');
+            menu.appendChild(said);
+        }
         const swatches = this.document.createElement('div');
         swatches.className = 'annotator-selection-inks';
         menu.appendChild(swatches);
-        for (const [index, ink] of INKS.entries()) {
-            const button = this.document.createElement('button'),
-                name = inkLabel(ink, labels);
+        for (const ink of INKS) {
+            const button = this.document.createElement('button');
             button.className = 'annotator-ink-swatch';
             button.dataset.annotatorInk = ink;
             // The remembered ink is *the* highlight action; the others are one-press alternatives.
-            if (ink === current) {
-                button.classList.add('is-current');
-                button.setAttribute('aria-label', `Highlight in ${name} (h)`);
-            } else {
-                button.setAttribute('aria-label', `Highlight in ${name} (${index + 1})`);
-            }
+            if (ink === current) button.classList.add('is-current');
             button.onpointerdown = event => event.preventDefault();
             button.onclick = () => this.run('highlight', ink);
             swatches.appendChild(button);
         }
+        this.showStyle();
         const note = this.document.createElement('button');
         note.className = 'annotator-selection-note';
         note.setAttribute('aria-label', 'Annotate selection (a)');
@@ -134,15 +159,45 @@ export class SelectionActions {
         const pane = source.getBoundingClientRect();
         menu.style.setProperty('--annotator-source-center', `${Math.round(pane.left + pane.width / 2)}px`);
         menu.style.setProperty('--annotator-source-width', `${Math.round(pane.width)}px`);
+        // On a narrow phone the bar may not hold everything: the word "Note" goes then, its icon and its name stay.
+        menu.classList.toggle('is-tight', menu.scrollWidth > menu.clientWidth + 1);
         const above = !below && rect.top > menu.offsetHeight + 14;
         menu.dataset.placement = above ? 'above' : 'below';
         menu.style.left = `${Math.max(8, Math.min(rect.left + rect.width / 2 - menu.offsetWidth / 2, this.document.documentElement.clientWidth - menu.offsetWidth - 8))}px`;
         menu.style.top = `${Math.max(8, above ? rect.top - menu.offsetHeight - 10 : rect.bottom + 10)}px`;
     }
+    /** The bar as its style has it: the style control's icon and name, and what each swatch says it makes. */
+    private showStyle() {
+        const menu = this.menu;
+        if (!menu) return;
+        menu.dataset.annotatorStyle = this.style;
+        const cycle = menu.querySelector<HTMLElement>('.annotator-selection-style');
+        if (cycle) {
+            cycle.setAttribute('aria-label', `Mark style: ${STYLE_NAMES[this.style]} (s)`);
+            cycle.replaceChildren(styleIcon(this.document, this.style));
+        }
+        menu.querySelectorAll<HTMLElement>('.annotator-ink-swatch').forEach((button, index) => {
+            const name = inkLabel(INKS[index], this.labels);
+            button.setAttribute(
+                'aria-label',
+                `${STYLE_ACTIONS[this.style]} in ${name} (${INKS[index] === this.current ? 'h' : index + 1})`
+            );
+        });
+    }
+    /** Take the next style. The selection, the bar and its place stay as they are. */
+    private cycle() {
+        if (!this.menu || this.offered) return;
+        this.style = nextStyle(this.style);
+        this.showStyle();
+        const said = this.menu.querySelector('.annotator-selection-said');
+        if (said) said.textContent = STYLE_NAMES[this.style];
+        this.restyle(this.style);
+    }
     private run(action: SelectionAction, ink?: Ink) {
-        const capture = this.capture;
+        const capture = this.capture,
+            style = this.style;
         this.hide();
-        if (capture) this.choose(capture, action, ink);
+        if (capture) this.choose(capture, action, ink, style);
     }
     private outside = (event: Event) => {
         if (!this.menu?.contains(event.target as Node)) this.hide();
@@ -161,7 +216,11 @@ export class SelectionActions {
         const key = event.key.toLowerCase(),
             ink = /^[1-9]$/.test(key) ? inkAt(Number(key)) || undefined : undefined;
         if (event.key === 'Escape') this.hide();
-        else if (key === 'a' || key === 'h' || ink) {
+        else if (key === 's' && !this.offered) {
+            event.preventDefault();
+            event.stopPropagation();
+            this.cycle();
+        } else if (key === 'a' || key === 'h' || ink) {
             event.preventDefault();
             event.stopPropagation();
             this.run(key === 'a' ? 'annotate' : 'highlight', ink);

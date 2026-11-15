@@ -11,7 +11,11 @@ export function refreshSnapshotEditors(path: string) {
     });
 }
 export function snapshotEditorExtension(
-    provider: (path: string, raw: string, view: EditorView) => { id: string; from: number; to: number; ink?: string }[],
+    provider: (
+        path: string,
+        raw: string,
+        view: EditorView
+    ) => { id: string; from: number; to: number; ink?: string; style?: string }[],
     open: (path: string, id: string, view: EditorView) => void
 ) {
     return ViewPlugin.fromClass(
@@ -31,7 +35,11 @@ export function snapshotEditorExtension(
                     ranges.map(range =>
                         Decoration.mark({
                             class: 'annotator-snapshot-highlight',
-                            attributes: { 'data-annotation-id': range.id, 'data-annotator-ink': range.ink || 'yellow' }
+                            attributes: {
+                                'data-annotation-id': range.id,
+                                'data-annotator-ink': range.ink || 'yellow',
+                                'data-annotator-style': range.style || 'highlight'
+                            }
                         }).range(range.from, range.to)
                     ),
                     true

@@ -1,6 +1,7 @@
 import { Scope, setIcon, type App, type TFile } from 'obsidian';
 import { createCommentEditor, type CommentEditor } from './rich-editor';
 import { INKS, inkLabel, type Ink, type InkLabels } from './ink';
+import type { MarkStyle } from './mark-style';
 
 /**
  * The note composer, on the page.
@@ -81,7 +82,7 @@ export interface ComposerModel {
     labels: InkLabels;
     /** Paint the passage while composing (a new selection has no mark of its own yet). */
     paintsPassage: boolean;
-    state(): { ink: Ink; comment: string; tags: string; busy: boolean; blocked: boolean };
+    state(): { ink: Ink; style?: MarkStyle; comment: string; tags: string; busy: boolean; blocked: boolean };
     suggestions(): string[];
     setInk(ink: Ink): void;
     setComment(value: string): void;
@@ -174,6 +175,8 @@ export class FloatingComposer {
         this.tags.oninput = () => {
             model.setTags(this.tags.value);
             this.renderSuggestions();
+            // A tag may say how the passage is marked: the passage on the page follows it.
+            this.update();
         };
         this.suggestions = root.createDiv({
             cls: 'annotator-tag-suggestions',
@@ -268,15 +271,20 @@ export class FloatingComposer {
                 this.tags.value = next;
                 this.model.setTags(next);
                 this.renderSuggestions();
+                this.update();
             };
         }
     }
-    /** Reflect model state that can change underneath the card (ink, busy). */
+    /** Reflect model state that can change underneath the card (ink, style, busy). */
     update() {
         if (this.closed) return;
         const state = this.model.state();
         this.root.dataset.annotatorInk = state.ink;
-        if (this.marks) this.marks.dataset.annotatorInk = state.ink;
+        if (this.marks) {
+            // The passage is shown as it will be marked: tinted, or with the line its tags say.
+            this.marks.dataset.annotatorInk = state.ink;
+            this.marks.dataset.annotatorStyle = state.style || 'highlight';
+        }
         for (const dot of this.swatches) {
             const on = dot.dataset.annotatorInk === state.ink;
             dot.classList.toggle('is-current', on);

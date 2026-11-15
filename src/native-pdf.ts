@@ -25,6 +25,7 @@ import { INKS, INK_NAMES, DEFAULT_INK, inkOf, type Ink } from './ink';
 import type { PdfRef } from './pdf-write';
 import { bindMarkAction } from './mark-actions';
 import { decorateMark, noteGist } from './ink';
+import { styleOf } from './mark-style';
 import { openAnnotationAtPoint, type AnnotationRange } from './annotation-choices';
 import {
     domRange,
@@ -1216,6 +1217,8 @@ export class NativePdf {
             width: number;
             height: number;
             overlay: HTMLElement;
+            /** The layer of the marks that are lines, where the page has any. */
+            lines: HTMLElement | null;
             ranges: AnnotationRange[];
             errors: [string, string][];
         }
@@ -1311,6 +1314,7 @@ export class NativePdf {
                 before.text === index.text &&
                 before.content === content &&
                 before.overlay.parentElement === pageEl &&
+                (!before.lines || before.lines.parentElement === pageEl) &&
                 before.ranges.every(item => item.range.startContainer.isConnected);
             if (!same) clear(pageEl);
             sheets.push({
@@ -1410,7 +1414,14 @@ export class NativePdf {
                 continue;
             }
             // A page whose size changed keeps its overlay and has its marks made again.
-            if (sheet.same) overlay.replaceChildren();
+            if (sheet.same) {
+                overlay.replaceChildren();
+                pageEl.querySelectorAll(':scope > .annotator-line-marks').forEach(node => node.remove());
+            }
+            // An underline, a strike-out or a squiggly line is thin: it is drawn at full strength in a layer of its own, just over the tints.
+            const lines = passages.some(item => item.rects.length && styleOf(item.annotation) !== 'highlight')
+                ? pageEl.createDiv({ cls: 'annotator-native-marks annotator-line-marks' })
+                : null;
             // A passage that found no place on the page (its text not laid out yet) is not kept: the page is painted again
             // shortly, a few times at most, so that it does not wait for the reader to scroll or the note to change.
             const placed = passages.every(item => item.rects.length);
@@ -1428,11 +1439,13 @@ export class NativePdf {
                     width: bounds.width,
                     height: bounds.height,
                     overlay,
+                    lines,
                     ranges,
                     errors
                 });
             for (const { annotation, area } of areas) this.paintArea(pageEl, annotation, area);
             for (const { annotation, quote, rects } of passages) {
+                const layer = (styleOf(annotation) !== 'highlight' && lines) || overlay;
                 for (const rect of rects) {
                     if (rect.width < 0.5 || rect.height < 0.5) continue;
                     // One tooltip, the host's: it shows the label. A highlight with a note is named by the note, so
@@ -1440,7 +1453,7 @@ export class NativePdf {
                     // since the passage is already under the pointer. No `title`: that adds the system tooltip on top.
                     const note = noteGist(annotation.text),
                         open = `Open annotation: ${quote.exact}`;
-                    const mark = overlay.createEl('button', {
+                    const mark = layer.createEl('button', {
                         cls: 'annotator-native-mark',
                         attr: {
                             ...(note
@@ -1513,7 +1526,7 @@ export class NativePdf {
             }
         });
         mark.classList.toggle('is-active', this.activeId === annotation.id);
-        decorateMark(mark, annotation);
+        decorateMark(mark, annotation, false);
         mark.classList.toggle('has-note', !!note);
         mark.style.left = `${area.x / 100}%`;
         mark.style.top = `${area.y / 100}%`;

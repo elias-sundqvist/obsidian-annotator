@@ -5,6 +5,7 @@ import { domRange, findQuotes, indexLayer, normalize, type TextNodeIndex } from 
 import { describeHtml, rangeFromHtml } from './html-selectors';
 import { bindMarkAction } from './mark-actions';
 import { decorateMark } from './ink';
+import { styleOf } from './mark-style';
 import { openAnnotationAtPoint, type AnnotationRange } from './annotation-choices';
 
 export type Selector = NonNullable<Annotation['target'][number]['selector']>[number];
@@ -365,6 +366,7 @@ export class RangePainter {
     private generation = 0;
     private marks: HTMLElement | null = null;
     private frames: HTMLElement | null = null;
+    private lines: HTMLElement | null = null;
     private resize: ResizeObserver | null = null;
     private observer: MutationObserver | null = null;
     private frame: number | null = null;
@@ -413,6 +415,8 @@ export class RangePainter {
         this.marks?.remove();
         this.frames?.remove();
         this.frames = null;
+        this.lines?.remove();
+        this.lines = null;
         if (this.stopped || !this.root.isConnected) return;
         this.root.classList.add('annotator-reading-surface');
         const overlay = this.root.ownerDocument.createElement('div');
@@ -428,7 +432,7 @@ export class RangePainter {
                 button.dataset.annotationId = id;
                 const row = this.annotationOf(id),
                     picture = !!figureOf(row);
-                decorateMark(button, row);
+                decorateMark(button, row, !picture);
                 // A picture kept with a note is framed, not tinted: it stays as the book shows it.
                 button.classList.toggle('annotator-figure-mark', picture);
                 button.setAttribute('aria-label', picture ? 'Picture with a note: open it' : 'Open saved annotation');
@@ -462,6 +466,14 @@ export class RangePainter {
                         this.root.appendChild(this.frames);
                     }
                     this.frames.appendChild(button);
+                } else if (styleOf(row) !== 'highlight') {
+                    // An underline, a strike-out or a squiggly line is thin: it is drawn at full strength in a layer of its own, just over the tints.
+                    if (!this.lines) {
+                        this.lines = this.root.ownerDocument.createElement('div');
+                        this.lines.className = 'annotator-native-marks annotator-line-marks';
+                        this.root.insertBefore(this.lines, overlay.nextSibling);
+                    }
+                    this.lines.appendChild(button);
                 } else overlay.appendChild(button);
             }
     }
@@ -477,6 +489,7 @@ export class RangePainter {
         if (this.frame !== null) this.root.ownerDocument.defaultView!.cancelAnimationFrame(this.frame);
         this.marks?.remove();
         this.frames?.remove();
+        this.lines?.remove();
     }
 }
 

@@ -20,6 +20,7 @@ Set these on `body` from a CSS snippet, or use the **Style Settings** plugin
 | `--annotator-paper` | `#f4ecd8` | The paper of the "Sepia" page, for PDFs and books. Set it to parchment, grey, or any colour (a hex, `rgb()` or `hsl()` value). |
 | `--annotator-paper-text` | `#433422` | The text of a book on that paper. A PDF keeps its own ink. |
 | `--annotator-note-underline` | `2px` | Line under highlights that carry a note (`0px` to disable). |
+| `--annotator-line-thickness` | `2px` | The least thickness of an underline, a strike-out or a squiggly line; large text gets a thicker one. |
 | `--annotator-quote-font`, `--annotator-quote-size`, `--annotator-quote-color` | text font, UI small, normal text | Quoted passages in the sidebar. |
 | `--annotator-quote-lines` | `4` | Lines of a long quote before "More". |
 | `--annotator-radius`, `--annotator-radius-small`, `--annotator-pill` | `--radius-m`, `--radius-s`, pill | Corner shapes; a square theme gives square cards and a square selection bar. |
@@ -45,6 +46,16 @@ body {
 - Marks on the page: `.annotator-native-mark` (`.has-note`, `.is-active`,
   `.is-hover`). The mark layer blends with the page (`multiply` on light paper,
   `screen` on dark), so text stays crisp.
+- A mark over a passage also carries `data-annotator-style`: `highlight`,
+  `underline`, `strike-out` or `squiggly`, read from the annotation's tags.
+  Marks that are a line sit in a layer of their own,
+  `.annotator-native-marks.annotator-line-marks`, drawn at full strength
+  rather than blended; the line is the mark's `::after`. A line whose passage
+  has a note has a light wash of its ink. The same attribute is on a card
+  (its quote is drawn with the line), on the selection bar
+  (`.annotator-selection-actions`, whose style button is
+  `.annotator-selection-style`), and on a reading copy's marks in the editor
+  (`.annotator-snapshot-highlight`, drawn as a text decoration).
 - Exported summaries write `> [!quote|blue]`; the stylesheet tints those
   callouts with the same ink via `data-callout-metadata`.
 

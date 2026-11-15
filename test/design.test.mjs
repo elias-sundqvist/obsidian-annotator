@@ -203,6 +203,126 @@ test('the selection bar offers every ink; the remembered ink is the highlight ac
     } finally { actions.dispose(); w.close(); }
 });
 
+test('the selection bar chooses how a passage is marked: one control goes round the styles, the swatches show the line they make', async () => {
+    const dom = new JSDOM('<body><article>Selected passage</article></body>'), w = dom.window;
+    const { SelectionActions } = await import('./.generated/readers/selection-actions.js');
+    w.Range.prototype.getBoundingClientRect = () => ({ left: 10, top: 100, bottom: 120, width: 100, height: 20 });
+    let remembered = 'underline';
+    const chosen = [], heard = [], actions = new SelectionActions(w.document, (_capture, action, ink, style) => chosen.push([action, ink, style]), () => ({ ink: 'pink', labels: { pink: 'Question' }, style: remembered }), style => { heard.push(style); remembered = style; });
+    const source = w.document.querySelector('article'), capture = { file: 'a.pdf', exact: 'Selected passage', revision: 'r' };
+    const open = () => { const range = w.document.createRange(); range.selectNodeContents(source); w.getSelection().removeAllRanges(); w.getSelection().addRange(range); actions.show(capture, source); };
+    const bar = () => w.document.querySelector('[role=toolbar]'), control = () => bar().querySelector('.annotator-selection-style'), labels = () => [...bar().querySelectorAll('.annotator-ink-swatch')].map(el => el.getAttribute('aria-label'));
+    const key = name => w.document.dispatchEvent(new w.KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true }));
+    try {
+        // It opens in the remembered style: the control and every swatch say what a press makes.
+        open();
+        assert.equal(bar().dataset.annotatorStyle, 'underline'); assert.equal(control().getAttribute('aria-label'), 'Mark style: Underline (s)'); assert.equal(control().tagName, 'BUTTON');
+        assert.equal(bar().firstElementChild, control(), 'the style comes before the inks it applies to');
+        assert.ok(control().querySelector('svg[aria-hidden="true"]'), 'it shows the style as an icon');
+        assert.deepEqual(labels(), ['Underline in Yellow (1)', 'Underline in Orange (2)', 'Underline in Question (h)', 'Underline in Purple (4)', 'Underline in Blue (5)', 'Underline in Green (6)']);
+        // A press takes the next style; the bar, its selection and its place stay; the choice is remembered at once and said to a screen reader.
+        control().dispatchEvent(new w.MouseEvent('pointerdown', { bubbles: true, cancelable: true })); control().click();
+        assert.ok(bar()); assert.equal(w.getSelection().toString(), 'Selected passage'); assert.equal(chosen.length, 0);
+        assert.equal(bar().dataset.annotatorStyle, 'strike-out'); assert.equal(control().getAttribute('aria-label'), 'Mark style: Strike-out (s)'); assert.equal(labels()[2], 'Strike out in Question (h)');
+        assert.deepEqual(heard, ['strike-out']); assert.equal(bar().querySelector('[role=status]').textContent, 'Strike-out');
+        // The key does the same, round all four and back.
+        key('s'); assert.equal(bar().dataset.annotatorStyle, 'squiggly'); assert.equal(labels()[0], 'Squiggly underline in Yellow (1)');
+        key('S'); assert.equal(bar().dataset.annotatorStyle, 'highlight'); assert.equal(labels()[2], 'Highlight in Question (h)');
+        key('s'); assert.deepEqual(heard, ['strike-out', 'squiggly', 'highlight', 'underline']); assert.equal(chosen.length, 0);
+        // Every way of marking carries the style shown: a swatch, h, a number, and a note.
+        bar().querySelectorAll('.annotator-ink-swatch')[4].click(); assert.deepEqual(chosen.pop(), ['highlight', 'blue', 'underline']); assert.equal(bar(), null);
+        for (const [name, expected] of [['h', ['highlight', undefined, 'underline']], ['3', ['highlight', 'pink', 'underline']], ['a', ['annotate', undefined, 'underline']]]) { open(); key(name); assert.deepEqual(chosen.pop(), expected, name); }
+        open(); bar().querySelector('[aria-label="Annotate selection (a)"]').click(); assert.deepEqual(chosen.pop(), ['annotate', undefined, 'underline']);
+        // With a modifier, s is the host's (a save, say), not the bar's.
+        open(); w.document.dispatchEvent(new w.KeyboardEvent('keydown', { key: 's', metaKey: true, bubbles: true })); assert.equal(bar().dataset.annotatorStyle, 'underline'); actions.hide();
+        // Nothing remembered yet: a highlight.
+        remembered = undefined; open(); assert.equal(bar().dataset.annotatorStyle, 'highlight'); key('h'); assert.deepEqual(chosen.pop(), ['highlight', undefined, 'highlight']);
+        // A live web page draws highlights only: its bar has no style control, s does nothing there, and what it makes is a highlight.
+        remembered = 'squiggly'; actions.offer(capture, source, 'Selected passage');
+        assert.equal(control(), null); assert.equal(bar().dataset.annotatorStyle, 'highlight'); assert.equal(labels()[2], 'Highlight in Question (h)');
+        key('s'); assert.equal(bar().dataset.annotatorStyle, 'highlight'); assert.deepEqual(heard, ['strike-out', 'squiggly', 'highlight', 'underline']);
+        key('h'); assert.deepEqual(chosen.pop(), ['highlight', undefined, 'highlight']);
+    } finally { actions.dispose(); w.close(); }
+});
+
+test('a new passage is marked in the style last chosen, as a tag the note shows; the style is remembered with the inks', async () => {
+    const h = await collection([quoted('a', 'Passage')]);
+    try {
+        const host = { view: { contentEl: h.dom.window.document.body }, payload: async (capture, comment, id) => quoted(id, capture.exact, { text: comment }), isCurrent: () => true, identity: () => ({ uri: 'urn:x-pdf:draft' }), status: () => 'Page 1' };
+        h.plugin.hostFor = () => host;
+        const stored = exact => h.records().find(each => each.target[0].selector?.[0].exact === exact);
+        // Marked at once: the style is a tag; the ink as usual.
+        await h.plugin.beginCapture({ file: h.file.path, exact: 'First', revision: 'r' }, 'highlight', 'blue', 'squiggly');
+        assert.deepEqual(stored('First').tags, ['squiggly']); assert.equal(stored('First').color, 'blue'); assert.equal(h.plugin.lastStyle, 'squiggly');
+        // Nothing said: the remembered style. A note opens with its style among the tags, and the user's tags join it.
+        await h.plugin.beginCapture({ file: h.file.path, exact: 'Second', revision: 'r' }, 'annotate');
+        assert.deepEqual(h.plugin.tags, ['squiggly']); assert.equal(h.plugin.tagInput, 'squiggly');
+        h.plugin.updateTags(['squiggly', 'idea']); h.plugin.updateComment('Why'); await h.plugin.save();
+        assert.deepEqual(stored('Second').tags, ['squiggly', 'idea']); assert.equal(stored('Second').text, 'Why');
+        // A note given up before anything was written leaves no draft behind: the style tag is the reader's, not the user's.
+        await h.plugin.beginCapture({ file: h.file.path, exact: 'Third', revision: 'r' }, 'annotate', undefined, 'underline');
+        assert.deepEqual(h.plugin.tags, ['underline']); h.plugin.dismissEdit(); assert.equal(h.plugin.draftSessions.size, 0);
+        // A highlight is no tag at all, as before.
+        await h.plugin.beginCapture({ file: h.file.path, exact: 'Fourth', revision: 'r' }, 'highlight', undefined, 'highlight');
+        assert.deepEqual(stored('Fourth').tags, []); assert.equal(h.plugin.lastStyle, 'highlight');
+        // The choice is kept with the inks.
+        h.plugin.setMarkStyle('strike-out'); await h.plugin.savePreferences(); assert.equal(h.plugin.data.nativeInks.style, 'strike-out'); assert.equal(h.plugin.data.nativeInks.last, 'blue');
+        // A live web page draws highlights only: nothing made there is given a line, and the style chosen elsewhere stays.
+        const { LiveWebHost } = await import('./.generated/plugin-boundary.mjs'), binding = h.plugin.bindingFor;
+        h.plugin.bindingFor = () => ({ host: Object.create(LiveWebHost.prototype) });
+        await h.plugin.beginCapture({ file: h.file.path, exact: 'Fifth', revision: 'r' }, 'annotate', undefined, 'squiggly');
+        assert.deepEqual(h.plugin.tags, []); assert.equal(h.plugin.lastStyle, 'strike-out'); h.plugin.cancelEdit(); h.plugin.bindingFor = binding;
+    } finally { h.dispose(); }
+});
+
+test('a saved passage can be marked another way: its tags change as an edit of them would change them, the rest stays', async () => {
+    const h = await collection([quoted('a', 'Passage', { text: 'Note', tags: ['idea', 'underline', 'todo'], color: 'green' }), quoted('b', 'Other')]);
+    try {
+        const before = h.contents.get(h.note.path);
+        await h.plugin.restyle(h.file.path, h.records()[0], 'squiggly');
+        const row = h.records()[0]; assert.deepEqual(row.tags, ['idea', 'squiggly', 'todo']); assert.equal(row.text, 'Note'); assert.equal(row.color, 'green'); assert.deepEqual(row.target, storeRead(before)[0].target);
+        assert.ok(h.contents.get(h.note.path).startsWith('Prose that must survive.\n')); assert.deepEqual(h.records()[1], storeRead(before)[1]);
+        await h.plugin.restyle(h.file.path, h.records()[0], 'highlight'); assert.deepEqual(h.records()[0].tags, ['idea', 'todo']);
+        await h.plugin.restyle(h.file.path, h.records()[1], 'strike-out'); assert.deepEqual(h.records()[1].tags, ['strike-out']);
+        // The same style again writes nothing; a stale card changes nothing.
+        const source = h.contents.get(h.note.path); await h.plugin.restyle(h.file.path, h.records()[1], 'strike-out'); assert.equal(h.contents.get(h.note.path), source);
+        await h.plugin.restyle(h.file.path, { ...h.records()[0], text: 'Stale copy' }, 'underline'); assert.equal(h.contents.get(h.note.path), source);
+        // Changing one mark does not change the style new marks are made in.
+        assert.equal(h.plugin.lastStyle, 'highlight');
+    } finally { h.dispose(); }
+});
+
+test('a card shows how its passage is marked and changes it in place; an area has no style to change', async () => {
+    const area = { id: 'r', uri: 'urn:x-pdf:draft', text: '![[x.png]]', tags: [], target: [{ source: 'urn:x-pdf:draft', selector: [{ type: 'FragmentSelector', conformsTo: 'http://www.w3.org/TR/media-frags/', value: 'page=1&xywh=percent:10,10,20,20' }] }] };
+    const h = await collection([quoted('a', 'Alpha', { tags: ['idea', 'strike-out'] }), quoted('b', 'Beta'), area]);
+    try {
+        const { content, view } = h.sidebar(); const calls = []; h.plugin.restyle = async (_file, row, style) => { calls.push([row.id, style]); };
+        const card = id => content.querySelector(`[data-annotation-id="${id}"]`);
+        assert.equal(card('a').dataset.annotatorStyle, 'strike-out'); assert.equal(card('b').dataset.annotatorStyle, 'highlight');
+        // The style tag is still a tag the card lists, so it can be searched and renamed like any other.
+        assert.deepEqual([...card('a').querySelectorAll('.annotator-tag')].map(el => el.textContent), ['idea', 'strike-out']);
+        const button = card('a').querySelector('.annotator-style-button'); assert.equal(button.getAttribute('aria-label'), 'Change style (Strike-out)'); assert.ok(button.querySelector('svg[aria-hidden="true"]'));
+        assert.equal(card('b').querySelector('.annotator-style-button').getAttribute('aria-label'), 'Change style (Highlight)');
+        assert.equal(card('r').querySelector('.annotator-style-button'), null); assert.equal(card('r').hasAttribute('data-annotator-style'), false); assert.ok(card('r').querySelector('[aria-label^="Change colour"]'));
+        // Opened, the actions give way to the four styles, the current one pressed and focused.
+        button.click();
+        const actions = card('a').querySelector('.annotator-card-actions'); assert.equal(actions.getAttribute('role'), 'group'); assert.equal(actions.getAttribute('aria-label'), 'Choose mark style');
+        const choices = [...actions.querySelectorAll('button')];
+        assert.deepEqual(choices.map(el => [el.getAttribute('aria-label'), el.getAttribute('aria-pressed')]), [['Highlight', 'false'], ['Underline', 'false'], ['Strike-out', 'true'], ['Squiggly', 'false']]);
+        assert.equal(h.dom.window.document.activeElement, choices[2]);
+        choices[3].click(); assert.deepEqual(calls, [['a', 'squiggly']]);
+        // The current style closes the choice and changes nothing; so does Escape.
+        view.show(); card('a').querySelector('.annotator-style-button').click(); card('a').querySelector('[aria-pressed="true"]').click(); assert.equal(calls.length, 1); assert.ok(card('a').querySelector('.annotator-style-button'));
+        card('a').querySelector('.annotator-style-button').click(); card('a').querySelector('.annotator-card-actions').dispatchEvent(new h.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); assert.ok(card('a').querySelector('.annotator-style-button'));
+        // A retired choice does nothing.
+        view.show(); choices[0].click(); assert.equal(calls.length, 1);
+        // While the passage is edited, the card follows the tags being written.
+        h.plugin.editAnnotation(h.file.path, h.records()[1]); h.plugin.updateTags(['underline']); view.show();
+        assert.equal(card('b').dataset.annotatorStyle, 'underline');
+        await view.onClose();
+    } finally { h.dispose(); }
+});
+
 test('per-annotation notes carry Bases-friendly properties and a Base that lists their folder', () => {
     const rows = [quoted('b', 'Second: a "quoted" passage\nwith a line break', { color: 'blue', text: 'A note with [[link]]', tags: ['key idea'], created: '2026-11-11T10:00:00.000Z' }), quoted('a', 'First passage'), { id: 'r', uri: 'u', text: 'Reply text', tags: [], references: ['b'], target: [{ source: 'u' }] }, { id: 'n', uri: 'u', text: 'Page note', tags: [], target: [{ source: 'u' }] }];
     const page = { a: 1, b: 12 };
@@ -302,8 +422,12 @@ test('a highlight on the page offers a menu: edit, copy, recolour and delete wit
     try {
         const row = id => h.records().find(item => item.id === id), titles = menu => menu.items.map(item => (item.checked ? '✓ ' : '') + item.title);
         const menu = h.plugin.annotationMenu(h.file.path, row('a'));
-        assert.deepEqual(titles(menu), ['Edit note', 'Reply', 'Show in sidebar', 'Copy quote', 'Copy as Markdown', 'Copy annotation link', 'Yellow', 'Orange', 'Pink', 'Purple', '✓ Blue', 'Green', 'Delete']);
+        assert.deepEqual(titles(menu), ['Edit note', 'Reply', 'Show in sidebar', 'Copy quote', 'Copy as Markdown', 'Copy annotation link', 'Yellow', 'Orange', 'Pink', 'Purple', '✓ Blue', 'Green', '✓ Highlight', 'Underline', 'Strike-out', 'Squiggly', 'Delete']);
         assert.equal(menu.items.at(-1).warning, true);
+        // The styles are offered after the inks, and change the passage's tags.
+        menu.items.find(item => item.title === 'Underline').run(); await new Promise(resolve => setTimeout(resolve, 20));
+        assert.deepEqual(row('a').tags, ['underline']); assert.equal(titles(h.plugin.annotationMenu(h.file.path, row('a'))).filter(title => title.startsWith('✓')).join(), '✓ Blue,✓ Underline');
+        await h.plugin.restyle(h.file.path, row('a'), 'highlight');
         assert.equal(menu.native, false, 'drawn in the app so colour choices can show their ink');
         assert.equal(titles(h.plugin.annotationMenu(h.file.path, row('b')))[0], 'Add note', 'a bare highlight offers to add a note');
         menu.items.find(item => item.title === 'Green').run(); await new Promise(resolve => setTimeout(resolve, 20));

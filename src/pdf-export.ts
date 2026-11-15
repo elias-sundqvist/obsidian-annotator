@@ -4,6 +4,7 @@ import { areaOf, leadingImage } from './area';
 import { drawingOf } from './drawing';
 import { annotationQuote } from './pdf-annotation';
 import { inkOf, type Ink } from './ink';
+import { styleOf, styleOfTag } from './mark-style';
 import type { PdfNote, Rgb } from './pdf-write';
 
 /**
@@ -163,36 +164,25 @@ export function rangeQuads(
     return pieces.map(piece => piece.quad);
 }
 
-/** The tags that say a passage is marked with a line rather than a tint: what a mark taken in from another program is tagged with, and what the reader may tag one with. */
-const STYLE_TAGS: Record<string, 'underline' | 'strikeout' | 'squiggly' | undefined> = {
-    underline: 'underline',
-    'strike-out': 'strikeout',
-    strikeout: 'strikeout',
-    squiggly: 'squiggly'
-};
-/** How a passage is marked in the PDF: with a line where one of its tags says so (the first that does), else as a highlight. */
+/**
+ * How a passage is marked in the PDF: with a line where one of its tags says so (the first that does), else as a
+ * highlight. Which tags say so is decided in mark-style.ts, the same place the page asks; here the style is only
+ * given the name the PDF format has for it.
+ */
 export function lineStyle(annotation: Annotation): 'underline' | 'strikeout' | 'squiggly' | undefined {
-    for (const tag of annotation.tags || []) {
-        const style = typeof tag === 'string' ? STYLE_TAGS[tag.toLowerCase()] : undefined;
-        if (style) return style;
-    }
-    return undefined;
+    const style = styleOf(annotation);
+    return style === 'highlight' ? undefined : style === 'strike-out' ? 'strikeout' : style;
 }
 /** What a PDF reader shows as the annotation's comment: the note as written, its tags, then its replies. */
 export function noteContents(annotation: Annotation, replies: readonly Annotation[] = []): string {
-    const style = lineStyle(annotation);
+    const style = styleOf(annotation);
     const own = (row: Annotation) => {
         let text = row.text || '';
         // An area note leads with the picture of its region; in the PDF the region itself is on the page.
         if (leadingImage(text)) text = text.replace(/^\s*(?:!\[\[[^\]]*\]\]|!\[[^\]]*\]\([^)]*\))/, '');
         // A tag that says how the mark is drawn is said by the mark itself.
         const tags = (row.tags || [])
-            .filter(
-                tag =>
-                    typeof tag === 'string' &&
-                    tag &&
-                    !(row === annotation && style && STYLE_TAGS[tag.toLowerCase()] === style)
-            )
+            .filter(tag => typeof tag === 'string' && tag && !(row === annotation && styleOfTag(tag) === style))
             .map(tag => `#${tag}`)
             .join(' ');
         return [text.trim(), tags].filter(Boolean).join('\n');

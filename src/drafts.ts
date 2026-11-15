@@ -1,6 +1,7 @@
 import { clone } from './portable';
 import type { Annotation } from './codec';
 import type { SourceCapture, SourceIdentity } from './source';
+import { styleOfTag } from './mark-style';
 export interface DraftSession {
     id: string;
     file: string;
@@ -89,5 +90,6 @@ export function draftChanged(session: Pick<DraftSession, 'editing' | 'comment' |
     return session.editing
         ? session.comment !== session.editing.annotation.text ||
               JSON.stringify(session.tags) !== JSON.stringify(session.editing.annotation.tags)
-        : !!session.comment.trim() || session.tags.length > 0;
+        : // A new passage's style is said by a tag the reader put there; nothing has been written until something else is.
+          !!session.comment.trim() || session.tags.some(tag => !styleOfTag(tag));
 }

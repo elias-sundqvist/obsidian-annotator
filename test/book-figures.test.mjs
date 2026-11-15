@@ -162,3 +162,37 @@ test('a book with no contents names its chapters readably, and a chapter that do
         assert.equal(await lang(0), 'zh-TW'); assert.equal(await lang(1), 'zh-CN'); assert.equal(await lang(2), 'ja');
     } finally { view.dispose(); win.close(); for (const [key, value] of Object.entries(old)) if (value === undefined) delete globalThis[key]; else globalThis[key] = value; }
 });
+
+test('a passage of a book is marked the way its tags say: a line in a layer of its own over the tints, and a picture never as a line', async () => {
+    const win = new JSDOM('<body></body>', { pretendToBeVisual: true }).window;
+    const old = {}; for (const key of ['document', 'window', 'Node', 'NodeFilter', 'Range', 'CSS']) { old[key] = globalThis[key]; globalThis[key] = key === 'window' ? win : key === 'document' ? win.document : key === 'CSS' ? { escape: s => s } : win[key]; }
+    const proto = win.HTMLElement.prototype;
+    proto.empty = function () { this.replaceChildren(); }; proto.addClass = function (...names) { this.classList.add(...names); }; proto.setText = function (text) { this.textContent = text; };
+    proto.createEl = function (tag, options = {}) { const el = win.document.createElement(tag); if (options.text) el.textContent = options.text; if (options.cls) el.className = options.cls; for (const [k, v] of Object.entries(options.attr || {})) el.setAttribute(k, v); for (const key of ['type', 'placeholder', 'value']) if (options[key]) el[key] = options[key]; this.append(el); return el; }; proto.createDiv = function (options) { return this.createEl('div', options); };
+    win.Range.prototype.getClientRects = function () { return [{ left: 10, right: 110, top: 20, bottom: 80, width: 100, height: 60 }]; }; win.Range.prototype.getBoundingClientRect = function () { return this.getClientRects()[0]; };
+    win.ResizeObserver = class { observe() {} disconnect() {} }; win.URL.createObjectURL = () => 'blob:picture'; win.URL.revokeObjectURL = () => {}; globalThis.URL.createObjectURL ??= () => 'blob:picture'; globalThis.URL.revokeObjectURL ??= () => {};
+    const bytes = await archive(), file = { path: 'Pictures.epub', stat: { mtime: 1, size: bytes.byteLength } };
+    const callbacks = { preferences: () => ({ readingMode: 'scroll', fontSize: 100, theme: 'light' }), progress: () => null, saveProgress() {}, setPreferences: async () => {}, capture() {}, open() {}, changed() {} };
+    const content = win.document.createElement('div'); win.document.body.append(content);
+    const view = new EpubView({ contentEl: content, app: { vault: { readBinary: async () => bytes, getAbstractFileByPath: () => file } } }, callbacks); view.file = file;
+    const frames = async (count = 4) => { for (let i = 0; i < count; i++) await new Promise(resolve => win.requestAnimationFrame(resolve)); };
+    try {
+        view.file = null; await view.setState({ file: file.path, chapter: 0 }, {}); await frames();
+        // Two passages as the reader saves them: one left a highlight, one underlined; and a picture kept with the underline tag.
+        const passage = async (words, id) => { const node = [...content.querySelectorAll('.annotator-epub-chapter p')].find(p => p.textContent === words), range = win.document.createRange(); range.selectNodeContents(node); win.getSelection().removeAllRanges(); win.getSelection().addRange(range); return view.payload(view.capture(), '', id); };
+        const tint = await passage('Before the chart.', 'tint'), line = { ...(await passage('The end.', 'line')), tags: ['idea', 'underline'], color: 'blue' };
+        const picture = { id: 'pic', text: '![[x.png]]', tags: ['underline'], ...view.resolver.identity(0), target: [{ source: view.resolver.identity(0).uri, selector: [figureSelector('body > figure:nth-child(3) > img:nth-child(1)')] }], nativeEpub: { version: 1, src: 'OPS/images/chart.png' } };
+        view.setAnnotations([tint, line, picture]); await frames();
+        const mark = id => content.querySelector(`.annotator-native-mark[data-annotation-id="${id}"]`);
+        assert.equal(mark('tint').dataset.annotatorStyle, 'highlight'); assert.equal(mark('line').dataset.annotatorStyle, 'underline'); assert.equal(mark('line').dataset.annotatorInk, 'blue');
+        // The tint is blended with the others; the line has its own layer, just over it; the picture is framed in its own as before, with no style.
+        const tints = mark('tint').parentElement, lines = mark('line').parentElement;
+        assert.ok(lines.classList.contains('annotator-line-marks') && lines.classList.contains('annotator-native-marks')); assert.equal(tints.classList.contains('annotator-line-marks'), false); assert.equal(tints.nextElementSibling, lines);
+        assert.ok(mark('pic').parentElement.classList.contains('annotator-figure-marks')); assert.equal(mark('pic').hasAttribute('data-annotator-style'), false);
+        // The style changes: so does the mark; with no lines left, the layer goes too.
+        view.setAnnotations([tint, { ...line, tags: ['squiggly'] }]); await frames(); assert.equal(mark('line').dataset.annotatorStyle, 'squiggly'); assert.equal(content.querySelectorAll('.annotator-line-marks').length, 1);
+        view.setAnnotations([tint, { ...line, tags: ['idea'] }]); await frames(); assert.equal(mark('line').dataset.annotatorStyle, 'highlight'); assert.equal(mark('line').parentElement, mark('tint').parentElement); assert.equal(content.querySelectorAll('.annotator-line-marks').length, 0);
+        view.setAnnotations([{ ...line, tags: ['strike-out'] }]); await frames(); assert.equal(content.querySelectorAll('.annotator-line-marks').length, 1);
+        view.dispose(); assert.equal(content.querySelectorAll('.annotator-native-marks').length, 0);
+    } finally { view.dispose(); win.close(); for (const [key, value] of Object.entries(old)) if (value === undefined) delete globalThis[key]; else globalThis[key] = value; }
+});

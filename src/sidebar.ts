@@ -21,6 +21,7 @@ import type { Annotation } from './codec';
 import { quoteOf, type SourceHost } from './source';
 import { searchAnnotations, compareLocations, defaultLocation } from './annotation-search';
 import { INKS, inkLabel, inkOf, type Ink } from './ink';
+import { MARK_STYLES, STYLE_NAMES, styleIcon, styleOf } from './mark-style';
 import { createCommentEditor, type CommentEditor } from './rich-editor';
 import { displayTitle } from './library';
 // @ts-expect-error The proofs' JavaScript wrappers carry no type declarations.
@@ -821,6 +822,8 @@ export class AnnotationView extends ItemView {
             const quote = selected?.exact || (editing && quoteOf(editing.annotation)?.exact);
             const card = parent.createDiv({ cls: `annotator-editor-card is-${placement}` });
             card.dataset.annotatorInk = plugin.ink;
+            // The passage is quoted as it will be marked: the style is among the tags being written.
+            if (quote) card.dataset.annotatorStyle = styleOf({ tags: plugin.tags });
             const top = card.createDiv({ cls: 'annotator-editor-head' });
             top.createEl('span', {
                 cls: 'annotator-editor-kind',
@@ -1188,6 +1191,8 @@ export class AnnotationView extends ItemView {
                 attr: { 'data-annotation-id': annotation.id }
             });
             card.dataset.annotatorInk = editingHere ? plugin.ink : inkOf(annotation);
+            // How the passage is marked shows on its quote: a list of underlines does not read as a list of highlights.
+            if (quote) card.dataset.annotatorStyle = styleOf(editingHere ? { tags: plugin.tags } : annotation);
             const dragLink = (event: DragEvent) => {
                 if (!current(card)) return;
                 const link = plugin.annotationLink(file!, annotation);
@@ -1280,6 +1285,10 @@ export class AnnotationView extends ItemView {
                             const icon = (item as unknown as { iconEl?: HTMLElement }).iconEl;
                             if (icon?.dataset) icon.dataset.annotatorInk = ink;
                         });
+                }
+                if (quote) {
+                    menu.addSeparator();
+                    plugin.addStyleItems(menu, file!, annotation);
                 }
                 menu.addSeparator();
                 // Deleting asks first, the same way from the menu as from the card.
@@ -1556,6 +1565,47 @@ export class AnnotationView extends ItemView {
                                 if (!current(dot)) return;
                                 if (ink === inkOf(annotation)) this.show();
                                 else void plugin.recolor(file!, annotation, ink);
+                            };
+                        }
+                        actions.onkeydown = key => {
+                            if (current(actions) && key.key === 'Escape' && !key.isComposing && key.keyCode !== 229) {
+                                key.preventDefault();
+                                key.stopPropagation();
+                                this.show();
+                            }
+                        };
+                        actions.querySelector<HTMLElement>('.is-current')?.focus();
+                    };
+                }
+                // A passage can be marked another way afterwards: the button shows how it is marked now, and opens the four styles in its place.
+                if (quote) {
+                    const now = styleOf(annotation);
+                    const restyle = actions.createEl('button', {
+                        cls: 'clickable-icon annotator-icon-button annotator-style-button',
+                        attr: { 'aria-label': `Change style (${STYLE_NAMES[now]})` }
+                    });
+                    restyle.dataset.annotatorFocus = JSON.stringify([annotation.id, 'Change style']);
+                    restyle.appendChild(styleIcon(restyle.ownerDocument, now));
+                    restyle.onclick = event => {
+                        event.stopPropagation();
+                        if (!current(restyle)) return;
+                        actions.empty();
+                        actions.addClass('is-choosing');
+                        actions.setAttribute('role', 'group');
+                        actions.setAttribute('aria-label', 'Choose mark style');
+                        for (const style of MARK_STYLES) {
+                            const choice = actions.createEl('button', {
+                                cls: `clickable-icon annotator-icon-button annotator-style-choice${style === now ? ' is-current is-active' : ''}`,
+                                attr: { 'aria-label': STYLE_NAMES[style], 'aria-pressed': String(style === now) }
+                            });
+                            choice.dataset.annotatorStyle = style;
+                            choice.dataset.annotatorFocus = JSON.stringify([annotation.id, 'Change style']);
+                            choice.appendChild(styleIcon(choice.ownerDocument, style));
+                            choice.onclick = click => {
+                                click.stopPropagation();
+                                if (!current(choice)) return;
+                                if (style === now) this.show();
+                                else void plugin.restyle(file!, annotation, style);
                             };
                         }
                         actions.onkeydown = key => {
