@@ -131,6 +131,10 @@ export class AnnotationView extends ItemView {
     getIcon() {
         return 'highlighter';
     }
+    /** A source by its name: a copy kept under a digest by the file it was made from, any other by its own file's. */
+    private sourceName(key: string) {
+        return this.plugin.sourceTitle(key) || sourceName(key);
+    }
     async onOpen() {
         this.closed = false;
         this.show();
@@ -435,7 +439,7 @@ export class AnnotationView extends ItemView {
         const quoted = threads.roots.filter(node => inTab(node, 'annotations'));
         const name = title.createEl('button', {
             cls: 'annotator-head-name',
-            text: state?.note ? displayTitle(state.note.basename) : file ? sourceName(file) : 'Annotations'
+            text: state?.note ? displayTitle(state.note.basename) : file ? this.sourceName(file) : 'Annotations'
         });
         if (state?.note) describe(name, `Open ${state.note.path}`);
         name.disabled = !state?.note;
@@ -448,7 +452,7 @@ export class AnnotationView extends ItemView {
             const said = 'range' in pages ? describePages(pages.range) : `page ${pages.uncovered}`;
             title.createDiv({
                 cls: 'annotator-head-pages',
-                text: `${said.charAt(0).toUpperCase()}${said.slice(1)} of ${sourceName(file)}${'range' in pages ? '' : ': in no annotation note'}`
+                text: `${said.charAt(0).toUpperCase()}${said.slice(1)} of ${this.sourceName(file)}${'range' in pages ? '' : ': in no annotation note'}`
             });
         }
         const tools = titleRow.createDiv({ cls: 'annotator-head-tools' });

@@ -196,6 +196,7 @@ import { installAnnotationLinks } from './link-navigation';
 import {
     remoteKind,
     remoteFilename,
+    originalName,
     validateRemote,
     remoteRevisions,
     revisionFilename,
@@ -2683,7 +2684,9 @@ export default class AnnotatorPlugin extends Plugin {
         if (this.app.vault.getAbstractFileByPath(path))
             throw new Error(`Refusing to overwrite existing ${path}. Open its annotation-target explicitly.`);
         const target = pdf.startsWith('web:') ? pdf.slice(4) : pdf,
-            title = (collectionSource(pdf).split('/').pop() || 'Annotations').replace(/\.[^.]+$/, '');
+            title =
+                this.sourceTitle(pdf) ||
+                (collectionSource(pdf).split('/').pop() || 'Annotations').replace(/\.[^.]+$/, '');
         const note = await this.app.vault.create(path, await this.newNoteContent(target, title));
         this.madeNotes.set(note, pdf);
         this.associations[pdf] = note.path;
@@ -2825,7 +2828,7 @@ export default class AnnotatorPlugin extends Plugin {
         this.madeNotes.set(note, pdf);
         this.madeRanges.set(note, range);
         await this.loadNote(pdf);
-        new Notice(`${clean} made for ${describePages(range)} of ${source.basename}.`);
+        new Notice(`${clean} made for ${describePages(range)} of ${this.sourceTitle(source.path) || source.basename}.`);
         const at = host?.currentPage();
         if (host && (!at || !partForPage([{ range }], at))) host.showPage(range.first);
         this.refresh();
@@ -6035,7 +6038,7 @@ export default class AnnotatorPlugin extends Plugin {
             {
                 what: 'pages',
                 // A PDF that is itself a searchable copy takes the words into itself.
-                copy: this.canRecogniseAgain(key!) ? null : searchableName('', source.basename),
+                copy: this.canRecogniseAgain(key!) ? null : searchableName('', this.sourceStem(source)),
                 current: host.currentPage() ?? 0,
                 without,
                 little,
@@ -6362,7 +6365,7 @@ export default class AnnotatorPlugin extends Plugin {
         else {
             const folder = source.parent?.path || '';
             for (let copy = 1; ; copy++) {
-                path = searchableName(folder, source.basename, copy);
+                path = searchableName(folder, this.sourceStem(source), copy);
                 const existing = this.app.vault.getAbstractFileByPath(path);
                 if (!existing) break;
                 if (existing instanceof TFile) {
@@ -6488,7 +6491,7 @@ export default class AnnotatorPlugin extends Plugin {
             }
             // The export of a PDF starts with that PDF's own bytes. A file of the export's name that does is an earlier export, and is replaced; anything else is left alone.
             const folder = source.parent?.path && source.parent.path !== '/' ? `${source.parent.path}/` : '',
-                base = `${folder}${source.basename} (annotated)`;
+                base = `${folder}${this.sourceStem(source)} (annotated)`;
             let path = `${base}.pdf`,
                 target: TFile | null = null;
             for (let copy = 2; ; copy++) {
@@ -7750,6 +7753,25 @@ export default class AnnotatorPlugin extends Plugin {
             throw new Error(`The source's server answered ${response.status}${why}. ${after}`);
         }
         return response.arrayBuffer;
+    }
+    /**
+     * What to call a source kept in "Annotator sources", whose file is named by a digest of its address (so that one
+     * address is one file): the name of the file it was made from, downloaded or copied in from Zotero, Calibre,
+     * DEVONthink or elsewhere on this computer. Empty for any other source, which is called by its own file name.
+     * (Obsidian's own PDF tab names the file it shows, and a plugin cannot name it otherwise.)
+     */
+    sourceTitle(key: string): string {
+        const url = this.remoteUrl(key);
+        return url ? originalName(url) : '';
+    }
+    /** A source's name for a file made from it (a searchable copy, an export): as `sourceTitle`, as a file may be named. */
+    private sourceStem(source: TFile): string {
+        const named = this.sourceTitle(source.path)
+            .replace(/[\\/:*?"<>|#^[\]]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .replace(/^[.\s]+|[.\s]+$/g, '')
+            .slice(0, 120);
+        return named || source.basename;
     }
     private remoteUrl(path: string): string | undefined {
         path = collectionSource(path);

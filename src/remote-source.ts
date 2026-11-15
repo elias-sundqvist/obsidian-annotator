@@ -9,6 +9,26 @@ export function remoteKind(url: string, explicit?: unknown): 'pdf' | 'epub' | nu
 export async function remoteFilename(url: string, kind: 'pdf' | 'epub') {
     return `Annotator sources/${await digest(cachedSourceUrl(url))}.${kind}`;
 }
+/**
+ * The name of the file a copy was made from, by the address it came from: the last part of its path, read as it is
+ * written there, without its extension ("Vaswani et al. - 2017 - Attention" for `…/Vaswani%20et%20al.%20-%202017%20-%20Attention.pdf`).
+ * Empty when the address names no file.
+ */
+export function originalName(url: string): string {
+    try {
+        const last =
+            new URL(url).pathname
+                .split('/')
+                .filter(part => part)
+                .pop() || '';
+        return decodeURIComponent(last)
+            .replace(/\.(pdf|epub|fb2\.zip|fb2|fbz)$/i, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+    } catch {
+        return '';
+    }
+}
 export function validateRemote(bytes: ArrayBuffer, kind: 'pdf' | 'epub') {
     const limit = (kind === 'epub' ? 64 : 128) * 1024 * 1024;
     if (!bytes.byteLength || bytes.byteLength > limit)

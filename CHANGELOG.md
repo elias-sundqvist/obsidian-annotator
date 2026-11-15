@@ -199,6 +199,13 @@ What changed for someone using Annotator. How to use each thing is in
   annotations are written in it), **Copying and exporting**, **Opening**,
   **Sources outside the vault** (the Zotero and Calibre folders) and
   **Reading**. Each setting does what it did and keeps its value.
+- A PDF or book downloaded, or copied in from Zotero, Calibre, DEVONthink or
+  elsewhere on the computer, is kept in `Annotator sources` under a name made
+  of digits and letters, so that one address is one file. The sidebar now
+  calls it by the name of the file it came from, and so are its searchable
+  copy, its annotated export and a note made for it. (Obsidian's own tab for
+  a PDF shows the file's name, which a plugin cannot change; a book's tab
+  shows its title.)
 
 ## 0.3.1 (2026-11-13)
 

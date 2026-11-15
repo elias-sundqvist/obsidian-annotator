@@ -139,6 +139,21 @@ async function remoteHost(){
  globalThis.__annotatorTestPdfJs=async()=>({getDocument:({data})=>({promise:Promise.resolve({numPages:1,fingerprints:[new TextDecoder().decode(data).includes('original')?'original':'updated'],getPage:async()=>({getTextContent:async()=>({items:[{str:'Retained passage in the document.'}]}),cleanup(){}})}),destroy:async()=>{}})});
  globalThis.__annotatorTestRequest=async()=>({status:200,arrayBuffer:new TextEncoder().encode('%PDF-1.7 updated').buffer});await h.plugin.onload();h.plugin.currentFile=path;return{...h,url,path,file,note,raw,original};
 }
+test('a source kept under a digest is called by the file it was made from: in the sidebar, and in what is made from it',async()=>{
+ const {originalName}=await import('./.generated/readers/remote-source.js');
+ assert.equal(originalName('https://example.org/papers/remote.pdf?x=1#page=2'),'remote');assert.equal(originalName('file:///Users/me/Zotero/storage/N7SMB24A/Vaswani%20et%20al.%20-%202017%20-%20Attention.pdf'),'Vaswani et al. - 2017 - Attention');
+ assert.equal(originalName('https://docdrop.org/x/paper.pdf/'),'paper');assert.equal(originalName('file:///Library/Book%20Title.fb2.zip'),'Book Title');assert.equal(originalName('https://example.org/'),'');assert.equal(originalName('not a url'),'');assert.equal(originalName('https://example.org/%E0%A4%A.pdf'),'');
+ const h=await remoteHost();try{
+  // Obsidian names its own PDF tab by the file; the reader names the source by where it came from.
+  assert.equal(h.plugin.sourceTitle(h.path),'remote');assert.equal(h.plugin.sourceTitle('Papers/Own.pdf'),'',"a file of the vault's own is named by its file");
+  // In the sidebar, while the source has no note of its own.
+  const w=h.dom.window,p=w.HTMLElement.prototype;p.empty=function(){this.replaceChildren();};p.addClass=function(...names){this.classList.add(...names);};p.setText=function(text){this.textContent=text;};p.createEl=function(tag,o={}){const e=w.document.createElement(tag);if(o.text)e.textContent=o.text;if(o.cls)e.className=o.cls;for(const[k,v]of Object.entries(o.attr||{}))e.setAttribute(k,v);this.append(e);return e;};p.createDiv=function(o){return this.createEl('div',o);};
+  const content=w.document.createElement('div');w.document.body.append(content);h.plugin.notes.set(h.path,{note:null,records:[]});h.plugin.currentFile=h.path;new AnnotationView({contentEl:content,app:h.app},h.plugin).show();
+  assert.equal(content.querySelector('.annotator-head-name').textContent,'remote');
+  // A file made from it is named by it, as a file may be named.
+  assert.equal(h.plugin.sourceStem(h.file),'remote');h.plugin.sourceTitle=()=>'Odd: name? / with "marks" #one.';assert.equal(h.plugin.sourceStem(h.file),'Odd name with marks one');h.plugin.sourceTitle=()=>'';assert.equal(h.plugin.sourceStem(h.file),'original');
+ }finally{h.dispose();}
+});
 test('remote refresh reviews immutable bytes, retains old sources and notes, and permits offline rollback',async()=>{
  const h=await remoteHost();try{const candidate=await h.plugin.prepareRemoteRevision(h.url);assert.equal(candidate.notes[0].review.checks[0].resolved,true);assert.equal(h.plugin.remoteSources[h.url],h.path);assert.equal(h.files.has(candidate.next.path),false);
  const next=await h.plugin.commitRemoteRevision(candidate);assert.equal(h.plugin.data.remoteSources[h.url],next.path);assert.deepEqual(h.binaries.get(h.path),h.original);assert.equal(h.contents.get(h.note.path),h.raw);assert.equal(h.plugin.remoteHistory[h.url].length,2);assert.equal(h.plugin.noteMatchesSource(h.note,h.path),true);assert.equal(h.plugin.noteMatchesSource(h.note,next.path),true);assert.deepEqual(h.plugin.data.opaque,{keep:true});
