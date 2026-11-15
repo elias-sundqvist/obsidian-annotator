@@ -3,6 +3,7 @@
 // here is decided by Bend definitions whose laws are proved in PROOF.bend; this
 // file only converts between host values and Bend values.
 import Ink from './ink.bend';
+import PageText from './pagetext.bend';
 import Shelf from './shelf.bend';
 import Digest from './digest.bend';
 import Area from './area.bend';
@@ -33,6 +34,16 @@ export function storedInk(json) { return Ink.stored(members(json).members); }
 export function recolorJson(json, color) {
     const value = members(json);
     return stringifyJson({ ...value, members: Ink.recolor(value.members, text(color)) });
+}
+
+/** The size a stored `pageText` value shows the note at on the page: "small", "medium" or "large"; "" where it is not shown (absent, not a string). */
+export function pageTextKey(value) { return typeof value === 'string' ? PageText.normal(value) : ''; }
+/** The size a stored annotation-json object shows its note at on the page, or "". */
+export function storedPageText(json) { return PageText.stored(members(json).members); }
+/** Show a stored annotation's note on the page at a size, or (`null`) no longer. Only its `pageText` member changes. */
+export function pageTextJson(json, size) {
+    const value = members(json);
+    return stringifyJson({ ...value, members: size === null ? PageText.hide(value.members) : PageText.show(value.members, text(size)) });
 }
 
 const entries = rows => list(rows.map(row => Shelf.entry(text(row.id), text(row.section), text(row.color), row.quoted === true)));

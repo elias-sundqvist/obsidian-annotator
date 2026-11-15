@@ -17,15 +17,15 @@ cd proofs
 node verify.mjs
 ```
 
-The verifier checks all 257 laws, requires 125 deliberately broken programs to
-fail type checking, and runs 80 Node tests against the actual compiled Bend
+The verifier checks all 263 laws, requires 128 deliberately broken programs to
+fail type checking, and runs 81 Node tests against the actual compiled Bend
 modules. It also has the proofs checked a second time by Bend's small kernel
 (`bend PROOF.bend --verdict`), which has its own proof in Lean and accepts
 only defs that are valid proofs and rely on no `@unsafe` or foreign code.
 That step must pass wherever it can run: where Lean v4.34.0 is installed (on
 the PATH or in `~/.elan/bin`) or Bend has already built its kernel; elsewhere
 the verifier says the step was skipped, and `BEND_VERDICT=1` makes its absence
-a failure, as CI does. The kernel accepted all of PROOF.bend on 2026-11-14
+a failure, as CI does. The kernel accepted all of PROOF.bend on 2026-11-15
 (Bend 2.0.40, Lean 4.34.0). It disables the Bend launcher's telemetry/automatic updates for its
 invocations. Set `BEND_BIN` if `bend` is not on PATH. Bend 2.0.40 is a single
 binary with no Node import hook of its own, so the tests import `.bend` files
@@ -164,20 +164,23 @@ format migration is included.
 
 ## Reader logic: inks, list arrangement, export
 
-`ink.bend`, `shelf.bend` and `digest.bend` hold the decisions behind the native
-reader's highlight colours, the arrangement of its annotation list and its
+`ink.bend`, `pagetext.bend`, `shelf.bend` and `digest.bend` hold the decisions behind the native
+reader's highlight colours, its text boxes, the arrangement of its annotation list and its
 Markdown export. `reader.mjs` is the only host boundary; the plugin's
 TypeScript converts values and draws, and decides none of this itself.
 
 | Module | Decides | Laws (in `LAWS.bend`, proved in `PROOF.bend`) |
 | --- | --- | --- |
 | `ink.bend` | Which ink a stored `color` denotes; how an ink is written into an annotation's JSON members | `ink_key_roundtrip`, `ink_shortcut_roundtrip`, `ink_read_after_write`, `ink_write_preserves_others`, `ink_last_write_wins` |
+| `pagetext.bend` | Whether an area's note is shown on its page (a text box), at which size; how that is written into, and taken out of, an annotation's JSON members | `pagetext_key_roundtrip`, `pagetext_read_after_write`, `pagetext_write_preserves_others`, `pagetext_last_write_wins`, `pagetext_read_after_clear`, `pagetext_clear_preserves_others` |
 | `shelf.bend` | Which tab an entry is on; what a colour filter keeps; where section headings go | `shelf_tabs_partition`, `shelf_empty_filter_shows_all`, `shelf_filter_sound`, `shelf_headings_keep_cards`, `shelf_headings_lead` |
 | `digest.bend` | Quoting of exported passages and notes; single-line titles; block layout | `digest_line_roundtrip`, `digest_lines_roundtrip`, `digest_title_is_one_line`, `digest_block_roundtrip`, `digest_body_passage_then_note`, `digest_body_passage_only`, `digest_body_note_only` |
 
 In words: recolouring an annotation changes its `color` member and nothing
 else, whatever else the annotation contains; reading it back yields the chosen
-ink; the last colour wins without growing the JSON. Every entry is on exactly
+ink; the last colour wins without growing the JSON. A text box's size is one
+member written the same way, and taking it away removes every copy of it and
+nothing else. Every entry is on exactly
 one tab; a colour filter never shows another colour; headings are purely
 additive (the cards between them are exactly the entries, in order) and a
 non-empty grouped list opens with one. Exported text is quoted reversibly, so

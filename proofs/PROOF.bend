@@ -6,6 +6,7 @@ import ./area.bend as Area
 import ./scan_text.bend as Scan
 import ./segments.bend as Segments
 import ./ink.bend as Ink
+import ./pagetext.bend as PageText
 import ./shelf.bend as Shelf
 import ./digest.bend as Digest
 import ./video_header.bend as VideoHeader
@@ -1013,6 +1014,106 @@ def Laws.ink_last_write_wins(members, first, second):
       {==}
     case Con{pair, rest}:
       ink_last_place(Ink.is_color(pair), pair, first, second, rest, {==}, Laws.ink_last_write_wins(rest, first, second))
+
+
+# ── Text boxes ──────────────────────────────────────────────────────────────
+def Laws.pagetext_key_roundtrip(size):
+  match size:
+    case PageText.Small{}:
+      {==}
+    case PageText.Medium{}:
+      {==}
+    case PageText.Large{}:
+      {==}
+
+def pagetext_some_key(size: PageText.Size) -> {Some{PageText.parse(PageText.key(size))} == Some{size} : Maybe<&2, PageText.Size>}:
+  match size:
+    case PageText.Small{}:
+      {==}
+    case PageText.Medium{}:
+      {==}
+    case PageText.Large{}:
+      {==}
+
+def pagetext_read_place(hit: Bool, -pair: Annotation.JsonPair<Annotation.Json>, +size: PageText.Size, -rest: List<&2, Annotation.JsonPair<Annotation.Json>>, -updated: List<&2, Annotation.JsonPair<Annotation.Json>>, same: {hit == PageText.is_page_text(pair) : Bool}, ih: {PageText.get(updated) == Some{size} : Maybe<&2, PageText.Size>}) -> {PageText.get(PageText.place(hit, pair, size, rest, updated)) == Some{size} : Maybe<&2, PageText.Size>}:
+  match hit:
+    case True{}:
+      pagetext_some_key(size)
+    case False{}:
+      %same : {PageText.choose(_, pair, PageText.get(updated)) == Some{size} : Maybe<&2, PageText.Size>}
+      ih
+
+def Laws.pagetext_read_after_write(members, size):
+  match members:
+    case Nil{}:
+      pagetext_some_key(size)
+    case Con{pair, rest}:
+      pagetext_read_place(PageText.is_page_text(pair), pair, size, rest, PageText.set(rest, size), {==}, Laws.pagetext_read_after_write(rest, size))
+
+def pagetext_others_place(hit: Bool, -pair: Annotation.JsonPair<Annotation.Json>, -size: PageText.Size, -rest: List<&2, Annotation.JsonPair<Annotation.Json>>, -updated: List<&2, Annotation.JsonPair<Annotation.Json>>, same: {hit == PageText.is_page_text(pair) : Bool}, ih: {PageText.others(updated) == PageText.others(rest) : List<&2, Annotation.JsonPair<Annotation.Json>>}) -> {PageText.others(PageText.place(hit, pair, size, rest, updated)) == PageText.keep(PageText.is_page_text(pair), pair, PageText.others(rest)) : List<&2, Annotation.JsonPair<Annotation.Json>>}:
+  match hit:
+    case True{}:
+      %same : {PageText.others(rest) == PageText.keep(_, pair, PageText.others(rest)) : List<&2, Annotation.JsonPair<Annotation.Json>>}
+      {==}
+    case False{}:
+      %same : {PageText.keep(_, pair, PageText.others(updated)) == PageText.keep(_, pair, PageText.others(rest)) : List<&2, Annotation.JsonPair<Annotation.Json>>}
+      %ih : {Con{pair, PageText.others(updated)} == Con{pair, _} : List<&2, Annotation.JsonPair<Annotation.Json>>}
+      {==}
+
+def Laws.pagetext_write_preserves_others(members, size):
+  match members:
+    case Nil{}:
+      {==}
+    case Con{pair, rest}:
+      pagetext_others_place(PageText.is_page_text(pair), pair, size, rest, PageText.set(rest, size), {==}, Laws.pagetext_write_preserves_others(rest, size))
+
+def pagetext_last_place(hit: Bool, -pair: Annotation.JsonPair<Annotation.Json>, -first: PageText.Size, -second: PageText.Size, -rest: List<&2, Annotation.JsonPair<Annotation.Json>>, same: {hit == PageText.is_page_text(pair) : Bool}, ih: {PageText.set(PageText.set(rest, first), second) == PageText.set(rest, second) : List<&2, Annotation.JsonPair<Annotation.Json>>}) -> {PageText.set(PageText.place(hit, pair, first, rest, PageText.set(rest, first)), second) == PageText.place(hit, pair, second, rest, PageText.set(rest, second)) : List<&2, Annotation.JsonPair<Annotation.Json>>}:
+  match hit:
+    case True{}:
+      {==}
+    case False{}:
+      %same : {PageText.place(_, pair, second, PageText.set(rest, first), PageText.set(PageText.set(rest, first), second)) == Con{pair, PageText.set(rest, second)} : List<&2, Annotation.JsonPair<Annotation.Json>>}
+      %ih : {Con{pair, PageText.set(PageText.set(rest, first), second)} == Con{pair, _} : List<&2, Annotation.JsonPair<Annotation.Json>>}
+      {==}
+
+def Laws.pagetext_last_write_wins(members, first, second):
+  match members:
+    case Nil{}:
+      {==}
+    case Con{pair, rest}:
+      pagetext_last_place(PageText.is_page_text(pair), pair, first, second, rest, {==}, Laws.pagetext_last_write_wins(rest, first, second))
+
+def pagetext_cleared_keep(hit: Bool, -pair: Annotation.JsonPair<Annotation.Json>, -tail: List<&2, Annotation.JsonPair<Annotation.Json>>, same: {hit == PageText.is_page_text(pair) : Bool}, ih: {PageText.get(tail) == None{} : Maybe<&2, PageText.Size>}) -> {PageText.get(PageText.keep(hit, pair, tail)) == None{} : Maybe<&2, PageText.Size>}:
+  match hit:
+    case True{}:
+      ih
+    case False{}:
+      %same : {PageText.choose(_, pair, PageText.get(tail)) == None{} : Maybe<&2, PageText.Size>}
+      ih
+
+def Laws.pagetext_read_after_clear(members):
+  match members:
+    case Nil{}:
+      {==}
+    case Con{pair, rest}:
+      pagetext_cleared_keep(PageText.is_page_text(pair), pair, PageText.clear(rest), {==}, Laws.pagetext_read_after_clear(rest))
+
+def pagetext_clear_keep(hit: Bool, -pair: Annotation.JsonPair<Annotation.Json>, -tail: List<&2, Annotation.JsonPair<Annotation.Json>>, -rest: List<&2, Annotation.JsonPair<Annotation.Json>>, same: {hit == PageText.is_page_text(pair) : Bool}, ih: {PageText.others(tail) == PageText.others(rest) : List<&2, Annotation.JsonPair<Annotation.Json>>}) -> {PageText.others(PageText.keep(hit, pair, tail)) == PageText.keep(PageText.is_page_text(pair), pair, PageText.others(rest)) : List<&2, Annotation.JsonPair<Annotation.Json>>}:
+  match hit:
+    case True{}:
+      %same : {PageText.others(tail) == PageText.keep(_, pair, PageText.others(rest)) : List<&2, Annotation.JsonPair<Annotation.Json>>}
+      ih
+    case False{}:
+      %same : {PageText.keep(_, pair, PageText.others(tail)) == PageText.keep(_, pair, PageText.others(rest)) : List<&2, Annotation.JsonPair<Annotation.Json>>}
+      %ih : {Con{pair, PageText.others(tail)} == Con{pair, _} : List<&2, Annotation.JsonPair<Annotation.Json>>}
+      {==}
+
+def Laws.pagetext_clear_preserves_others(members):
+  match members:
+    case Nil{}:
+      {==}
+    case Con{pair, rest}:
+      pagetext_clear_keep(PageText.is_page_text(pair), pair, PageText.clear(rest), rest, {==}, Laws.pagetext_clear_preserves_others(rest))
 
 
 # ── The annotation list ─────────────────────────────────────────────────────

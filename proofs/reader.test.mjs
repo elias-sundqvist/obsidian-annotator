@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { inkKey, inkShortcut, storedInk, recolorJson, tabs, arrange, exportBlock, exportTitle, importBlock, areaFit, areaValid, areaMove, areaResize, AREA_FULL, AREA_LEAST, spanShift, scanWords, SCAN_MOST, SCAN_BOXES } from './reader.mjs';
+import { inkKey, inkShortcut, storedInk, recolorJson, pageTextKey, storedPageText, pageTextJson, tabs, arrange, exportBlock, exportTitle, importBlock, areaFit, areaValid, areaMove, areaResize, AREA_FULL, AREA_LEAST, spanShift, scanWords, SCAN_MOST, SCAN_BOXES } from './reader.mjs';
 
 test('inks: stored keys, defaults and shortcuts', () => {
     for (const ink of ['yellow', 'orange', 'pink', 'purple', 'blue', 'green']) assert.equal(inkKey(ink), ink);
@@ -23,6 +23,34 @@ test('recolouring rewrites one member and retains every other byte-for-byte lexe
     assert.equal(storedInk(middle), 'yellow');
     assert.equal(recolorJson(middle, 'pink'), '{"a":1,"color":"pink","z":[1.50,2]}');
     assert.throws(() => recolorJson('[]', 'pink'), /must be an object/);
+});
+
+test('text boxes: a size is one member, written in place, taken away whole, and every other lexeme stays', () => {
+    for (const size of ['small', 'medium', 'large']) assert.equal(pageTextKey(size), size);
+    // A size this version does not know shows the note at the middle size; a value that is not a string does not show it.
+    for (const later of ['huge', '', 'Large', 'small ']) assert.equal(pageTextKey(later), 'medium');
+    for (const none of [undefined, null, 12, true, {}, ['large']]) assert.equal(pageTextKey(none), '');
+    const json = '{"a":1,"big":12345678901234567890123,"nativePdf":{"pageText":"keep"},"z":[1.50,2]}';
+    assert.equal(storedPageText(json), '');
+    const shown = pageTextJson(json, 'large');
+    assert.equal(shown, json.slice(0, -1) + ',"pageText":"large"}');
+    assert.equal(storedPageText(shown), 'large');
+    assert.equal(pageTextJson(shown, 'small'), json.slice(0, -1) + ',"pageText":"small"}', 'replaced in place, never duplicated');
+    assert.equal(pageTextJson(shown, null), json, 'taken away, the object is what it was');
+    // In the middle and not a string: not shown; a write replaces it where it stands, taking it away leaves the rest.
+    const odd = '{"pageText":7,"color":"blue","x":0}';
+    assert.equal(storedPageText(odd), '');
+    assert.equal(pageTextJson(odd, 'medium'), '{"pageText":"medium","color":"blue","x":0}');
+    assert.equal(pageTextJson(odd, null), '{"color":"blue","x":0}');
+    // A member written twice is read as JavaScript reads it, the last value in the first place; Bend never sees two (the laws cover them anyway).
+    assert.equal(storedPageText('{"pageText":7,"x":1,"pageText":"large"}'), 'large');
+    // Ink and size are written by separate members: each leaves the other alone.
+    const both = recolorJson(pageTextJson('{"id":"t"}', 'small'), 'green');
+    assert.equal(both, '{"id":"t","pageText":"small","color":"green"}');
+    assert.equal(storedPageText(recolorJson(both, 'pink')), 'small');
+    assert.equal(storedInk(pageTextJson(both, 'large')), 'green');
+    assert.equal(storedInk(pageTextJson(both, null)), 'green');
+    assert.throws(() => pageTextJson('[]', 'small'), /must be an object/);
 });
 
 const rows = [

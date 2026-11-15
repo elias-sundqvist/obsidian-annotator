@@ -6,6 +6,7 @@ import ./area.bend as Area
 import ./scan_text.bend as Scan
 import ./segments.bend as Segments
 import ./ink.bend as Ink
+import ./pagetext.bend as PageText
 import ./shelf.bend as Shelf
 import ./digest.bend as Digest
 import ./video_header.bend as VideoHeader
@@ -725,6 +726,44 @@ law ink_last_write_wins:
   for +second: Ink.Ink
   {Ink.set(Ink.set(members, first), second) == Ink.set(members, second) : List<&2, Annotation.JsonPair<Annotation.Json>>}
 
+
+# ── Text boxes ──────────────────────────────────────────────────────────────
+# A text box is an area whose note is also shown on the page, at a size kept
+# in one top-level member. Every size survives being written and read back.
+law pagetext_key_roundtrip:
+  for size: PageText.Size
+  {PageText.parse(PageText.key(size)) == size : PageText.Size}
+
+# Reading after showing the note at a size yields that size, whatever members
+# (including earlier or duplicate `pageText` members) the annotation had.
+law pagetext_read_after_write:
+  for +members: List<&2, Annotation.JsonPair<Annotation.Json>>
+  for +size: PageText.Size
+  {PageText.get(PageText.set(members, size)) == Some{size} : Maybe<&2, PageText.Size>}
+
+# Showing or resizing changes nothing else: every other member keeps its key,
+# value and order.
+law pagetext_write_preserves_others:
+  for +members: List<&2, Annotation.JsonPair<Annotation.Json>>
+  for +size: PageText.Size
+  {PageText.others(PageText.set(members, size)) == PageText.others(members) : List<&2, Annotation.JsonPair<Annotation.Json>>}
+
+# The last size wins, and resizing again never grows the annotation.
+law pagetext_last_write_wins:
+  for +members: List<&2, Annotation.JsonPair<Annotation.Json>>
+  for +first: PageText.Size
+  for +second: PageText.Size
+  {PageText.set(PageText.set(members, first), second) == PageText.set(members, second) : List<&2, Annotation.JsonPair<Annotation.Json>>}
+
+# No longer shown on the page means no size is read, duplicates or not.
+law pagetext_read_after_clear:
+  for +members: List<&2, Annotation.JsonPair<Annotation.Json>>
+  {PageText.get(PageText.clear(members)) == None{} : Maybe<&2, PageText.Size>}
+
+# Taking the member away changes nothing else.
+law pagetext_clear_preserves_others:
+  for +members: List<&2, Annotation.JsonPair<Annotation.Json>>
+  {PageText.others(PageText.clear(members)) == PageText.others(members) : List<&2, Annotation.JsonPair<Annotation.Json>>}
 
 # ── The annotation list ─────────────────────────────────────────────────────
 # Every entry appears under exactly one tab.
