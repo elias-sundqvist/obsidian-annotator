@@ -20,6 +20,7 @@ import {
     headingFor,
     renameHeading,
     addHeadings,
+    moveUnderHeading,
     type Annotation
 } from './codec';
 import type { HeadingOptions } from './note-headings';
@@ -106,6 +107,8 @@ export const logic = {
     headingFor,
     renameHeading,
     addHeadings,
+    /** Annotations not under the heading named for new ones moved to the end of its section, in one checked write. */
+    moveUnderHeading,
     /** Hypothesis JSON in and out of a note. */
     importHypothesis,
     exportHypothesis,

@@ -203,6 +203,24 @@ test('drawings, and annotations made many at a time, go into the notes of their 
     } finally { h.dispose(); }
 });
 
+test('moving annotations under the heading, from the reader: within the note of the page, never from one note to another', async () => {
+    const notes = chapters(); notes['Books/Chapter 2.md'].rows.push(row('three', 4, 'Also old'));
+    const h = host({ notes });
+    try {
+        const first = 'Books/Chapter 1.md', second = 'Books/Chapter 2.md';
+        h.contents.set(second, `${h.contents.get(second)}## Highlights\n\nMine.\n`);
+        const binding = await h.start(), one = h.contents.get(first);
+        await h.plugin.setDisplay({ writeUnder: '## Highlights' });
+        h.plugin.currentFile = h.pdf.path; h.viewer.currentPageNumber = 3; binding.host.pageListener();
+        assert.equal(h.plugin.shownNote(h.pdf.path).path, second);
+        assert.equal(await h.plugin.moveUnderHeading(), 2);
+        assert.equal(h.contents.get(first), one, 'the other note is untouched');
+        const text = h.contents.get(second);
+        assert.ok(text.indexOf('## Highlights') < text.indexOf('^two') && text.indexOf('^two') < text.indexOf('^three'), text);
+        assert.deepEqual(h.plugin.notes.get(h.pdf.path).parts.map(part => [part.note.path, part.records.map(each => each.id)]), [[first, ['one']], [second, ['two', 'three']]]);
+    } finally { h.dispose(); }
+});
+
 test('notes that cannot share the PDF say which and why, and nothing is written to any of them', async () => {
     const cases = [
         [{ 'Books/Chapter 1.md': { pages: '1-3', rows: [row('one', 1)] }, 'Books/Chapter 2.md': { pages: '3-4', rows: [row('two', 3)] } }, /Chapter 1 \(pages 1–3\) and Chapter 2 \(pages 3–4\) both hold page 3\. A page can be in one annotation note only/],

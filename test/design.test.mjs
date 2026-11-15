@@ -1245,3 +1245,38 @@ test('annotation headings: off by default; on, each new annotation gets one, ren
         h.plugin.data = { nativeDisplay: { annotationHeadings: true, headingLevel: 9 } }; await h.plugin.onload(); assert.equal(h.plugin.display.headingLevel, 3); assert.equal(h.plugin.display.annotationHeadings, true);
     } finally { Menu.prototype.showAtMouseEvent = shown; h.dispose(); }
 });
+
+test('the command that moves a note\'s annotations under the heading: explained without one, one write, Undo while the note is as it left it', async () => {
+    const { Notice } = await import('./.generated/plugin-boundary.mjs');
+    const h = await collection([quoted('a', 'The first passage', { text: 'my note' }), quoted('b', 'Another passage')]);
+    const wait = () => new Promise(resolve => setTimeout(resolve, 20));
+    try {
+        const text = () => h.contents.get(h.note.path), last = () => Notice.messages.at(-1), command = h.plugin.commands.find(item => item.id === 'move-annotations-under-heading');
+        assert.equal(command.name, "Move this note's annotations under the heading");
+        // No heading named: what to do, and nothing written.
+        const original = text();
+        assert.equal(await h.plugin.moveUnderHeading(h.note), 0); assert.equal(text(), original);
+        assert.match(String(last()), /No heading is set.*"Write new annotations under this heading".*Nothing was moved/);
+        // Named: the note lacks it, so it is written at the end and both annotations go under it, in one write.
+        await h.plugin.setDisplay({ writeUnder: '## Highlights' });
+        let writes = 0; const process = h.app.vault.process; h.app.vault.process = async (...args) => { writes++; return process(...args); };
+        const before = JSON.stringify(h.records());
+        assert.equal(await h.plugin.moveUnderHeading(h.note), 2); assert.equal(writes, 1);
+        assert.ok(text().startsWith('Prose that must survive.\n\n## Highlights\n\n>%%'), JSON.stringify(text().slice(0, 80)));
+        assert.equal(JSON.stringify(h.records()), before, 'the sidebar reads them again, as they were');
+        assert.equal(last().textContent, '2 annotations of Paper notes moved under “## Highlights”.Undo');
+        // Undo: the note exactly as it was.
+        last().querySelector('button').click(); await wait();
+        assert.equal(text(), original); assert.match(String(last()), /The annotations of Paper notes are back where they were/);
+        // From the reader (no Markdown note active): the note of the source; run again, nothing to move.
+        assert.equal(await h.plugin.moveUnderHeading(), 2); const moved = text();
+        assert.equal(await h.plugin.moveUnderHeading(), 0); assert.equal(text(), moved); assert.match(String(last()), /Every annotation in Paper notes is under “## Highlights” already/);
+        // Undo once the note has changed since: refused, and the change kept.
+        const notice = Notice.messages.findLast(item => item.querySelector?.('button'));
+        h.contents.set(h.note.path, `${moved}My later line.\n`); notice.querySelector('button').click(); await wait();
+        assert.equal(text(), `${moved}My later line.\n`); assert.match(String(last()), /has changed since its annotations were moved.*Nothing was changed/);
+        // A damaged note: refused, nothing written.
+        const damaged = `${original}>%%\n>\`\`\`annotation-json\n>{\n`; h.contents.set(h.note.path, damaged);
+        await assert.rejects(h.plugin.moveUnderHeading(h.note), /damaged annotation block/); assert.equal(text(), damaged);
+    } finally { h.dispose(); }
+});

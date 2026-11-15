@@ -16,7 +16,8 @@ import { displayText, readDisplayText } from '../proofs/display-text.mjs';
 // @ts-expect-error The proofs' JavaScript wrappers carry no type declarations.
 import { recolorJson, pageTextJson, pageTextKey, storedPageText } from '../proofs/reader.mjs';
 import { editedQuote, quoteText, withQuote } from './shown-quote';
-import { headingLine, namedHeading, noteHeadings, placeUnder } from './note-place';
+import { headingLine, namedHeading, noteHeadings, placeUnder, sectionOf } from './note-place';
+import { moveUnder } from './note-move';
 import {
     annotationHeadingLine,
     headingWords,
@@ -526,6 +527,139 @@ export function addHeadings(source: string, options: HeadingOptions): { source: 
     )
         throw new Error('Headings could not be added without changing something else in the note; it is as it was.');
     return { source: result, added: planned.length };
+}
+
+/** The lines of a note that are not in an annotation or an annotation's own heading, each with its line end. */
+function proseLines(source: string, blocks: readonly { start: number; end: number }[], owned: OwnedHeading[]) {
+    const cut = [
+            ...blocks.map(block => [source.lastIndexOf('\n', block.start - 1) + 1, block.end]),
+            ...owned.map(heading => [heading.from, heading.to])
+        ],
+        out: string[] = [];
+    for (let at = 0; at < source.length;) {
+        const newline = source.indexOf('\n', at),
+            end = newline < 0 ? source.length : newline + 1,
+            line = source.slice(at, end);
+        if (line.trim() && !cut.some(([from, to]) => at >= from && at < to)) out.push(line);
+        at = end;
+    }
+    return out;
+}
+/** Whether the line above an annotation's first line is empty, or it is the first line of the note: what Annotator 0.2 needs to read it. */
+function blankAbove(source: string, start: number): boolean {
+    const line = source.lastIndexOf('\n', start - 1) + 1;
+    return line === 0 || /(?:^|\n)\r?\n$/.test(source.slice(0, line));
+}
+
+/**
+ * Move every annotation of a note that is not in the section of the heading named for new annotations
+ * (note-place.ts) to the end of that section, in the order they had, after those that are there (note-move.ts). A
+ * note without the heading gets it at its end first, as when an annotation is written under it. With headings on
+ * (`headings`), an annotation's own heading moves with it.
+ *
+ * One write, made only if it reads back as the note did: the same annotations, each reading exactly as before; each
+ * one's text, line ends included, as it was; all of them in the section, in the order said; every other line of
+ * the note (but blank lines) as it was and in its order, plus the heading if it was written; an empty line above
+ * each annotation that had one and each one moved (Annotator 0.2 reads it then); and, with headings on, each annotation with the heading it had. Otherwise nothing
+ * is written and the error says what differed. A note with a damaged annotation is refused.
+ */
+export function moveUnderHeading(
+    source: string,
+    under: string,
+    headings: HeadingOptions | null = null
+): { source: string; moved: number; heading: boolean } {
+    const named = namedHeading(under);
+    if (!named) throw new Error('No heading is named for annotations to be written under.');
+    const problems = readSome(source).problems;
+    if (problems.length)
+        throw new Error(
+            `The note has a damaged annotation block (line ${problems[0].line}). Nothing was moved. Repair the note, then try again.`
+        );
+    // The named heading is a section, never an annotation's own.
+    const options = headings ? { ...headings, keep: [...(headings.keep || []), under] } : null,
+        ownIn = (text: string) => (options ? headingsIn(text, options) : []);
+    let text = source,
+        heading = false;
+    if (
+        placeUnder(
+            source,
+            named,
+            ownIn(source).map(own => own.from)
+        ).heading
+    ) {
+        if (!parseDocument(source).blocks.length) return { source, moved: 0, heading: false };
+        const ending = source.match(/\r?\n/)?.[0] ?? '\n',
+            blank = /\n[ \t]*\r?\n\s*$/.test(source),
+            gap = !source.trim() || blank ? '' : source.endsWith('\n') ? ending : ending + ending;
+        text = `${source}${gap}${headingLine(named, under)}${ending}`;
+        heading = true;
+    }
+    const blocks = parseDocument(text).blocks as (StoredBlock & { start: number; end: number; raw: string })[],
+        owned = ownIn(text),
+        ownedAbove = new Map(owned.map(own => [own.to, own.from])),
+        plan = moveUnder(
+            text,
+            named,
+            blocks.map(block => {
+                const line = text.lastIndexOf('\n', block.start - 1) + 1;
+                return { id: block.id, from: ownedAbove.get(line) ?? line, start: block.start, end: block.end };
+            }),
+            owned.map(own => own.from)
+        );
+    if (!plan.moved.length) return { source, moved: 0, heading: false };
+    const result = plan.text,
+        refuse = (what: string) => {
+            throw new Error(`The annotations could not be moved without changing ${what}. Nothing was written.`);
+        };
+    const rows = (note: string) => readAll(note).map(row => JSON.stringify(row)),
+        sorted = (items: string[]) => [...items].sort();
+    if (JSON.stringify(sorted(rows(result))) !== JSON.stringify(sorted(rows(source))))
+        refuse('how an annotation reads');
+    const after = parseDocument(result).blocks as (StoredBlock & { start: number; end: number; raw: string })[],
+        body = (raw: string) => raw.replace(/(?:\r?\n)+$/, '');
+    if (
+        JSON.stringify(sorted(after.map(block => body(block.raw)))) !==
+        JSON.stringify(sorted(blocks.map(block => body(block.raw))))
+    )
+        refuse('the text of an annotation');
+    const ownedAfter = ownIn(result),
+        section = sectionOf(
+            result,
+            named,
+            ownedAfter.map(own => own.from)
+        );
+    if (
+        !section ||
+        after.some(block => block.start <= section.from || block.start >= section.to) ||
+        JSON.stringify(after.map(block => block.id)) !== JSON.stringify(plan.order)
+    )
+        refuse('where the annotations are meant to go');
+    if (options && !sameHeadings(headingTexts(text, options), headingTexts(result, options), null))
+        refuse('which heading is an annotation’s own');
+    const was = proseLines(text, blocks, owned),
+        now = proseLines(result, after, ownedAfter);
+    if (
+        was.length !== now.length ||
+        was.some(
+            (line, index) =>
+                line !== now[index] &&
+                !(index === was.length - 1 && !line.endsWith('\n') && now[index].replace(/\r?\n$/, '') === line)
+        )
+    )
+        refuse('the text of the note around them');
+    // A blank line above each annotation that had one, and above each one moved (but one under its own heading).
+    const spaced = new Map(blocks.map(block => [block.id, blankAbove(text, block.start)])),
+        moved = new Set(plan.moved),
+        headed = new Set(owned.map(own => own.id));
+    if (
+        after.some(
+            block =>
+                (spaced.get(block.id) || (moved.has(block.id) && !headed.has(block.id))) &&
+                !blankAbove(result, block.start)
+        )
+    )
+        refuse('the blank line above an annotation');
+    return { source: result, moved: plan.moved.length, heading };
 }
 
 /**

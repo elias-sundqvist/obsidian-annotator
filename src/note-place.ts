@@ -98,12 +98,25 @@ export function placeUnder(
     skip: readonly number[] = []
 ): { at: number; heading: boolean } {
     if (!named) return { at: text.length, heading: false };
+    const section = sectionOf(text, named, skip);
+    return section ? { at: section.to, heading: false } : { at: text.length, heading: true };
+}
+
+/**
+ * The named heading's section: from the start of the heading's line to where a new annotation goes (`placeUnder`),
+ * or null when the note does not have the heading. `skip` is as for `placeUnder`.
+ */
+export function sectionOf(
+    text: string,
+    named: NamedHeading,
+    skip: readonly number[] = []
+): { from: number; to: number } | null {
     const headings = noteHeadings(text).filter(heading => !skip.includes(heading.from)),
         index = headings.findIndex(
             heading => heading.text === named.text && (named.level === null || heading.level === named.level)
         );
-    if (index < 0) return { at: text.length, heading: true };
+    if (index < 0) return null;
     const level = headings[index].level,
         next = headings.slice(index + 1).find(heading => heading.level <= level);
-    return { at: next ? next.from : text.length, heading: false };
+    return { from: headings[index].from, to: next ? next.from : text.length };
 }

@@ -63,6 +63,20 @@ before the next heading of the same or a higher level, in the order they
 were made. A note that has no such heading gets it at its end. Annotations
 already in a note stay where they are.
 
+To bring them there too, open the note (or its source in the reader) and
+run **Move this note's annotations under the heading**. Every annotation
+that is not in the heading's section goes to its end, after the ones there
+already, in the order they had in the note; with **Give each annotation a
+heading** on, an annotation's own heading goes with it. A note without the
+heading gets it at its end first. Only the annotations and the blank lines
+around them move: each is moved exactly as it is written, and your own text
+stays as it was, in its order. The note is read back before it is written,
+and if anything would read differently nothing is written and the notice
+says why. The notice has **Undo**, which puts the note back exactly as it
+was while you have not changed it since. Of a PDF whose notes hold page
+ranges, the command works on the note of the page being read, and an
+annotation never moves from one note to another.
+
 ### A heading for each annotation
 
 Turn on **Give each annotation a heading** and each new annotation gets a

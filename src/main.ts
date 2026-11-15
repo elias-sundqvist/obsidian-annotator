@@ -41,6 +41,7 @@ import { readPdfAnnotations, replacing } from './pdf-read';
 import { addDetails } from './pdf-details';
 import { newNoteText, DEFAULT_NOTE_HEADING } from './note-template';
 import { DEFAULT_HEADING_LEVEL, HEADING_LEVELS, headingLevel, type HeadingOptions } from './note-headings';
+import { namedHeading } from './note-place';
 import { HeadingModal } from './heading-dialog';
 import { HTML_FILE, htmlFileUrl, htmlCopyBase } from './html-file';
 import { drawingArea, drawingOf, drawingSelectors, drawingSvg, type Drawing } from './drawing';
@@ -517,6 +518,9 @@ export default class AnnotatorPlugin extends Plugin {
         renameHeading: (source: string, id: string, text: string | null) =>
             this.logic.call('renameHeading', source, id, text, this.headingSettings()),
         addHeadings: (source: string) => this.logic.call('addHeadings', source, this.headingSettings()),
+        // With headings on, an annotation's own heading moves with it.
+        moveUnderHeading: (source: string) =>
+            this.logic.call('moveUnderHeading', source, this.display.writeUnder, this.headingOptions()),
         recolor: (source: string, id: string, ink: string) => this.logic.call('recolor', source, id, ink),
         setPageText: (source: string, id: string, size: string | null) =>
             this.logic.call('setPageText', source, id, size),
@@ -1268,6 +1272,13 @@ export default class AnnotatorPlugin extends Plugin {
             name: "Add headings to this note's annotations",
             callback: () => {
                 void this.addHeadingsToNote().catch(error => this.fail(error));
+            }
+        });
+        this.addCommand({
+            id: 'move-annotations-under-heading',
+            name: "Move this note's annotations under the heading",
+            callback: () => {
+                void this.moveUnderHeading().catch(error => this.fail(error));
             }
         });
         this.registerEvent(
@@ -3501,6 +3512,86 @@ export default class AnnotatorPlugin extends Plugin {
             this.refresh();
         }
         return added;
+    }
+    /**
+     * Move every annotation of a note that is not under the heading named in "Write new annotations under this
+     * heading" to the end of that heading's section, in one write that is refused if anything else would change. The
+     * note is the Markdown note open, else the note of the source being read (of a PDF whose notes hold page ranges,
+     * the note of the page: an annotation never moves from one note to another). The notice offers Undo.
+     */
+    async moveUnderHeading(note: TFile | null = null): Promise<number> {
+        const under = this.display.writeUnder,
+            named = namedHeading(under);
+        if (!named) {
+            new Notice(
+                'No heading is set to move annotations under. Name one in Annotator\'s settings, in "Write new annotations under this heading" (for example "## Highlights"), then run this command again. Nothing was moved.',
+                10000
+            );
+            return 0;
+        }
+        const active = this.app.workspace.getActiveFile(),
+            target =
+                note ||
+                (active instanceof TFile && active.extension === 'md' ? active : this.shownNote(this.currentFile));
+        if (!target) throw new Error('Open an annotation note, or a source with one, first.');
+        if (this.busy) throw new Error('An annotation operation is already running.');
+        this.busy = true;
+        let moved = 0,
+            before = '',
+            after = '';
+        const heading = under.replace(/\s+/g, ' ').trim();
+        try {
+            after = await this.rewrite(target, async source => {
+                if (this.stopped) throw new Error('Plugin was unloaded before the annotations were moved.');
+                const result = await this.codec.moveUnderHeading(source);
+                moved = result.moved;
+                before = source;
+                return result.source;
+            });
+            for (const [file, state] of this.notes) if (this.notesOf(state).includes(target)) await this.loadNote(file);
+        } finally {
+            this.busy = false;
+            this.refresh();
+        }
+        if (!moved) {
+            new Notice(`Every annotation in ${target.basename} is under “${heading}” already.`);
+            return 0;
+        }
+        const document = this.app.workspace.containerEl.ownerDocument,
+            message = document.createDocumentFragment(),
+            undo = document.createElement('button');
+        undo.textContent = 'Undo';
+        undo.className = 'annotator-notice-undo';
+        message.append(
+            `${moved} ${moved === 1 ? 'annotation' : 'annotations'} of ${target.basename} moved under “${heading}”.`,
+            undo
+        );
+        const notice = new Notice(message, 15000) as Notice & { hide?(): void };
+        undo.onclick = () => {
+            notice.hide?.();
+            void this.undoMove(target, before, after).catch(error => this.fail(error));
+        };
+        return moved;
+    }
+    /** Put a note back exactly as it was before its annotations were moved, while it is still exactly as the move left it. */
+    async undoMove(note: TFile, before: string, after: string) {
+        if (this.busy) throw new Error('An annotation operation is already running.');
+        this.busy = true;
+        try {
+            await this.rewrite(note, async source => {
+                if (this.stopped) throw new Error('Plugin was unloaded before the annotations were put back.');
+                if (source !== after)
+                    throw new Error(
+                        `${note.basename} has changed since its annotations were moved, so Undo would take those changes back too. Nothing was changed.`
+                    );
+                return before;
+            });
+            for (const [file, state] of this.notes) if (this.notesOf(state).includes(note)) await this.loadNote(file);
+            new Notice(`The annotations of ${note.basename} are back where they were.`);
+        } finally {
+            this.busy = false;
+            this.refresh();
+        }
     }
     async recolor(file: string, annotation: Annotation, ink: Ink) {
         if (this.busy || ink === inkOf(annotation) || this.damaged(file)) return;
@@ -8079,7 +8170,7 @@ class NativeSettings extends PluginSettingTab {
         new Setting(root)
             .setName('Write new annotations under this heading')
             .setDesc(
-                'In any annotation note, new annotations go at the end of this heading\'s section, and the text after it stays after them. "## Highlights" means that level only, "Highlights" any level. A note without the heading gets it at its end. Empty: at the end of the note.'
+                'In any annotation note, new annotations go at the end of this heading\'s section, and the text after it stays after them. "## Highlights" means that level only, "Highlights" any level. A note without the heading gets it at its end. Empty: at the end of the note. Annotations a note already has stay where they are; the command "Move this note\'s annotations under the heading" moves them there.'
             )
             .addText(control =>
                 control

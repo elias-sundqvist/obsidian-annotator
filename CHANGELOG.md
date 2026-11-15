@@ -32,6 +32,12 @@ What changed for someone using Annotator. How to use each thing is in
   comes back with Undo. The command **Add headings to this note's
   annotations** gives older notes theirs. The headings are text between the
   annotations, so older versions read the note as before.
+- **Move this note's annotations under the heading** brings the annotations
+  a note had before you named a heading in **Write new annotations under
+  this heading** to the end of its section, in their order, with their own
+  headings when annotations have them. Each is moved exactly as it is
+  written and your text stays as it was; the note is read back first, and
+  nothing is written if anything would differ. The notice has Undo.
 - A PDF or book on a server that asks for a user name and password (HTTP
   Basic, for example a Calibre-Web library behind nginx) can be downloaded:
   the reader asks for them when the server does, and keeps them only until
