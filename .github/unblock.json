@@ -1482,6 +1482,15 @@
       "dependsOn": [],
       "estimate": 5,
       "notes": "Done 2026-11-15: Built 2026-11-15 by a subagent on feature/page-range, fast-forwarded into next. Property annotation-pages (10-100, 200-, 7) beside an unchanged annotation-target; non-overlapping ranges are parts of one PDF; overlaps, mixed ranged/unranged notes and unreadable ranges are refused with the notes and pages named. Writes go to the note of the page; a page in no range is read-only. Command 'New annotation note for pages…' with outline-based names. src/page-ranges.ts with property tests. Tried in Obsidian 1.13.7: the sidebar follows the page between two chapter notes, a highlight on page 5 goes into the second, and an overlap is refused with a clear message. Answers the request for a contiguous subset of pages."
+    },
+    {
+      "id": "devonthink-links",
+      "title": "DEVONthink item links as a note's source",
+      "status": "done",
+      "parent": "community",
+      "dependsOn": [],
+      "estimate": 2,
+      "notes": "Done 2026-11-15: Built 2026-11-15 by a subagent on feature/devonthink-links, merged into next. x-devonthink-item links are followed on a Mac by asking DEVONthink through osascript (JXA, UUID passed as an argument), after a first-use question; then the usual copy-in question. Tried with DEVONthink 4.4.2 (the owner's copy, trial) and from inside Obsidian 1.13.7: the link was followed, the copy-in asked, the PDF opened; no macOS permission prompt was needed here. A database whose record points at a missing file is reported with what to do. Not tried: DEVONthink 3."
     }
   ]
 }
