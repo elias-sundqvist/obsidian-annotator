@@ -1426,6 +1426,15 @@
       "dependsOn": [],
       "estimate": 1,
       "notes": "Done 2026-11-15: Built 2026-11-15 on feature/highlight-link, merged into next. Shift+H, Shift+1-6, Shift-click, and a command. Answers the Alt-drag highlight-and-link request."
+    },
+    {
+      "id": "rect-links",
+      "title": "Take in PDF++ rectangle links as areas",
+      "status": "done",
+      "parent": "community",
+      "dependsOn": [],
+      "estimate": 1,
+      "notes": "Done 2026-11-15: Built 2026-11-15 on feature/rect-links, merged into next. selection-links.ts rectLink and rectCorners; NativePdf.rectPlan and areaPictureDrawn; the import command takes both kinds. Tried in Obsidian 1.13.7 (the picture is exactly the linked figure)."
     }
   ]
 }
