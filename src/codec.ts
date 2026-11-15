@@ -15,7 +15,7 @@ import { createTypedAnnotation, deleteTypedAnnotation } from '../proofs/typed-cr
 import { displayText, readDisplayText, shownPassage } from '../proofs/display-text.mjs';
 // @ts-expect-error The proofs' JavaScript wrappers carry no type declarations.
 import { recolorJson, pageTextJson, pageTextKey, storedPageText } from '../proofs/reader.mjs';
-import { editedQuote, quoteText, withQuote } from './shown-quote';
+import { editedQuote, quoteText, visibleQuote, withQuote } from './shown-quote';
 import { headingLine, namedHeading, noteHeadings, placeUnder, sectionOf } from './note-place';
 import { moveUnder } from './note-move';
 import {
@@ -92,6 +92,21 @@ const visibleLine = (block: StoredBlock) => array(block.fields.display).join('\n
  * whose visible words are not its stored passage, its ID and those words.
  * The first block of an ID speaks for it, as in reading.
  */
+/**
+ * The words a heading made for an annotation starts from: the reader's own quote, else the visible line's words when
+ * they are the stored passage with white space put back (a PDF's line ends), else none (its stored passage is used).
+ */
+function quotedWords(block: StoredBlock, edited: Map<string, string>): string | null {
+    const mine = edited.get(block.id);
+    if (mine !== undefined) return mine;
+    try {
+        const exact = storedQuote(annotationOf(block)),
+            shown = visibleQuote(visibleLine(block));
+        return exact && shown ? shownPassage(exact, String(readDisplayText(shown))) : null;
+    } catch {
+        return null;
+    }
+}
 function quoteEdits(blocks: StoredBlock[]): [string, string][] {
     const out: [string, string][] = [],
         seen = new Set<string>();
@@ -468,7 +483,10 @@ export function headingFor(
         heading: own ? own.text : null,
         suggested: own
             ? own.text
-            : uniqueHeading(defaultWords(annotationOf(block), edited.get(id)), takenHeadings(source, options))
+            : uniqueHeading(
+                  defaultWords(annotationOf(block), quotedWords(block, edited)),
+                  takenHeadings(source, options)
+              )
     };
 }
 
@@ -523,7 +541,7 @@ export function addHeadings(source: string, options: HeadingOptions): { source: 
     for (const block of blocks) {
         if (was.has(block.id) || seen.has(block.id)) continue;
         seen.add(block.id);
-        const words = uniqueHeading(defaultWords(annotationOf(block), edited.get(block.id)), taken);
+        const words = uniqueHeading(defaultWords(annotationOf(block), quotedWords(block, edited)), taken);
         taken.push(words);
         planned.push({ id: block.id, start: block.start, eol: block.eol, words });
     }

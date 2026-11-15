@@ -66,6 +66,17 @@ test('what a new heading says: the first words, one line, nothing that ends a li
     assert.equal(uniqueHeading('Words', ['words', 'Other']), 'Words (2)'); assert.equal(uniqueHeading('Words', ['words', 'words (2)']), 'Words (3)'); assert.equal(uniqueHeading('Words', []), 'Words');
 });
 
+test('a passage written with its PDF line ends spaced gives its heading the spaced words: made with it, suggested, and added by the command', () => {
+    const exact = 'alarge number of high-evolvabilitygenomes', shown = 'a large number of high-evolvability genomes';
+    assert.match(createUnder('# Paper\n', quoted('a1', exact), {}, '', ON, shown), /\n### a large number of high-evolvability genomes\n/);
+    const plain = create('# Paper\n', quoted('a1', exact), {}, shown);
+    assert.equal(headingFor(plain, 'a1', ON).suggested, 'a large number of high-evolvability genomes');
+    assert.match(addHeadings(plain, ON).source, /\n### a large number of high-evolvability genomes\n/);
+    // Written from the stored passage (an older version, or a source whose words were not known), it is the stored words.
+    assert.equal(headingFor(create('# Paper\n', quoted('a1', exact)), 'a1', ON).suggested, exact);
+    // The reader's own quote still comes first.
+    assert.equal(headingFor(requote(plain, 'a1', 'my own words'), 'a1', ON).suggested, 'my own words');
+});
 test('created with a heading: the line above the annotation, which reads exactly as without it', () => {
     for (const under of ['', '## Highlights']) {
         const plain = createUnder('# Paper\n\nIntro.\n', quoted('a1', 'Attention is all you need.'), {}, under);
