@@ -712,6 +712,10 @@ body:is(.annotator-compact, .annotator-compact-setting) { --annotator-quote-line
 /* ── Settings, library and migration (all built from host components) ───── */
 .annotator-ink-setting .setting-item-name { display: flex; align-items: center; gap: 8px; }
 .annotator-ink-setting .annotator-ink-swatch { cursor: default; }
+.annotator-key-setting input.annotator-key-field { width: 3.5em; text-align: center; font-family: var(--font-monospace); }
+.annotator-key-setting input.annotator-key-field.is-invalid { border-color: var(--text-error); }
+.annotator-key-problem { display: block; color: var(--text-error); }
+.annotator-key-problem:empty { display: none; }
 .annotator-library-item { display: flex; align-items: center; gap: var(--size-4-3, 12px); }
 .annotator-library-kind { display: flex; color: var(--text-muted); }
 .annotator-library-item .suggestion-content { flex: 1; min-width: 0; }
@@ -1222,6 +1226,37 @@ body:is(.annotator-compact, .annotator-compact-setting) { --annotator-quote-line
 .annotator-native-areas .annotator-native-mark.annotator-area-mark.is-hover { background: rgba(var(--annotator-ink), .1); }
 .annotator-native-areas .annotator-native-mark.annotator-area-mark.is-active { background: rgba(var(--annotator-ink), .04); box-shadow: 0 0 0 3px rgba(var(--annotator-ink), .35); }
 .annotator-native-hide-highlights .annotator-native-areas { visibility: hidden; }
+
+/* ── Page notes on their page ────────────────────────────────────────────────
+   A note about a PDF page is a small marker at the foot of that page, in its
+   right margin: where a page of one's own would come before the next page.
+   Inside the page, as every mark is, so the PDF's own layout stays its own.
+   Drawn on the app's surface, not blended, with the note's ink as an edge. */
+.annotator-native-marks.annotator-page-notes, [data-annotator-page] .annotator-native-marks.annotator-page-notes {
+    inset: auto var(--size-4-2, 8px) var(--size-4-2, 8px) auto; display: flex; flex-direction: column-reverse; gap: var(--size-4-1, 4px);
+    mix-blend-mode: normal; opacity: 1; z-index: 6;
+}
+.annotator-page-notes .annotator-native-mark.annotator-page-note-mark,
+.annotator-page-notes .annotator-native-mark.annotator-page-note-mark:hover {
+    position: relative; display: flex; align-items: center; justify-content: center; box-sizing: border-box;
+    width: var(--size-4-8, 32px); height: var(--size-4-8, 32px); padding: 0;
+    color: var(--text-muted); background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border); border-radius: var(--radius-s, 4px);
+    box-shadow: inset 3px 0 0 rgb(var(--annotator-ink)), var(--shadow-s);
+    transition: color .14s var(--annotator-ease, ease), border-color .14s var(--annotator-ease, ease);
+}
+.annotator-page-notes .annotator-native-mark.annotator-page-note-mark:hover { color: var(--text-normal); border-color: var(--background-modifier-border-hover); }
+.annotator-page-notes .annotator-native-mark.annotator-page-note-mark.is-active { color: var(--text-normal); border-color: var(--interactive-accent); }
+.annotator-page-notes .annotator-native-mark.annotator-page-note-mark.is-flash { animation: annotator-page-note-flash 1.1s var(--annotator-ease, ease) 1 both; }
+@keyframes annotator-page-note-flash {
+    0%, 45% { box-shadow: inset 3px 0 0 rgb(var(--annotator-ink)), 0 0 0 4px rgba(var(--annotator-ink), .45); }
+    100% { box-shadow: inset 3px 0 0 rgb(var(--annotator-ink)), var(--shadow-s); }
+}
+.annotator-page-notes .annotator-page-note-mark svg { width: var(--icon-s, 16px); height: var(--icon-s, 16px); fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) {
+    .annotator-page-notes .annotator-native-mark.annotator-page-note-mark { transition: none; }
+    .annotator-page-notes .annotator-native-mark.annotator-page-note-mark.is-flash { animation: none; }
+}
 /* Marking: a crosshair over the pages and a dashed frame that follows the drag. */
 .annotator-area-mode .page, .annotator-area-mode .page * { cursor: crosshair !important; user-select: none !important; -webkit-user-select: none !important; }
 .annotator-area-mode .page { touch-action: none; }

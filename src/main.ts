@@ -95,6 +95,7 @@ import {
     STYLE_ICON_NAMES,
     STYLE_NAMES,
     isMarkStyle,
+    nextStyle,
     styleOf,
     styleOfTag,
     withStyle,
@@ -178,6 +179,16 @@ import { AnnotationView } from './sidebar';
 import { CitationsView, CITATIONS_VIEW } from './citations-view';
 import type { CiteLogic } from './pdf-citations';
 import { SelectionActions, type SelectionAction } from './selection-actions';
+import {
+    DEFAULT_SELECTION_KEYS,
+    SELECTION_KEY_LABELS,
+    SELECTION_KEY_NAMES,
+    keyOf,
+    selectionKeyProblem,
+    selectionKeys,
+    type SelectionKeyName,
+    type SelectionKeys
+} from './selection-keys';
 import { installAnnotationLinks } from './link-navigation';
 import {
     remoteKind,
@@ -410,6 +421,8 @@ export default class AnnotatorPlugin extends Plugin {
     /** The size new text boxes' words start at: the one chosen last. */
     lastTextSize: TextSize = DEFAULT_TEXT_SIZE;
     inkLabels: InkLabels = {};
+    /** The selection bar's letter keys, as chosen in the settings. */
+    selectionKeys: SelectionKeys = { ...DEFAULT_SELECTION_KEYS };
     summary: SummaryOptions = { ...DEFAULT_SUMMARY };
     /** Sidebar display choices, applied as body classes so snippets and Style Settings can set them too. */
     display: {
@@ -563,7 +576,7 @@ export default class AnnotatorPlugin extends Plugin {
             (capture, action, ink, style) => {
                 void this.beginCapture(capture, action, ink, style);
             },
-            () => ({ ink: this.lastInk, labels: this.inkLabels, style: this.lastStyle }),
+            () => ({ ink: this.lastInk, labels: this.inkLabels, style: this.lastStyle, keys: this.selectionKeys }),
             style => this.setMarkStyle(style)
         );
         this.register(() => this.selectionActions?.dispose());
@@ -599,6 +612,7 @@ export default class AnnotatorPlugin extends Plugin {
         this.lastTextSize = isTextSize(inks.textSize) ? inks.textSize : DEFAULT_TEXT_SIZE;
         this.ink = this.lastInk;
         this.inkLabels = inkLabels(inks.labels);
+        this.selectionKeys = selectionKeys(this.savedData.nativeSelectionKeys);
         this.summary = summaryOptions(this.savedData.nativeSummary);
         const shown = settingsObject(this.savedData.nativeDisplay);
         this.display = {
@@ -868,6 +882,16 @@ export default class AnnotatorPlugin extends Plugin {
                 void this.captureLast('highlight-link');
             }
         });
+        // The bar's S: the next style for the selection whose bar is open, else for the next passage marked.
+        this.addCommand({
+            id: 'next-mark-style',
+            name: 'Next mark style',
+            callback: () => {
+                if (this.selectionActions?.cycleStyle()) return;
+                this.setMarkStyle(nextStyle(this.lastStyle));
+                new Notice(`Mark style: ${STYLE_NAMES[this.lastStyle]}`);
+            }
+        });
         this.addCommand({
             id: 'next-annotation',
             name: 'Go to next annotation',
@@ -942,6 +966,22 @@ export default class AnnotatorPlugin extends Plugin {
                         .then(() => this.newNote(this.currentFile!))
                         .catch(error => this.fail(error));
                 } else new Notice('Open a source to annotate first.');
+            }
+        });
+        // A page of one's own between two pages of a PDF, as a page note of the page being read: its marker sits at the
+        // foot of that page. Stored as any page note is, so an older version lists it as one.
+        this.addCommand({
+            id: 'add-note-page',
+            name: 'Add a note page after this page (PDF)',
+            checkCallback: checking => {
+                const file = this.currentFile,
+                    host: unknown = file ? this.bindingFor(file)?.host : undefined;
+                if (!file || !(host instanceof NativePdf) || !host.currentPage()) return false;
+                if (!checking)
+                    void this.openSidebar()
+                        .then(() => this.newNote(file))
+                        .catch(error => this.fail(error));
+                return true;
             }
         });
         this.addCommand({
@@ -2886,6 +2926,24 @@ export default class AnnotatorPlugin extends Plugin {
         await this.persist();
         this.refresh();
     }
+    /**
+     * Give one of the selection bar's actions another key. Refused, with the reason, when the key is not one
+     * character, is a number, or is another action's; the keys in use stay then.
+     */
+    async setSelectionKey(name: SelectionKeyName, value: string): Promise<string | null> {
+        const others = SELECTION_KEY_NAMES.filter(other => other !== name).map(other => this.selectionKeys[other]),
+            problem = selectionKeyProblem(value, others);
+        if (problem) return problem;
+        const key = keyOf(value);
+        if (key === this.selectionKeys[name]) return null;
+        this.selectionKeys = { ...this.selectionKeys, [name]: key };
+        await this.persist();
+        return null;
+    }
+    async resetSelectionKeys() {
+        this.selectionKeys = { ...DEFAULT_SELECTION_KEYS };
+        await this.persist();
+    }
     private applyDisplay() {
         const body = this.app.workspace.containerEl.ownerDocument.body;
         body.classList.toggle('annotator-compact-setting', this.display.compact);
@@ -4703,6 +4761,7 @@ export default class AnnotatorPlugin extends Plugin {
                     textSize: this.lastTextSize,
                     labels: { ...this.inkLabels }
                 },
+                nativeSelectionKeys: { ...this.selectionKeys },
                 nativeSummary: { ...settingsObject(this.savedData.nativeSummary), ...this.summary },
                 nativeDisplay: { ...settingsObject(this.savedData.nativeDisplay), ...this.display }
             };
@@ -6366,6 +6425,7 @@ export default class AnnotatorPlugin extends Plugin {
             logic: this.logic,
             resume: (file: TFile) => this.progressElsewhere(file),
             changed: () => this.refresh(),
+            keys: () => this.selectionKeys,
             transcript: async (note: TFile, target: string, language: string, remote: boolean) => {
                 if (remote)
                     return loadYouTubeTranscript(target, language, async (url, options) => {
@@ -7869,6 +7929,8 @@ class NativeSettings extends PluginSettingTab {
                     .onChange(value => save(plugin.setDisplay({ composer: value as 'page' | 'sidebar' })))
             );
 
+        this.selectionKeySettings(root);
+
         new Setting(root).setName('Sidebar').setHeading();
         new Setting(root)
             .setName('Compact cards')
@@ -8194,6 +8256,56 @@ class NativeSettings extends PluginSettingTab {
                     .setButtonText('Check')
                     .setCta()
                     .onClick(() => plugin.openMigration())
+            );
+    }
+    /** The selection bar's letter keys: each one character, none a number, no two the same; and back to h, a and s. */
+    private selectionKeySettings(root: HTMLElement) {
+        const plugin = this.plugin;
+        new Setting(root)
+            .setName('Keys on a selection')
+            .setHeading()
+            .setDesc(
+                'While the bar by a selection is open, these keys act on it; 1–6 pick a colour and Escape closes it. With Shift, the mark key also copies the link (with a letter key). Each action is also a command, which Obsidian\u2019s Hotkeys settings can give any key.'
+            );
+        for (const name of SELECTION_KEY_NAMES) {
+            const setting = new Setting(root).setName(SELECTION_KEY_LABELS[name]);
+            setting.settingEl.addClass('annotator-key-setting');
+            // Why a key typed here is not taken, said where the setting is described and read out as it changes.
+            const said = setting.descEl.createEl('span', { cls: 'annotator-key-problem', attr: { role: 'status' } });
+            setting.addText(control => {
+                const input = control.inputEl;
+                const show = (problem: string | null) => {
+                    said.textContent = problem || '';
+                    input.classList.toggle('is-invalid', !!problem);
+                    input.setAttribute('aria-invalid', problem ? 'true' : 'false');
+                };
+                input.classList.add('annotator-key-field');
+                input.setAttribute('aria-label', `Key: ${SELECTION_KEY_LABELS[name]}`);
+                input.spellcheck = false;
+                input.autocapitalize = 'off';
+                control
+                    .setPlaceholder(DEFAULT_SELECTION_KEYS[name])
+                    .setValue(plugin.selectionKeys[name])
+                    .onChange(value => {
+                        void plugin.setSelectionKey(name, value).then(show, error => new Notice(String(error)));
+                    });
+                // Left with a key that was not taken, the field shows again the key in use.
+                input.addEventListener('blur', () => {
+                    input.value = plugin.selectionKeys[name];
+                    show(null);
+                });
+            });
+        }
+        new Setting(root)
+            .setName('Back to H, A and S')
+            .setDesc('The keys the bar had to begin with.')
+            .addButton(control =>
+                control.setButtonText('Reset').onClick(() => {
+                    void plugin.resetSelectionKeys().then(
+                        () => this.display(),
+                        error => new Notice(String(error))
+                    );
+                })
             );
     }
     /** How a PDF or a book reaches the reader from outside Obsidian, on this device: its key and its recipe. */

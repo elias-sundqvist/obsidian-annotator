@@ -269,6 +269,114 @@ test('the selection bar chooses how a passage is marked: one control goes round 
     } finally { actions.dispose(); w.close(); }
 });
 
+test('a key of the selection bar is one character that prints, not a number, and no other action\'s; keys kept that break this give way to h, a and s', async () => {
+    const { selectionKeyProblem, selectionKeys, keyOf, pressed, DEFAULT_SELECTION_KEYS } = await import('./.generated/readers/selection-keys.js');
+    assert.deepEqual({ ...DEFAULT_SELECTION_KEYS }, { mark: 'h', note: 'a', style: 's' });
+    for (const fine of ['q', 'é', ';', 'ß', 'ж', '🙂']) assert.equal(selectionKeyProblem(fine), null, fine);
+    for (const [value, said] of [['', 'Type a key.'], ['ab', 'One character only.'], [' ', 'A key that prints a character.'], ['\t', 'A key that prints a character.'], ['\u0007', 'A key that prints a character.'], ['3', 'The number keys choose the colour.'], ['0', 'The number keys choose the colour.'], ['٣', 'The number keys choose the colour.']])
+        assert.equal(selectionKeyProblem(value), said, JSON.stringify(value));
+    // No two actions share a key, whatever its case.
+    assert.equal(selectionKeyProblem('H', ['h', 's']), 'Another action has this key.'); assert.equal(selectionKeyProblem('x', ['h', 's']), null);
+    assert.equal(keyOf('M'), 'm'); assert.equal(keyOf('É'), 'é');
+    // Kept keys are read in lower case; a missing one is its default; any that clash or break the rule bring the defaults back.
+    assert.deepEqual(selectionKeys({ mark: 'M', note: 'n', style: 'y' }), { mark: 'm', note: 'n', style: 'y' });
+    assert.deepEqual(selectionKeys({ note: 'x' }), { mark: 'h', note: 'x', style: 's' });
+    for (const broken of [undefined, null, 'h', ['h'], { mark: 'a' }, { style: '5' }, { mark: 'hh' }, { note: '' }, { mark: 'q', note: 'Q' }])
+        assert.deepEqual(selectionKeys(broken), { mark: 'h', note: 'a', style: 's' }, JSON.stringify(broken));
+    // A press is the key whatever Shift did to a letter; a named key is never a letter.
+    assert.equal(pressed({ key: 'H' }, 'h'), true); assert.equal(pressed({ key: 'é' }, 'é'), true); assert.equal(pressed({ key: 'Escape' }, 'e'), false); assert.equal(pressed({ key: 'j' }, 'h'), false);
+});
+
+test('the selection bar answers the keys chosen for it: its labels name them, they act, and the keys they replace do nothing', async () => {
+    const dom = new JSDOM('<body><article>Selected passage</article></body>'), w = dom.window;
+    const { SelectionActions } = await import('./.generated/readers/selection-actions.js');
+    w.Range.prototype.getBoundingClientRect = () => ({ left: 10, top: 100, bottom: 120, width: 100, height: 20 });
+    let keys = { mark: 'm', note: 'n', style: 'y' }, remembered;
+    const chosen = [], actions = new SelectionActions(w.document, (_capture, action, ink, style) => chosen.push([action, ink, style]), () => ({ ink: 'pink', labels: { pink: 'Question' }, keys, style: remembered }), style => { remembered = style; });
+    const source = w.document.querySelector('article'), capture = { file: 'a.pdf', exact: 'Selected passage', revision: 'r' };
+    const open = () => { const range = w.document.createRange(); range.selectNodeContents(source); w.getSelection().removeAllRanges(); w.getSelection().addRange(range); actions.show(capture, source); };
+    const bar = () => w.document.querySelector('[role=toolbar]'), labels = () => [...bar().querySelectorAll('.annotator-ink-swatch')].map(el => el.getAttribute('aria-label'));
+    const press = init => { const event = new w.KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...(typeof init === 'string' ? { key: init } : init) }); w.document.dispatchEvent(event); return event.defaultPrevented; };
+    try {
+        open();
+        assert.equal(bar().querySelector('.annotator-selection-style').getAttribute('aria-label'), 'Mark style: Highlight (y)');
+        assert.deepEqual(labels(), ['Highlight in Yellow (1)', 'Highlight in Orange (2)', 'Highlight in Question (m)', 'Highlight in Purple (4)', 'Highlight in Blue (5)', 'Highlight in Green (6)']);
+        assert.equal(bar().querySelector('.annotator-selection-note').getAttribute('aria-label'), 'Annotate selection (n)');
+        for (const el of bar().querySelectorAll('button')) assert.equal(el.hasAttribute('title'), false);
+        // The keys they replace are left to the host: nothing is made, nothing is taken from it, the bar stays.
+        for (const old of ['h', 'a', 's']) assert.equal(press(old), false, old);
+        assert.deepEqual(chosen, []); assert.ok(bar()); assert.equal(bar().dataset.annotatorStyle, 'highlight');
+        // The chosen ones act, a capital as well; the labels follow the style.
+        assert.equal(press('y'), true); assert.equal(bar().dataset.annotatorStyle, 'underline'); assert.equal(labels()[2], 'Underline in Question (m)'); assert.equal(bar().querySelector('.annotator-selection-style').getAttribute('aria-label'), 'Mark style: Underline (y)');
+        press('M'); assert.deepEqual(chosen.pop(), ['highlight', undefined, 'underline']);
+        open(); press({ key: 'M', shiftKey: true }); assert.deepEqual(chosen.pop(), ['highlight-link', undefined, 'underline'], 'Shift with the mark key copies the link');
+        open(); press('n'); assert.deepEqual(chosen.pop(), ['annotate', undefined, 'underline']);
+        open(); press({ key: 'N', shiftKey: true }); assert.equal(chosen.length, 0, 'Shift with the note key is not a note'); actions.hide();
+        // The numbers stay the inks.
+        open(); press('4'); assert.deepEqual(chosen.pop(), ['highlight', 'purple', 'underline']);
+        // Keys that are not plain letters: one chosen from a French number row is its action, not that row's ink.
+        keys = { mark: ';', note: 'é', style: 's' }; open();
+        assert.equal(labels()[2], 'Underline in Question (;)'); assert.equal(bar().querySelector('.annotator-selection-note').getAttribute('aria-label'), 'Annotate selection (é)');
+        press({ key: 'é', code: 'Digit2' }); assert.deepEqual(chosen.pop(), ['annotate', undefined, 'underline']);
+        open(); press({ key: ';', code: 'Semicolon' }); assert.deepEqual(chosen.pop(), ['highlight', undefined, 'underline']);
+        // The command "Next mark style" takes the next style in the bar that is open, and says when there is none.
+        open(); assert.equal(actions.cycleStyle(), true); assert.equal(bar().dataset.annotatorStyle, 'strike-out'); actions.hide(); assert.equal(actions.cycleStyle(), false);
+        actions.offer(capture, source, 'Selected passage'); assert.equal(actions.cycleStyle(), false, 'a live page draws highlights only'); actions.hide();
+        // Nothing chosen: h, a and s.
+        keys = undefined; open(); assert.equal(bar().querySelector('.annotator-selection-note').getAttribute('aria-label'), 'Annotate selection (a)'); press('a'); assert.equal(chosen.pop()[0], 'annotate');
+    } finally { actions.dispose(); w.close(); }
+});
+
+test('the keys on a selection are chosen in the settings: refused with the reason when they break the rule, kept with the settings, back to h, a and s on reset; the next style is a command too', async () => {
+    const { Notice } = await import('./.generated/plugin-boundary.mjs');
+    const h = host();
+    try {
+        h.plugin.data = { nativeSelectionKeys: { mark: 'm', note: 'n', style: 'y' } };
+        await h.plugin.onload();
+        assert.deepEqual(h.plugin.selectionKeys, { mark: 'm', note: 'n', style: 'y' });
+        // The bar is told the keys in use.
+        assert.deepEqual(h.plugin.selectionActions.inks().keys, { mark: 'm', note: 'n', style: 'y' });
+        const tab = h.plugin.settingTabs[0]; tab.display();
+        const rows = [...tab.containerEl.querySelectorAll('.setting-item')], heading = rows.find(row => row.querySelector('.setting-item-name').textContent === 'Keys on a selection');
+        assert.ok(heading?.classList.contains('setting-item-heading')); assert.match(heading.textContent, /Hotkeys/);
+        const keyRows = [...tab.containerEl.querySelectorAll('.annotator-key-setting')];
+        assert.deepEqual(keyRows.map(row => row.querySelector('.setting-item-name').textContent), ['Mark in the last colour', 'Open a note', 'Next mark style']);
+        assert.equal(rows.indexOf(keyRows[0]), rows.indexOf(heading) + 1);
+        const field = row => row.querySelector('input.annotator-key-field'), said = row => row.querySelector('.annotator-key-problem');
+        assert.deepEqual(keyRows.map(row => field(row).value), ['m', 'n', 'y']);
+        assert.deepEqual(keyRows.map(row => field(row).getAttribute('aria-label')), ['Key: Mark in the last colour', 'Key: Open a note', 'Key: Next mark style']);
+        const type = async (row, value) => { field(row).value = value; field(row).dispatchEvent(new h.dom.window.Event('input')); for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); };
+        const writes = () => h.plugin.writes.length;
+        let before = writes();
+        for (const [value, reason] of [['5', 'The number keys choose the colour.'], ['M', 'Another action has this key.'], ['ab', 'One character only.'], [' ', 'A key that prints a character.'], ['', 'Type a key.']]) {
+            await type(keyRows[1], value);
+            assert.equal(said(keyRows[1]).textContent, reason, value); assert.equal(said(keyRows[1]).getAttribute('role'), 'status');
+            assert.equal(field(keyRows[1]).getAttribute('aria-invalid'), 'true'); assert.ok(field(keyRows[1]).classList.contains('is-invalid'));
+            assert.equal(h.plugin.selectionKeys.note, 'n', 'the key in use stays');
+        }
+        assert.equal(writes(), before, 'nothing refused is saved');
+        // Left with a refused key, the field shows the one in use again.
+        field(keyRows[1]).dispatchEvent(new h.dom.window.Event('blur')); assert.equal(field(keyRows[1]).value, 'n'); assert.equal(said(keyRows[1]).textContent, ''); assert.equal(field(keyRows[1]).getAttribute('aria-invalid'), 'false');
+        // A good key is taken at once, in lower case, and kept with the settings.
+        await type(keyRows[1], 'Q');
+        assert.equal(said(keyRows[1]).textContent, ''); assert.deepEqual(h.plugin.selectionKeys, { mark: 'm', note: 'q', style: 'y' });
+        assert.deepEqual(h.plugin.data.nativeSelectionKeys, { mark: 'm', note: 'q', style: 'y' });
+        // Reset: back to h, a and s, saved, and the fields say so.
+        const reset = [...tab.containerEl.querySelectorAll('button')].find(button => button.textContent === 'Reset');
+        assert.equal(reset.closest('.setting-item').querySelector('.setting-item-name').textContent, 'Back to H, A and S');
+        reset.click(); for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0));
+        assert.deepEqual(h.plugin.selectionKeys, { mark: 'h', note: 'a', style: 's' }); assert.deepEqual(h.plugin.data.nativeSelectionKeys, { mark: 'h', note: 'a', style: 's' });
+        assert.deepEqual([...tab.containerEl.querySelectorAll('input.annotator-key-field')].map(input => input.value), ['h', 'a', 's']);
+        // "Next mark style" with no bar open: the next passage is marked in the next style, and it says which.
+        const command = h.plugin.commands.find(each => each.id === 'next-mark-style'); assert.equal(command.name, 'Next mark style');
+        before = Notice.messages.length; h.plugin.lastStyle = 'highlight'; command.callback();
+        assert.equal(h.plugin.lastStyle, 'underline'); assert.equal(String(Notice.messages.at(-1)), 'Mark style: Underline'); assert.equal(Notice.messages.length, before + 1);
+    } finally { h.dispose(); }
+    // Keys kept that clash are not used: the bar has h, a and s.
+    const again = host();
+    try { again.plugin.data = { nativeSelectionKeys: { mark: 'a', note: 'a', style: 's' } }; await again.plugin.onload(); assert.deepEqual(again.plugin.selectionKeys, { mark: 'h', note: 'a', style: 's' }); } finally { again.dispose(); }
+});
+
 test('a new passage is marked in the style last chosen, as a tag the note shows; the style is remembered with the inks', async () => {
     const h = await collection([quoted('a', 'Passage')]);
     try {

@@ -1,6 +1,7 @@
 import type { SourceCapture } from './source';
 import { DEFAULT_INK, INKS, inkAt, inkLabel, type Ink, type InkLabels } from './ink';
 import { DEFAULT_STYLE, STYLE_ACTIONS, STYLE_NAMES, nextStyle, styleIcon, type MarkStyle } from './mark-style';
+import { DEFAULT_SELECTION_KEYS, pressed, type SelectionKeys } from './selection-keys';
 // Match the self-contained guest helper; the editing-island regressions cover both.
 function editingContext(target: EventTarget | null): boolean {
     const element =
@@ -22,6 +23,8 @@ export interface SelectionInkState {
     labels?: InkLabels;
     /** How a passage is marked by `h`, a number or a swatch: the style last chosen. */
     style?: MarkStyle;
+    /** The letter keys the reader chose for marking, a note and the next style; `h`, `a` and `s` unless changed. */
+    keys?: SelectionKeys;
 }
 const SVG = 'http://www.w3.org/2000/svg';
 /** Lucide "message-square-plus"; inlined so this module stays free of host APIs. */
@@ -34,6 +37,7 @@ export class SelectionActions {
     private style: MarkStyle = DEFAULT_STYLE;
     private current: Ink = DEFAULT_INK;
     private labels: InkLabels | undefined;
+    private keys: SelectionKeys = DEFAULT_SELECTION_KEYS;
     /**
      * `choose` is told the style with every action, so a note's passage is marked the way the bar shows as well.
      * `restyle` hears each change of style at once: the choice is remembered even when nothing is marked with it.
@@ -92,9 +96,10 @@ export class SelectionActions {
         this.capture = capture;
         this.source = source;
         this.offered = words !== undefined;
-        const { ink: current, labels, style } = this.inks();
+        const { ink: current, labels, style, keys } = this.inks();
         this.current = current;
         this.labels = labels;
+        this.keys = keys || DEFAULT_SELECTION_KEYS;
         // A live web page draws every mark as a highlight, so its bar offers no other style and makes none.
         this.style = this.offered ? DEFAULT_STYLE : style || DEFAULT_STYLE;
         const menu = this.document.createElement('div');
@@ -134,7 +139,7 @@ export class SelectionActions {
         this.showStyle();
         const note = this.document.createElement('button');
         note.className = 'annotator-selection-note';
-        note.setAttribute('aria-label', 'Annotate selection (a)');
+        note.setAttribute('aria-label', `Annotate selection (${this.keys.note})`);
         const icon = this.document.createElementNS(SVG, 'svg');
         icon.setAttribute('viewBox', '0 0 24 24');
         icon.setAttribute('aria-hidden', 'true');
@@ -176,16 +181,22 @@ export class SelectionActions {
         menu.dataset.annotatorStyle = this.style;
         const cycle = menu.querySelector<HTMLElement>('.annotator-selection-style');
         if (cycle) {
-            cycle.setAttribute('aria-label', `Mark style: ${STYLE_NAMES[this.style]} (s)`);
+            cycle.setAttribute('aria-label', `Mark style: ${STYLE_NAMES[this.style]} (${this.keys.style})`);
             cycle.replaceChildren(styleIcon(this.document, this.style));
         }
         menu.querySelectorAll<HTMLElement>('.annotator-ink-swatch').forEach((button, index) => {
             const name = inkLabel(INKS[index], this.labels);
             button.setAttribute(
                 'aria-label',
-                `${STYLE_ACTIONS[this.style]} in ${name} (${INKS[index] === this.current ? 'h' : index + 1})`
+                `${STYLE_ACTIONS[this.style]} in ${name} (${INKS[index] === this.current ? this.keys.mark : index + 1})`
             );
         });
+    }
+    /** Take the next style in the open bar, as its key does (for the command of the same name). False when no bar can. */
+    cycleStyle(): boolean {
+        if (!this.menu || this.offered) return false;
+        this.cycle();
+        return true;
     }
     /** Take the next style. The selection, the bar and its place stay as they are. */
     private cycle() {
@@ -217,22 +228,25 @@ export class SelectionActions {
         )
             return;
         const key = event.key.toLowerCase(),
+            keys = this.keys,
             // With Shift a number key gives its symbol ("!"), so the key's place is read instead.
             digit = /^[1-9]$/.test(key) ? key : /^(?:Digit|Numpad)([1-9])$/.exec(event.code || '')?.[1],
             ink = digit ? inkAt(Number(digit)) || undefined : undefined;
+        // The chosen letters are read before a key's place: on a keyboard whose number row types letters unshifted
+        // ("é" on a French one), a letter chosen from that row is the action it was chosen for.
         if (event.key === 'Escape') this.hide();
-        else if (key === 's' && !event.shiftKey && !this.offered) {
+        else if (pressed(event, keys.style) && !event.shiftKey && !this.offered) {
             event.preventDefault();
             event.stopPropagation();
             this.cycle();
-        } else if (key === 'a' && !event.shiftKey) {
+        } else if (pressed(event, keys.note) && !event.shiftKey) {
             event.preventDefault();
             event.stopPropagation();
             this.run('annotate');
-        } else if (key === 'h' || ink) {
+        } else if (pressed(event, keys.mark) || ink) {
             event.preventDefault();
             event.stopPropagation();
-            // Shift+H, Shift+1–6: highlight and copy its link.
+            // Shift with the mark key or 1–6: highlight and copy its link.
             this.run(event.shiftKey ? 'highlight-link' : 'highlight', ink);
         }
     };

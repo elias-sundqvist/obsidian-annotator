@@ -11,6 +11,19 @@ What changed for someone using Annotator. How to use each thing is in
   like any file outside the vault. A Zotero, Calibre or DEVONthink link
   whose file has moved since it was followed, and was not copied yet, is
   followed again.
+- **Keys on a selection.** The selection bar's letter keys (`H` to mark,
+  `A` for a note, `S` for the next mark style) can be changed in the
+  settings; a key is one character, not a number, and no two are the same,
+  and **Reset** brings the old ones back. The bar's labels, and those of a
+  video transcript's bar, name the keys chosen. **Next mark style** is now a
+  command, so every action on a selection can also have a hotkey of
+  Obsidian's.
+- **A note page after a PDF page.** **Add a note page after this page
+  (PDF)** starts a note of your own about the page being read, in Markdown,
+  kept in the annotation note as that page's page note. A marker at the foot
+  of the page stands for it; pointing at it shows its words, and a click
+  opens it in the sidebar. It is stored as page notes always were, so an
+  older version lists it among them.
 - A PDF or book on a server that asks for a user name and password (HTTP
   Basic, for example a Calibre-Web library behind nginx) can be downloaded:
   the reader asks for them when the server does, and keeps them only until

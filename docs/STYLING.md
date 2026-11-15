@@ -121,6 +121,13 @@ value stays the ink key (`"color": "blue"`), so renaming never rewrites notes.
   page's paper and ink reach a box as `--annotator-page-ground` and
   `--annotator-page-ink`, set from the page (`data-annotator-page`, and
   `data-annotator-paper="sepia"` on a sepia page).
+- **Page notes on the page.** A page note that remembers its PDF page is a
+  marker at the foot of that page: `.annotator-native-mark.annotator-page-note-mark`
+  (`.has-note`, `.is-active`, and `data-annotator-ink`, whose ink is the rule
+  along its edge), in a layer `.annotator-native-marks.annotator-page-notes`
+  that is never blended. It is drawn with `--background-primary`,
+  `--background-modifier-border` and `--text-muted`; its size is
+  `--size-4-8`, its distance from the corner `--size-4-2`.
 
 ## Annotation notes
 
