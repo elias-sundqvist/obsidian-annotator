@@ -72,7 +72,7 @@ The `annotation-target` may be written in any of the usual ways:
 | An embed | `annotation-target: "![[Attention.pdf]]"` |
 | A Markdown link | `annotation-target: "[Attention](Papers/Attention.pdf)"` |
 | A web address | `annotation-target: https://arxiv.org/pdf/1706.03762` |
-| A Zotero or Calibre link | `annotation-target: zotero://open-pdf/library/items/N7SMB24A` ([Zotero](#with-zotero), [Calibre](#with-calibre)) |
+| A Zotero, Calibre or DEVONthink link | `annotation-target: zotero://open-pdf/library/items/N7SMB24A` ([Zotero](#with-zotero), [Calibre](#with-calibre), [DEVONthink](#with-devonthink)) |
 | An HTML file in the vault | `annotation-target: "[[Saved page.html]]"` |
 | A Dataview inline field | `annotation-target:: [[Attention.pdf]]` in the note's text |
 
@@ -756,6 +756,32 @@ there is no EPUB, or the one a `view-book` link names), asks once and reads a
 copy kept in `Annotator sources`. Calibre need not be running and its files
 are never changed. A book that has neither format has to be converted in
 Calibre first. This was tried on macOS against a Calibre 9 library.
+
+## With DEVONthink
+
+A PDF or EPUB in a DEVONthink database can be a note's source by its item
+link, for example
+`annotation-target: x-devonthink-item://22427A1B-F90C-482B-A7B1-6368992BCF35`
+(in DEVONthink, select the item and choose **Copy Item Link**; a link with
+`?page=…` works too). DEVONthink keeps its files inside the database in a
+layout of its own, so the reader asks DEVONthink where the file is. The first
+time in a session it asks you before it does, and says if DEVONthink is not
+running and will be opened. macOS then asks whether Obsidian may control
+DEVONthink: allow it (if you said no, turn it on in **System Settings →
+Privacy & Security → Automation**, under Obsidian). The file found, inside
+the database or, for an indexed item, where it is, is then asked about once
+and read from a copy kept in `Annotator sources`, like any file outside the
+vault. Nothing in DEVONthink is changed. The database must be open in
+DEVONthink, and the item must be a PDF or EPUB. If DEVONthink later moves
+the file before it has been copied, the link is followed again.
+
+This works on a Mac only: DEVONthink is asked through macOS. On a phone or a
+tablet, open the note once on the Mac first; the copy it keeps in the vault
+is then read there. On Windows or Linux, point `annotation-target` at the
+file's path (in DEVONthink, **Show in Finder**) or at a copy in the vault.
+Following a link was tried on macOS against DEVONthink 4.4.2, with
+DEVONthink running and not running. DEVONthink 3 is asked the same way but
+has not been tried.
 
 ## Reading progress
 

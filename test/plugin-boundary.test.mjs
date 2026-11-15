@@ -292,8 +292,11 @@ test('desktop file aliases follow in-vault renames and are adopted after reopeni
 test('compiled CommonJS plugin startup does not load filesystem modules; explicit desktop access does',async()=>{
  const {readFile}=await import('node:fs/promises'),{runInNewContext}=await import('node:vm'),code=await readFile(new URL('./.generated/plugin-boundary.cjs',import.meta.url),'utf8'),dom=new JSDOM('<body></body>');
  let filesystemCalls=0;const module={exports:{}};
- try{runInNewContext(code,{module,exports:module.exports,require:name=>{if(name==='fs')filesystemCalls++;return nodeRequire(name);},window:dom.window,document:dom.window.document,TextEncoder,TextDecoder,crypto,setTimeout,clearTimeout,setInterval,clearInterval,console});
+ let processCalls=0;
+ try{runInNewContext(code,{module,exports:module.exports,require:name=>{if(name==='fs')filesystemCalls++;if(name==='child_process')processCalls++;return nodeRequire(name);},window:dom.window,document:dom.window.document,TextEncoder,TextDecoder,crypto,setTimeout,clearTimeout,setInterval,clearInterval,console});
  assert.equal(filesystemCalls,0);const fs=module.exports.Native.prototype.desktopFileSystem();assert.equal(typeof fs.open,'function');assert.equal(filesystemCalls,1);
+ // Programs are run only to ask DEVONthink for a file, and what runs them is loaded only then.
+ assert.equal(processCalls,0);const run=module.exports.Native.prototype.desktopScriptRunner();assert.equal(typeof run,'function');assert.equal(processCalls,1);
  }finally{dom.window.close();}
 });
 
@@ -982,10 +985,48 @@ test('a Zotero or Calibre link as a target is followed once to its file, remembe
   assert.match(h.plugin.targetKey(calibre),/^remote:file:\/\/.*A%20Book%20-%20Jane%20Doe\.epub$/);
   // A link to the item and not to its PDF cannot be followed, and says what to do; nothing is remembered for it.
   await assert.rejects(h.plugin.followAppLink('zotero://select/library/items/Y2KGGJ99'),/copy the PDF's own link in Zotero/);assert.equal(h.plugin.targetKey(item),'applink:zotero://select/library/items/Y2KGGJ99');assert.equal(saves,2);
-  await assert.rejects(h.plugin.followAppLink('https://example.org/a.pdf'),/not a Zotero or Calibre link/);
+  await assert.rejects(h.plugin.followAppLink('https://example.org/a.pdf'),/not a Zotero, Calibre or DEVONthink link/);
   // On a phone there is no folder to look in: it says to open the note on a computer first.
   Platform.isMobile=true;try{await assert.rejects(h.plugin.followAppLink('calibre://show-book/Books/7'),/on a computer first/);}finally{Platform.isMobile=false;}
  }finally{h.dispose();fs.rmSync(root,{recursive:true,force:true});}
+});
+test('a DEVONthink link is followed on a Mac by asking DEVONthink, after one yes a session, and its file is then asked about and copied in',async()=>{
+ const fs=nodeRequire('fs'),os=nodeRequire('os'),path=nodeRequire('path'),root=fs.mkdtempSync(path.join(os.tmpdir(),'annotator-devonthink-'));
+ const put=(file,text)=>{const full=path.join(root,file);fs.mkdirSync(path.dirname(full),{recursive:true});fs.writeFileSync(full,text);return full;};
+ const A='22427A1B-F90C-482B-A7B1-6368992BCF35',B='FC97C304-899B-4635-82EB-849200C224FB',paper=put('Test.dtBase2/Files.noindex/pdf/8/Imported.pdf','%PDF-1.7 imported'),indexed=put('Papers/Indexed paper.pdf','%PDF-1.7 indexed');
+ // The stand-in for osascript: DEVONthink's answers, as DEVONthink 4.4.2 gave them for a test database.
+ let state='stopped',refuse=null;const files={[A]:paper,[B]:indexed},runs=[];
+ const run=async args=>{runs.push(args.slice(4));if(refuse)return {status:1,stdout:'',stderr:refuse,timedOut:false};if(args[4]==='state')return {status:0,stdout:JSON.stringify({state}),stderr:'',timedOut:false};state='running';return {status:0,stdout:JSON.stringify(files[args[5]]?{state:'found',path:files[args[5]],pending:false}:{state:'missing'}),stderr:'',timedOut:false};};
+ globalThis.__annotatorTestPdfJs=async()=>({getDocument:()=>({promise:Promise.resolve({numPages:1,fingerprints:['x'],getPage:async()=>({getTextContent:async()=>({items:[{str:'Passage'}]})})}),destroy:async()=>{}})});
+ globalThis.__annotatorTestRequest=async()=>{throw new Error('Local files must not use HTTP');};
+ const h=host();Platform.isDesktopApp=true;Platform.isMacOS=true;try{h.plugin.manifest={id:'obsidian-annotator'};h.app.vault.adapter.getBasePath=()=>'/unrelated/vault';
+  const asked=[],copies=[];h.plugin.desktopScriptRunner=()=>run;h.plugin.devonthinkApproval=async(link,running)=>{asked.push({link,running});return answer;};h.plugin.sourceApproval=async url=>{copies.push(url);return 'yes';};let answer='no';
+  const link=`x-devonthink-item://${A}?page=2`,note=h.add('D.md','Unchanged',{'annotation-target':link}),other=h.add('E.md','',{'annotation-target':`[Indexed](x-devonthink-item://${B.toLowerCase()})`}),gone=h.add('G.md','',{'annotation-target':'x-devonthink-item://00000000-0000-0000-0000-000000000000'});
+  await h.plugin.onload();
+  assert.equal(h.plugin.targetKey(note),`applink:${link}`);
+  // Asked first, saying DEVONthink will be opened; "Not now" leaves DEVONthink unasked and nothing remembered, and is asked again next time.
+  await assert.rejects(h.plugin.openNoteTarget(note),/DEVONthink was not asked/);assert.deepEqual(asked,[{link,running:false}]);assert.deepEqual(runs,[['state','']]);assert.deepEqual(h.plugin.appLinkPaths,{});
+  answer='yes';await h.plugin.openNoteTarget(note);
+  assert.deepEqual(asked,[{link,running:false},{link,running:false}]);assert.deepEqual(runs.slice(1),[['state',''],['path',A]]);
+  // Followed, remembered, then an ordinary file outside the vault: asked about by its path, copied in, opened; the note is unchanged.
+  assert.deepEqual(h.plugin.appLinkPaths,{[link]:paper});assert.equal(h.plugin.data.appLinkPaths[link],paper);
+  assert.equal(copies.length,1);assert.ok(copies[0].startsWith('file://')&&copies[0].endsWith('/Imported.pdf'),copies[0]);
+  const copy=h.opened[0].file;assert.ok(copy.path.startsWith('Annotator sources/'));assert.equal(new TextDecoder().decode(h.binaries.get(copy.path)),'%PDF-1.7 imported');assert.equal(h.plugin.targetKey(note),copy.path);assert.equal(h.contents.get(note.path),'Unchanged');
+  // The yes holds for the session: the next link (in a Markdown link, its UUID in small letters) is followed without asking.
+  await h.plugin.followAppLink(`x-devonthink-item://${B.toLowerCase()}`);assert.equal(asked.length,2);assert.equal(h.plugin.targetKey(other),`remote:file://${indexed.split('/').map(encodeURIComponent).join('/')}`);
+  // An item no open database has: said, nothing remembered.
+  await assert.rejects(h.plugin.followAppLink('x-devonthink-item://00000000-0000-0000-0000-000000000000'),/No database open in DEVONthink has the item/);assert.equal(h.plugin.targetKey(gone),'applink:x-devonthink-item://00000000-0000-0000-0000-000000000000');
+  // A file that DEVONthink has moved since (to another database) and was never copied in: the link is followed again on opening.
+  const moved=put('Other.dtBase2/Files.noindex/pdf/2/Indexed paper.pdf','%PDF-1.7 indexed');fs.rmSync(indexed);files[B]=moved;
+  await h.plugin.openNoteTarget(other);assert.equal(h.plugin.appLinkPaths[`x-devonthink-item://${B.toLowerCase()}`],moved);assert.equal(copies.length,2);assert.ok(copies[1].endsWith('/Other.dtBase2/Files.noindex/pdf/2/Indexed%20paper.pdf'),copies[1]);
+  // A path DEVONthink gives for a file that is not there (it renamed the file and lost track) is said, not remembered.
+  files[A]=path.join(root,'Test.dtBase2/Files.noindex/pdf/8/Lost.pdf');await assert.rejects(h.plugin.followAppLink(`x-devonthink-item://${A}`),/but there is no file there\. Run Verify & Repair/);assert.equal(h.plugin.appLinkPaths[`x-devonthink-item://${A}`],undefined);
+  // macOS's refusal reaches the reader with where to allow it.
+  refuse='execution error: Error: Error: Not authorized to send Apple events to DEVONthink. (-1743)';await assert.rejects(h.plugin.followAppLink(`x-devonthink-item://${A}`),/Privacy & Security → Automation: under Obsidian, turn on DEVONthink/);refuse=null;
+  // Not on a Mac, and not on a phone: said, with what to do instead, and nothing is run.
+  const before=runs.length;Platform.isMacOS=false;await assert.rejects(h.plugin.followAppLink(`x-devonthink-item://${A}`),/on a Mac only\. On this computer, point annotation-target at the file's path/);
+  Platform.isMobile=true;Platform.isMacOS=true;Platform.isDesktopApp=false;await assert.rejects(h.plugin.followAppLink(`x-devonthink-item://${A}`),/on a Mac only\. Open this note in Obsidian on the Mac/);assert.equal(runs.length,before);
+ }finally{Platform.isMobile=false;Platform.isMacOS=false;Platform.isDesktopApp=false;h.dispose();fs.rmSync(root,{recursive:true,force:true});}
 });
 test('a note may name its source under a second property of the reader\'s choosing; annotation-target wins where both are there',async()=>{
  const {Notice}=await import('./.generated/plugin-boundary.mjs');
