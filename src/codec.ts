@@ -16,7 +16,16 @@ import { displayText, readDisplayText } from '../proofs/display-text.mjs';
 // @ts-expect-error The proofs' JavaScript wrappers carry no type declarations.
 import { recolorJson, pageTextJson, pageTextKey, storedPageText } from '../proofs/reader.mjs';
 import { editedQuote, quoteText, withQuote } from './shown-quote';
-import { headingLine, namedHeading, placeUnder } from './note-place';
+import { headingLine, namedHeading, noteHeadings, placeUnder } from './note-place';
+import {
+    annotationHeadingLine,
+    headingWords,
+    ownedHeadings,
+    shortHeading,
+    uniqueHeading,
+    type HeadingOptions,
+    type OwnedHeading
+} from './note-headings';
 export interface Annotation {
     id: string;
     text: string;
@@ -170,8 +179,11 @@ export function createUnder(
     source: string,
     annotation: Annotation,
     settings?: Record<string, boolean>,
-    under = ''
+    under = '',
+    /** When annotations have headings of their own (note-headings.ts): their level, and so on. */
+    headings: HeadingOptions | null = null
 ): string {
+    if (headings) return createHeaded(source, annotation, settings, under, headings);
     const named = namedHeading(under);
     if (!named) return create(source, annotation, settings);
     const before = readAll(source);
@@ -297,6 +309,223 @@ export function replaceStoredString(source: string, id: string, from: string, to
 }
 export function remove(source: string, id: string): string {
     return deleteTypedAnnotation(source, id).source;
+}
+
+// Annotations' own headings (note-headings.ts). A heading is prose: these functions add, rename or take away whole
+// lines of it beside an annotation, and the annotation itself is written and deleted by the checked operations above
+// alone. A result is made by cutting or splicing those lines only (around the checked write, which keeps the text
+// before and after it), and is refused unless every annotation reads back exactly as it read before, in its order
+// (but the one created or deleted), the one concerned has the heading meant, and every other one the heading it had.
+
+/** The annotations' own headings in a note the checked reader takes wholly. */
+function headingsIn(source: string, options: HeadingOptions): OwnedHeading[] {
+    return ownedHeadings(source, parseDocument(source).blocks as { id: string; start: number }[], options);
+}
+const headingTexts = (source: string, options: HeadingOptions) =>
+    new Map(headingsIn(source, options).map(heading => [heading.id, heading.text]));
+function sameHeadings(was: Map<string, string>, now: Map<string, string>, except: string | null) {
+    for (const [id, text] of was) if (id !== except && now.get(id) !== text) return false;
+    for (const [id, text] of now) if (id !== except && was.get(id) !== text) return false;
+    return true;
+}
+const readsAs = (source: string) => JSON.stringify(readAll(source));
+/** What a new heading says by default: the first words of the passage (the reader's own quote, if they made one), of an area's words, or of the note. */
+function defaultWords(annotation: Annotation, own?: string | null): string {
+    const area = (annotation as { nativePdf?: { words?: unknown } }).nativePdf?.words;
+    for (const words of [own, storedQuote(annotation), typeof area === 'string' ? area : '', annotation.text]) {
+        const heading = shortHeading(typeof words === 'string' ? words : '');
+        if (heading) return heading;
+    }
+    return 'Annotation';
+}
+/** Headings a default may not say: every heading of the note, and the sections the settings name. */
+const takenHeadings = (source: string, options: HeadingOptions) => [
+    ...noteHeadings(source).map(heading => heading.text),
+    ...(options.keep || []).map(setting => namedHeading(setting)?.text || '')
+];
+
+function createHeaded(
+    source: string,
+    annotation: Annotation,
+    settings: Record<string, boolean> | undefined,
+    under: string,
+    options: HeadingOptions
+): string {
+    const before = readAll(source);
+    if (before.some(row => row.id === annotation.id)) throw new Error(`Duplicate annotation ID ${annotation.id}`);
+    const was = headingTexts(source, options),
+        named = namedHeading(under),
+        ending = source.match(/\r?\n/)?.[0] ?? '\n';
+    let text = source,
+        at = source.length;
+    if (named) {
+        const place = placeUnder(
+            source,
+            named,
+            headingsIn(source, options).map(heading => heading.from)
+        );
+        if (place.heading) {
+            const blank = /\n[ \t]*\r?\n\s*$/.test(source),
+                gap = !source.trim() || blank ? '' : source.endsWith('\n') ? ending : ending + ending;
+            text = `${source}${gap}${headingLine(named, under)}${ending}`;
+            at = text.length;
+        } else at = place.at;
+    }
+    const head = text.slice(0, at),
+        tail = text.slice(at),
+        taken = takenHeadings(text, options),
+        // Words given (a deleted annotation's heading, brought back) are kept as they were, unless a section the
+        // settings name has them: such a heading would not be the annotation's.
+        given = options.text ? headingWords(options.text) : '',
+        sections = (options.keep || []).map(setting => namedHeading(setting)?.text),
+        words =
+            given && !sections.includes(given.toLowerCase().replace(/\s+/g, ' '))
+                ? given
+                : uniqueHeading(defaultWords(annotation), taken),
+        gap = !head.trim() || /\n[ \t]*\r?\n[ \t]*$/.test(head) ? '' : head.endsWith('\n') ? ending : ending + ending,
+        lead = `${head}${gap}${annotationHeadingLine(options.level, words)}${ending}`,
+        made = create(lead, annotation, settings),
+        result = !tail ? made : /\n\s*\n$/.test(made) ? made + tail : `${made}\n${tail}`;
+    const after = readAll(result),
+        index = after.findIndex(row => row.id === annotation.id),
+        now = headingTexts(result, options);
+    if (
+        !result.startsWith(lead) ||
+        !result.endsWith(tail) ||
+        index !== readAll(head).length ||
+        JSON.stringify(after.filter(row => row.id !== annotation.id)) !== JSON.stringify(before) ||
+        now.get(annotation.id) !== words ||
+        !sameHeadings(was, now, annotation.id)
+    )
+        throw new Error('The annotation could not be written with its heading.');
+    return result;
+}
+
+/**
+ * Delete an annotation and, when annotations have headings, its heading with it. Says which heading went, so that
+ * Undo can bring it back. The annotation is deleted by the checked deletion; its heading, the line above it, is then
+ * taken out with the blank lines between them.
+ */
+export function removeWithHeading(
+    source: string,
+    id: string,
+    options: HeadingOptions | null = null
+): { source: string; heading: string | null } {
+    if (!options) return { source: remove(source, id), heading: null };
+    const was = headingTexts(source, options),
+        own = headingsIn(source, options).find(heading => heading.id === id),
+        deleted = remove(source, id);
+    if (!own) {
+        if (!sameHeadings(was, headingTexts(deleted, options), id))
+            throw new Error('Deleting this annotation would give another one a heading that is not its own.');
+        return { source: deleted, heading: null };
+    }
+    const lines = source.slice(own.from, own.to);
+    if (deleted.slice(own.from, own.to) !== lines)
+        throw new Error("This annotation's heading could not be deleted with it.");
+    const result = deleted.slice(0, own.from) + deleted.slice(own.to);
+    if (readsAs(result) !== readsAs(deleted) || !sameHeadings(was, headingTexts(result, options), id))
+        throw new Error("Deleting this annotation's heading would change another annotation; nothing was deleted.");
+    return { source: result, heading: own.text };
+}
+
+/** Several annotations deleted, each with its heading. */
+export function removeManyWithHeadings(source: string, ids: string[], options: HeadingOptions | null = null): string {
+    let text = source;
+    for (const id of ids) text = removeWithHeading(text, id, options).source;
+    return text;
+}
+
+/** An annotation's heading, when it has one, and what a new one would say. */
+export function headingFor(
+    source: string,
+    id: string,
+    options: HeadingOptions
+): { heading: string | null; suggested: string } {
+    const blocks: StoredBlock[] = parseDocument(source).blocks,
+        block = blocks.find(row => row.id === id);
+    if (!block) throw new Error('Annotation was removed externally; reload before naming its heading.');
+    const own = headingsIn(source, options).find(heading => heading.id === id),
+        edited = new Map(quoteEdits(blocks));
+    return {
+        heading: own ? own.text : null,
+        suggested: own
+            ? own.text
+            : uniqueHeading(defaultWords(annotationOf(block), edited.get(id)), takenHeadings(source, options))
+    };
+}
+
+/** Where a heading line is put in front of an annotation: at the start of its first line, after a blank line. */
+function headingInsert(source: string, start: number, eol: string, line: string): { at: number; text: string } {
+    const at = source.lastIndexOf('\n', start - 1) + 1,
+        blank = at === 0 || /(?:^|\n)[ \t]*\r?\n$/.test(source.slice(0, at));
+    return { at, text: `${blank ? '' : eol}${line}${eol}${eol}` };
+}
+
+/**
+ * Give an annotation's heading other words, give an annotation a heading, or (`null`) take its heading away. Only
+ * that heading's line (and, when one is added or taken away, the blank line after it) changes.
+ */
+export function renameHeading(source: string, id: string, text: string | null, options: HeadingOptions): string {
+    const block = parseDocument(source).blocks.find((row: { id: string }) => row.id === id) as
+        (StoredBlock & { start: number; eol: string }) | undefined;
+    if (!block) throw new Error('Annotation was removed externally; reload before naming its heading.');
+    const was = headingTexts(source, options),
+        own = headingsIn(source, options).find(heading => heading.id === id),
+        words = text === null ? null : headingWords(text);
+    if (words === '') throw new Error('A heading needs words.');
+    let result: string;
+    if (words === null) {
+        if (!own) return source;
+        result = source.slice(0, own.from) + source.slice(own.to);
+    } else if (own) {
+        if (own.text === words) return source;
+        result = source.slice(0, own.from) + annotationHeadingLine(options.level, words) + source.slice(own.end);
+    } else {
+        const insert = headingInsert(source, block.start, block.eol, annotationHeadingLine(options.level, words));
+        result = source.slice(0, insert.at) + insert.text + source.slice(insert.at);
+    }
+    const now = headingTexts(result, options);
+    if (readsAs(result) !== readsAs(source) || now.get(id) !== (words ?? undefined) || !sameHeadings(was, now, id))
+        throw new Error("This annotation's heading could not be written without changing something else.");
+    return result;
+}
+
+/**
+ * Give every annotation of a note that has no heading of its own one: the first words of its passage or note. One
+ * write: refused, with nothing changed, unless every annotation reads back exactly as before and the headings it
+ * had are as they were.
+ */
+export function addHeadings(source: string, options: HeadingOptions): { source: string; added: number } {
+    const blocks = parseDocument(source).blocks as (StoredBlock & { start: number; eol: string })[],
+        was = headingTexts(source, options),
+        edited = new Map(quoteEdits(blocks)),
+        taken = takenHeadings(source, options),
+        planned: { id: string; start: number; eol: string; words: string }[] = [],
+        seen = new Set<string>();
+    for (const block of blocks) {
+        if (was.has(block.id) || seen.has(block.id)) continue;
+        seen.add(block.id);
+        const words = uniqueHeading(defaultWords(annotationOf(block), edited.get(block.id)), taken);
+        taken.push(words);
+        planned.push({ id: block.id, start: block.start, eol: block.eol, words });
+    }
+    if (!planned.length) return { source, added: 0 };
+    let result = source;
+    // From the last to the first, so the places of those before stay where they were.
+    for (const step of [...planned].reverse()) {
+        const insert = headingInsert(result, step.start, step.eol, annotationHeadingLine(options.level, step.words));
+        result = result.slice(0, insert.at) + insert.text + result.slice(insert.at);
+    }
+    const now = headingTexts(result, options);
+    if (
+        readsAs(result) !== readsAs(source) ||
+        planned.some(step => now.get(step.id) !== step.words) ||
+        [...was].some(([id, text]) => now.get(id) !== text) ||
+        now.size !== was.size + planned.length
+    )
+        throw new Error('Headings could not be added without changing something else in the note; it is as it was.');
+    return { source: result, added: planned.length };
 }
 
 /**

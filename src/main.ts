@@ -40,6 +40,8 @@ import { ScanDialog, type ScanChoice, type ScanQuestion } from './scan-dialog';
 import { readPdfAnnotations, replacing } from './pdf-read';
 import { addDetails } from './pdf-details';
 import { newNoteText, DEFAULT_NOTE_HEADING } from './note-template';
+import { DEFAULT_HEADING_LEVEL, HEADING_LEVELS, headingLevel, type HeadingOptions } from './note-headings';
+import { HeadingModal } from './heading-dialog';
 import { HTML_FILE, htmlFileUrl, htmlCopyBase } from './html-file';
 import { drawingArea, drawingOf, drawingSelectors, drawingSvg, type Drawing } from './drawing';
 import { windowShowing } from './rest';
@@ -406,6 +408,8 @@ export default class AnnotatorPlugin extends Plugin {
         /** What a copied or dragged annotation link is, as a template; empty for the plain link. */ linkTemplate: string;
         /** The heading a new annotation note starts with. */ noteHeading: string;
         /** The heading new annotations are written under, in any annotation note; empty for the end of the note. */ writeUnder: string;
+        /** Whether each annotation is given a heading of its own in its note (note-headings.ts). */ annotationHeadings: boolean;
+        /** The level of those headings: 2 to 6. */ headingLevel: number;
         /** Whether where the reader was is written to the note on leaving a source. */ progressProperty: boolean;
         /** A note whose text a new annotation note starts as; empty for none. */ noteTemplate: string;
         /** Whether a tablet's drawer has been docked beside the page for the annotations once; after that the reader's own choice stands. */ tabletDocked: boolean;
@@ -423,6 +427,8 @@ export default class AnnotatorPlugin extends Plugin {
         linkTemplate: '',
         noteHeading: DEFAULT_NOTE_HEADING,
         writeUnder: '',
+        annotationHeadings: false,
+        headingLevel: DEFAULT_HEADING_LEVEL,
         progressProperty: false,
         noteTemplate: '',
         tabletDocked: false,
@@ -454,16 +460,31 @@ export default class AnnotatorPlugin extends Plugin {
     private readonly codec = {
         readAll: (source: string) => this.logic.call('readAll', source),
         // New annotations go under the heading named in the settings, when there is one.
-        create: (source: string, annotation: Annotation, settings?: Record<string, boolean>) =>
-            this.logic.call('createUnder', source, annotation, settings, this.display.writeUnder),
+        // With headings on, each new annotation gets its heading; `heading` is the words of one brought back by Undo.
+        create: (source: string, annotation: Annotation, settings?: Record<string, boolean>, heading?: string | null) =>
+            this.logic.call(
+                'createUnder',
+                source,
+                annotation,
+                settings,
+                this.display.writeUnder,
+                this.headingOptions(heading)
+            ),
         createMany: (
             source: string,
             rows: { annotation: Annotation; ink?: string }[],
             settings?: Record<string, boolean>
-        ) => this.logic.call('createMany', source, rows, settings, this.display.writeUnder),
+        ) => this.logic.call('createMany', source, rows, settings, this.display.writeUnder, this.headingOptions()),
         update: (source: string, annotation: Annotation) => this.logic.call('update', source, annotation),
-        remove: (source: string, id: string) => this.logic.call('remove', source, id),
-        removeMany: (source: string, ids: string[]) => this.logic.call('removeMany', source, ids),
+        // With headings on, an annotation's heading goes with it (and is said, for the Undo).
+        removeWithHeading: (source: string, id: string) =>
+            this.logic.call('removeWithHeading', source, id, this.headingOptions()),
+        removeMany: (source: string, ids: string[]) =>
+            this.logic.call('removeManyWithHeadings', source, ids, this.headingOptions()),
+        headingFor: (source: string, id: string) => this.logic.call('headingFor', source, id, this.headingSettings()),
+        renameHeading: (source: string, id: string, text: string | null) =>
+            this.logic.call('renameHeading', source, id, text, this.headingSettings()),
+        addHeadings: (source: string) => this.logic.call('addHeadings', source, this.headingSettings()),
         recolor: (source: string, id: string, ink: string) => this.logic.call('recolor', source, id, ink),
         setPageText: (source: string, id: string, size: string | null) =>
             this.logic.call('setPageText', source, id, size),
@@ -479,6 +500,21 @@ export default class AnnotatorPlugin extends Plugin {
         exportHypothesis: (source: string) => this.logic.call('exportHypothesis', source),
         inspectVideo: (source: string) => this.logic.call('inspectVideo', source)
     };
+    /** What decides annotations' own headings: their level, and the section headings the settings name, which are never one. */
+    private headingSettings(): HeadingOptions {
+        return {
+            level: this.display.headingLevel,
+            keep: [this.display.writeUnder, this.display.noteHeading].filter(setting => setting.trim())
+        };
+    }
+    /**
+     * The same while annotations are given headings, else null: nothing is done about headings at all. Words given (a
+     * deleted annotation's heading, brought back by Undo) are written even when headings have been turned off since.
+     */
+    private headingOptions(heading?: string | null): HeadingOptions | null {
+        if (heading) return { ...this.headingSettings(), text: heading };
+        return this.display.annotationHeadings ? this.headingSettings() : null;
+    }
     /** Change a note by a computation made off this thread; written only if the note is still the text it was computed from. */
     private rewrite(note: TFile, compute: (source: string) => Promise<string>) {
         return rewrite(
@@ -596,6 +632,8 @@ export default class AnnotatorPlugin extends Plugin {
             noteHeading: typeof shown.noteHeading === 'string' ? shown.noteHeading.slice(0, 200) : DEFAULT_NOTE_HEADING,
             writeUnder:
                 typeof shown.writeUnder === 'string' ? shown.writeUnder.replace(/[\r\n]+/g, ' ').slice(0, 200) : '',
+            annotationHeadings: shown.annotationHeadings === true,
+            headingLevel: headingLevel(shown.headingLevel),
             progressProperty: shown.progressProperty === true,
             noteTemplate: typeof shown.noteTemplate === 'string' ? shown.noteTemplate.slice(0, 400) : '',
             tabletDocked: shown.tabletDocked === true,
@@ -1164,6 +1202,13 @@ export default class AnnotatorPlugin extends Plugin {
             name: 'Open this note’s source in the reader',
             callback: () => {
                 void this.openTarget().catch(error => this.fail(error));
+            }
+        });
+        this.addCommand({
+            id: 'add-annotation-headings',
+            name: "Add headings to this note's annotations",
+            callback: () => {
+                void this.addHeadingsToNote().catch(error => this.fail(error));
             }
         });
         this.registerEvent(
@@ -3031,6 +3076,15 @@ export default class AnnotatorPlugin extends Plugin {
                     .setIcon('text-cursor-input')
                     .onClick(() => this.editQuote(file, annotation))
             );
+        if (this.display.annotationHeadings)
+            menu.addItem(item =>
+                item
+                    .setTitle('Rename heading…')
+                    .setIcon('heading')
+                    .onClick(() => {
+                        void this.editHeading(file, annotation);
+                    })
+            );
         menu.addItem(item =>
             item
                 .setTitle('Reply')
@@ -3301,6 +3355,75 @@ export default class AnnotatorPlugin extends Plugin {
             this.busy = false;
             this.refresh();
         }
+    }
+    /** Ask for the words of an annotation's own heading in its note (as it is now, or as a new one would say), and write them. */
+    async editHeading(file: string, annotation: Annotation) {
+        if (this.damaged(file)) return;
+        try {
+            const note = this.noteHolding(file, annotation.id);
+            if (!note) throw new Error('Annotation note is unavailable.');
+            const { heading, suggested } = await this.codec.headingFor(await this.app.vault.read(note), annotation.id);
+            new HeadingModal(this.app, heading, suggested, text => {
+                void this.renameHeading(file, annotation, text);
+            }).open();
+        } catch (error) {
+            this.fail(error);
+        }
+    }
+    /** Give an annotation's heading these words (adding one when it has none), or (`null`) take it away. */
+    async renameHeading(file: string, annotation: Annotation, text: string | null) {
+        if (this.busy || this.damaged(file)) return;
+        if (text !== null && !text.trim()) return;
+        this.busy = true;
+        try {
+            const note = this.noteHolding(file, annotation.id);
+            if (!note) throw new Error('Annotation note is unavailable.');
+            await this.rewrite(note, async source => {
+                if (this.stopped) throw new Error('Plugin was unloaded before the heading was written.');
+                const current = (await this.codec.readAll(source)).find(row => row.id === annotation.id);
+                if (JSON.stringify(current) !== JSON.stringify(annotation))
+                    throw new Error('Annotation changed externally; reopen it before naming its heading.');
+                return await this.codec.renameHeading(source, annotation.id, text);
+            });
+            await this.loadNote(file);
+        } catch (error) {
+            this.fail(error);
+        } finally {
+            this.busy = false;
+            this.refresh();
+        }
+    }
+    /**
+     * Give every annotation of a note that has no heading of its own one, in one write that is refused if anything
+     * else would change. The note is the Markdown note open, else the note of the source being read.
+     */
+    async addHeadingsToNote(note: TFile | null = null): Promise<number> {
+        const active = this.app.workspace.getActiveFile(),
+            target =
+                note ||
+                (active instanceof TFile && active.extension === 'md' ? active : this.shownNote(this.currentFile));
+        if (!target) throw new Error('Open an annotation note, or a source with one, first.');
+        if (this.busy) throw new Error('An annotation operation is already running.');
+        this.busy = true;
+        let added = 0;
+        try {
+            await this.rewrite(target, async source => {
+                if (this.stopped) throw new Error('Plugin was unloaded before the headings were written.');
+                const result = await this.codec.addHeadings(source);
+                added = result.added;
+                return result.source;
+            });
+            for (const [file, state] of this.notes) if (this.notesOf(state).includes(target)) await this.loadNote(file);
+            new Notice(
+                added
+                    ? `${added} ${added === 1 ? 'heading' : 'headings'} added to ${target.basename}.`
+                    : `No annotation in ${target.basename} is without a heading.`
+            );
+        } finally {
+            this.busy = false;
+            this.refresh();
+        }
+        return added;
     }
     async recolor(file: string, annotation: Annotation, ink: Ink) {
         if (this.busy || ink === inkOf(annotation) || this.damaged(file)) return;
@@ -3999,12 +4122,16 @@ export default class AnnotatorPlugin extends Plugin {
                     kept = null;
                 }
             }
+            // The heading that goes with the annotation, kept for the Undo.
+            let heading: string | null = null;
             await this.rewrite(note, async source => {
                 if (this.stopped) throw new Error('Plugin was unloaded before deletion.');
                 const current = (await this.codec.readAll(source)).find(row => row.id === editing.annotation.id);
                 if (JSON.stringify(current) !== JSON.stringify(editing.annotation))
                     throw new Error('Annotation changed externally; reopen it before deleting.');
-                return await this.codec.remove(source, editing.annotation.id);
+                const removed = await this.codec.removeWithHeading(source, editing.annotation.id);
+                heading = removed.heading;
+                return removed.source;
             });
             if (serial === this.draftSerial) {
                 this.activeDraftId = null;
@@ -4027,7 +4154,7 @@ export default class AnnotatorPlugin extends Plugin {
                 }
             }
             await this.loadNote(editing.file);
-            this.offerUndo(editing.file, editing.annotation, kept, note);
+            this.offerUndo(editing.file, editing.annotation, kept, note, heading);
         } catch (error) {
             this.fail(error);
         } finally {
@@ -4040,7 +4167,8 @@ export default class AnnotatorPlugin extends Plugin {
         file: string,
         annotation: Annotation,
         picture: { path: string; bytes: ArrayBuffer } | null = null,
-        note?: TFile
+        note?: TFile,
+        heading: string | null = null
     ) {
         const document = this.app.workspace.containerEl.ownerDocument,
             message = document.createDocumentFragment();
@@ -4051,7 +4179,7 @@ export default class AnnotatorPlugin extends Plugin {
         const notice = new Notice(message, 8000) as Notice & { hide?(): void };
         undo.onclick = () => {
             notice.hide?.();
-            void this.restoreDeleted(file, annotation, picture, note).catch(error => this.fail(error));
+            void this.restoreDeleted(file, annotation, picture, note, heading).catch(error => this.fail(error));
         };
     }
     /**
@@ -4201,13 +4329,14 @@ export default class AnnotatorPlugin extends Plugin {
     /**
      * Put a just-deleted annotation back, with its comment, tags, colour and anchors. It returns to the end of the note
      * it was deleted from (of a PDF whose notes hold page ranges, the one it was in, while that note still holds pages
-     * of the PDF).
+     * of the PDF), with the heading it had.
      */
     async restoreDeleted(
         file: string,
         annotation: Annotation,
         picture: { path: string; bytes: ArrayBuffer } | null = null,
-        from?: TFile
+        from?: TFile,
+        heading: string | null = null
     ) {
         if (this.busy) throw new Error('An annotation operation is already running.');
         this.busy = true;
@@ -4223,7 +4352,7 @@ export default class AnnotatorPlugin extends Plugin {
                 if (!this.noteMatchesSource(note, file)) throw new Error('The annotation note target changed.');
                 if ((await this.codec.readAll(source)).some(row => row.id === annotation.id)) return source;
                 const { color: _color, ...plain } = annotation,
-                    restored = await this.codec.create(source, plain as Annotation, { ...this.markdown });
+                    restored = await this.codec.create(source, plain as Annotation, { ...this.markdown }, heading);
                 return inkOf(annotation) === DEFAULT_INK
                     ? restored
                     : await this.codec.recolor(restored, annotation.id, inkOf(annotation));
@@ -7799,6 +7928,27 @@ class NativeSettings extends PluginSettingTab {
                     .onChange(value =>
                         save(plugin.setDisplay({ writeUnder: value.replace(/[\r\n]+/g, ' ').slice(0, 200) }))
                     )
+            );
+        new Setting(root)
+            .setName('Give each annotation a heading')
+            .setDesc(
+                'A new annotation gets a heading of its own in its note, made of the first words of its passage or note: for the Outline, folding, and links such as [[Paper notes#First words]]. Rename it from the card or in the note; it is deleted with its annotation. For a note written before, use the command "Add headings to this note\'s annotations". Off: headings are left alone.'
+            )
+            .addToggle(control =>
+                control
+                    .setValue(plugin.display.annotationHeadings)
+                    .onChange(value => save(plugin.setDisplay({ annotationHeadings: value })))
+            );
+        new Setting(root)
+            .setName('Level of annotation headings')
+            .setDesc(
+                "A heading of this level directly above an annotation is that annotation's. Use a level below the headings you write annotations under."
+            )
+            .addDropdown(control =>
+                control
+                    .addOptions(Object.fromEntries(HEADING_LEVELS.map(level => [String(level), '#'.repeat(level)])))
+                    .setValue(String(plugin.display.headingLevel))
+                    .onChange(value => save(plugin.setDisplay({ headingLevel: headingLevel(Number(value)) })))
             );
         new Setting(root)
             .setName('Template for new annotation notes')

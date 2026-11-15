@@ -1305,6 +1305,15 @@ export class AnnotationView extends ItemView {
                             .setIcon('text-cursor-input')
                             .onClick(() => plugin.editQuote(file!, annotation))
                     );
+                if (plugin.display.annotationHeadings)
+                    menu.addItem(item =>
+                        item
+                            .setTitle('Rename heading…')
+                            .setIcon('heading')
+                            .onClick(() => {
+                                void plugin.editHeading(file!, annotation);
+                            })
+                    );
                 menu.addItem(item =>
                     item
                         .setTitle('Reply')
