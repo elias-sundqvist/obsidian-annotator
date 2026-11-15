@@ -1435,6 +1435,15 @@
       "dependsOn": [],
       "estimate": 1,
       "notes": "Done 2026-11-15: Built 2026-11-15 on feature/rect-links, merged into next. selection-links.ts rectLink and rectCorners; NativePdf.rectPlan and areaPictureDrawn; the import command takes both kinds. Tried in Obsidian 1.13.7 (the picture is exactly the linked figure)."
+    },
+    {
+      "id": "basic-auth",
+      "title": "Download sources behind an HTTP Basic sign-in",
+      "status": "done",
+      "parent": "community",
+      "dependsOn": [],
+      "estimate": 2,
+      "notes": "Done 2026-11-15: Built 2026-11-15 on feature/basic-auth, merged into next. Asks on a Basic challenge, keeps the sign-in in memory per origin, never stored. Tried in Obsidian 1.13.7 against a local Basic server. Answers the request for Basic auth (Calibre-Web behind nginx)."
     }
   ]
 }
