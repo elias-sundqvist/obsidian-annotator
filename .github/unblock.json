@@ -1399,6 +1399,33 @@
       "dependsOn": [],
       "estimate": 2,
       "notes": "Done 2026-11-15: Built 2026-11-15 on branch next (not released). Setting 'Write new annotations under this heading'; src/note-place.ts finds the end of the heading's section; codec.createUnder writes with the checked append into the part before it and refuses unless the rest of the note is byte for byte unchanged. Tried through the logic worker in Obsidian 1.13.7. Tests: note-place.test.mjs, design.test.mjs. Answers the two open requests about where annotations are written in a note."
+    },
+    {
+      "id": "mark-styles",
+      "title": "Underline, strike-out and squiggly as mark styles",
+      "status": "done",
+      "parent": "community",
+      "dependsOn": [],
+      "estimate": 3,
+      "notes": "Done 2026-11-15: Built 2026-11-15 by a subagent on feature/mark-styles, merged into next. src/mark-style.ts; the style is the existing tag. Style button and S in the selection bar; Change style on a card; lines drawn in PDFs, books, reading copies. Live web pages show highlights only. Tests: mark-style.test.mjs and others."
+    },
+    {
+      "id": "highlight-every-match",
+      "title": "Highlight every match of a word or phrase",
+      "status": "done",
+      "parent": "community",
+      "dependsOn": [],
+      "estimate": 3,
+      "notes": "Done 2026-11-15: Built 2026-11-15 by a subagent on feature/highlight-matches, merged into next. src/every-match.ts (pure, tested against a slow scan over 4000 texts), every-match-dialog.ts; PDFs and books; one write, Undo removes only what it made; limit 500. Answers the request to extract passages by keyword."
+    },
+    {
+      "id": "highlight-link",
+      "title": "Highlight and copy its link in one step",
+      "status": "done",
+      "parent": "community",
+      "dependsOn": [],
+      "estimate": 1,
+      "notes": "Done 2026-11-15: Built 2026-11-15 on feature/highlight-link, merged into next. Shift+H, Shift+1-6, Shift-click, and a command. Answers the Alt-drag highlight-and-link request."
     }
   ]
 }
