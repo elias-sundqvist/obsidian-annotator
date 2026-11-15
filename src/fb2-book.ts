@@ -165,11 +165,27 @@ function langOf(element: Element): string {
     const said = (element.getAttribute('xml:lang') || '').trim();
     return LANGUAGE.test(said) ? ` lang="${said}"` : '';
 }
-/** A heading's words on one line. */
+/**
+ * A heading's words on one line, as a chapter's name in an annotation is made from them. (Changing this changes
+ * those names: see `label` for how a heading is shown.)
+ */
 function plain(element: Element | undefined): string {
     if (!element) return '';
     const lines = named(element, 'p').map(line => line.textContent || '');
     return (lines.length ? lines.join(' ') : element.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+}
+/**
+ * A heading as the contents, the chapter list and the status line show it: its lines on one line, a colon after
+ * the first unless it ends in a mark of its own ("Chapter One: The Logbook", "Part I. Arrival").
+ */
+export function label(element: Element | undefined): string {
+    if (!element) return '';
+    const lines = named(element, 'p')
+        .map(line => (line.textContent || '').replace(/\s+/g, ' ').trim())
+        .filter(Boolean);
+    if (!lines.length) return plain(element);
+    const [head, ...rest] = lines;
+    return (rest.length ? `${head}${/[.,:;!?…\-–—]$/.test(head) ? ' ' : ': '}${rest.join(' ')}` : head).slice(0, 200);
 }
 /**
  * A binary's id as a file name. Letters, digits, dash, underscore and a dot that is not the first character stay;
@@ -306,6 +322,13 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
         trail?: string[];
         titled?: boolean;
     }
+    // How each heading a chapter's name is made from is shown: its words in a name, its lines in the contents.
+    const shown = new Map<string, string>(),
+        heading = (element: Element | undefined) => {
+            const words = plain(element);
+            if (words && !shown.has(words)) shown.set(words, label(element));
+            return words;
+        };
     const plan = (splitBelow: number): Draft[] => {
         const row: Row[] = [];
         const holds = (nodes: Node[], owner?: Element) => nodes.some(matters) || !!owner?.getAttribute('id');
@@ -317,12 +340,12 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
             !!element && !!first(element, 'title') && !Array.from(element.childNodes).some(says);
         const section = (element: Element, depth: number, trail: string[]) => {
             const all = Array.from(element.childNodes),
-                here = plain(first(element, 'title'));
+                here = heading(first(element, 'title'));
             if (divided.has(element) && depth < splitBelow) {
                 const inner = named(element, 'section'),
                     at = all.indexOf(inner[0]),
                     head = all.slice(0, at),
-                    given = here || (headingOnly(inner[0]) ? plain(first(inner[0], 'title')) : ''),
+                    given = here || (headingOnly(inner[0]) ? heading(first(inner[0], 'title')) : ''),
                     around = given ? [...trail, given] : trail;
                 if (holds(head, element)) row.push({ kind: 'waits', piece: { owner: element, nodes: head, depth } });
                 for (const node of all.slice(at))
@@ -609,7 +632,7 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
                         out.push(`</h${level}>\n`);
                         if (owner.localName === 'section')
                             nav.push({
-                                title: plain(element) || 'Untitled',
+                                title: label(element) || 'Untitled',
                                 path,
                                 fragment: top ? '' : anchor,
                                 depth: Math.min(8, Math.max(0, depth - 1))
@@ -681,7 +704,7 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
         if (draft.notes) {
             const owner = draft.pieces[0].owner!,
                 kind = (owner.getAttribute('name') || '').trim();
-            name = plain(first(owner, 'title')) || (kind ? kind[0].toUpperCase() + kind.slice(1) : 'Notes');
+            name = label(first(owner, 'title')) || (kind ? kind[0].toUpperCase() + kind.slice(1) : 'Notes');
             nav.push({ title: name, path: pathOf(draft), fragment: '', depth: 0 });
         } else {
             // Named by the headings it stands under and its own; a chapter with no title of its own, by how it begins as well.
@@ -692,7 +715,10 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
                       .filter(says)
                       .map(node => (node.textContent || '').replace(/\s+/g, ' ').trim())
                       .find(Boolean) || '';
-            name = [...draft.trail, ...(begins ? [begins.slice(0, 60)] : [])].join(' · ') || `Section ${index + 1}`;
+            name =
+                [...draft.trail.map(words => shown.get(words) || words), ...(begins ? [begins.slice(0, 60)] : [])].join(
+                    ' · '
+                ) || `Section ${index + 1}`;
         }
         add(draft.place, draft.idref, name, draft.linear, body);
     });

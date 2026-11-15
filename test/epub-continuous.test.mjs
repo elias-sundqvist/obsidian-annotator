@@ -490,3 +490,51 @@ test('every match in a book is where its find says, each a verified highlight of
   assert.equal(view.selectedWords(),'');const node=h.root(0).querySelector('p').firstChild,range=h.w.document.createRange();range.setStart(node,10);range.setEnd(node,24);h.w.getSelection().addRange(range);assert.equal(view.selectedWords(),'has a unique p');
  }finally{h.dispose();}
 });
+test('opening an annotation whose passage is in view, as saving a highlight does, leaves the text where it is; one out of view is scrolled to',async()=>{
+ const h=await host();try{
+  const node=h.root(0).querySelector('p').firstChild,range=(start,end)=>{const r=h.w.document.createRange();r.setStart(node,start);r.setEnd(node,end);return r;};
+  let scrolled=0;h.w.HTMLElement.prototype.scrollIntoView=function(){scrolled++;};
+  const row=id=>({id,uri:'urn:x',text:'',tags:[],target:[{source:'urn:x'}]}),opened=[];h.view.callbacks.open=annotation=>opened.push(annotation.id);
+  h.viewport.scrollTop=0;
+  // In view (20 to 40 pixels down a viewport 100 high): opened, and nothing moves.
+  h.view.ranges.set('seen',range(2,4));h.view.activate(row('seen'));
+  assert.deepEqual(opened,['seen']);assert.equal(scrolled,0,'not scrolled');assert.equal(h.viewport.scrollTop,0);
+  // Out of view (200 pixels down): scrolled to, as before.
+  h.view.ranges.set('far',range(20,22));h.view.activate(row('far'));assert.equal(scrolled,1);
+  // Partly in view (90 to 120 pixels down) is scrolled to as well.
+  h.view.ranges.set('cut',range(9,12));h.view.activate(row('cut'));assert.equal(scrolled,2);
+  // A passage with no box (hidden in a closed disclosure) is revealed and scrolled to.
+  const hidden=h.w.Range.prototype.getClientRects;h.w.Range.prototype.getClientRects=()=>[];
+  try{h.view.activate(row('seen'));assert.equal(scrolled,3);}finally{h.w.Range.prototype.getClientRects=hidden;}
+  assert.deepEqual(opened,['seen','far','cut','seen']);
+ }finally{h.dispose();}
+});
+test('scrolling, the header and the status line name the chapter that has begun a third of the way down the view, while the place kept is the first line in view',async()=>{
+ const h=await host();try{
+  // Chapters are 250 pixels long, the view 100 high: at 180 the second chapter begins 70 pixels down; at 230, 20 pixels down.
+  const select=h.view.contentEl.querySelector('select[aria-label="Chapter"]'),status=()=>h.view.statusEl.textContent;
+  h.viewport.scrollTop=180;h.view.updateCurrentChapter();
+  assert.equal(h.view.chapter,0);assert.equal(select.value,'0');assert.match(status(),/^1 \/ 6 · c0/);
+  let changed=0;h.view.callbacks.changed=()=>changed++;
+  h.viewport.scrollTop=230;h.view.updateCurrentChapter();
+  assert.equal(select.value,'1','the second chapter fills the view');assert.match(status(),/^2 \/ 6 · c1/);assert.equal(changed,1);
+  assert.equal(h.view.chapter,0,'the reading position is still the end of the first chapter at the top');
+  h.view.updateCurrentChapter();assert.equal(changed,1,'said once');
+  // The next chapter after the one named; the contents mark the one named.
+  let shown=null;const showChapter=h.view.showChapter;h.view.showChapter=async index=>{shown=index;};
+  try{h.view.contentEl.querySelector('[aria-label="Next chapter"]').click();assert.equal(shown,2);}finally{h.view.showChapter=showChapter;}
+  // Back above the line: the first chapter again.
+  h.viewport.scrollTop=150;h.view.updateCurrentChapter();assert.equal(select.value,'0');assert.match(status(),/^1 \/ 6 · c0/);
+ }finally{h.dispose();}
+});
+test('a place is put at the top of where the text is seen, below the gap the reader keeps above it, not under it',async()=>{
+ const h=await host();try{
+  // The gap above the text is the viewport's top border, 26 pixels: text scrolled under it is not drawn.
+  Object.defineProperty(h.viewport,'clientTop',{configurable:true,get:()=>26});
+  h.view.restoreOffset(5);
+  // The fifth character is 50 pixels down its chapter: scrolled to 24, it is 26 pixels down the viewport's box, the top of what is seen.
+  assert.equal(h.viewport.scrollTop,24);
+  const node=h.root(0).querySelector('p').firstChild,r=h.w.document.createRange();r.setStart(node,5);r.setEnd(node,6);assert.equal(r.getClientRects()[0].top,26);
+  assert.equal(h.view.visibleOffset(),5,'and read back as the place: the first character seen');
+ }finally{h.dispose();}
+});

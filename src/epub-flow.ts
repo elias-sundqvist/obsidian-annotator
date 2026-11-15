@@ -28,3 +28,21 @@ export class ReadingAxis {
         viewport.scrollBy(this.horizontal ? { left: value * (this.reverse ? -1 : 1) } : { top: value });
     }
 }
+type Box = Pick<DOMRect, 'left' | 'right' | 'top' | 'bottom'>;
+/**
+ * Whether a passage, by the boxes of its lines, is all inside a box (the reader's viewport): it has a box with room,
+ * and none that takes up room is outside. Within a pixel counts, for the fractions a scaled screen leaves.
+ */
+export function wholly(boxes: ArrayLike<Box>, within: Box): boolean {
+    const sized = Array.from(boxes).filter(box => box.right > box.left && box.bottom > box.top);
+    return (
+        sized.length > 0 &&
+        sized.every(
+            box =>
+                box.left >= within.left - 1 &&
+                box.right <= within.right + 1 &&
+                box.top >= within.top - 1 &&
+                box.bottom <= within.bottom + 1
+        )
+    );
+}

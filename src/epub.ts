@@ -18,7 +18,7 @@ import { matcher, matchPattern, type MatchOptions, type Occurrence, type Occurre
 import { fileRevision, type ReaderCallbacks, type SourceCapture, type SourceIdentity } from './source';
 import { openPublication, archivePath, fictionBookName, type Publication } from './epub-book';
 import { EpubResolver, publicationSections } from './epub-resolver';
-import { ReadingAxis } from './epub-flow';
+import { ReadingAxis, wholly } from './epub-flow';
 import { domRange, indexLayer } from './anchors';
 import { figurePath, figureSelector } from './area';
 import { fixedPageFit, fixedSpreads, type FixedSpread, type PageViewport } from './epub-layout';
@@ -136,6 +136,7 @@ export class EpubView extends FileView {
             counted = new Set<number>(),
             list = card.createEl('ul', { cls: 'annotator-book-contents-list' });
         let current: HTMLElement | null = null;
+        const here = this.shownChapter();
         for (const entry of entries) {
             const chapter = index(entry.path),
                 item = list.createEl('li'),
@@ -156,7 +157,7 @@ export class EpubView extends FileView {
                     `${entry.title}, ${count} ${count === 1 ? 'annotation' : 'annotations'}`
                 );
             }
-            if (chapter === this.chapter && !current) {
+            if (chapter === here && !current) {
                 button.setAttribute('aria-current', 'location');
                 current = button;
             }
@@ -408,7 +409,7 @@ export class EpubView extends FileView {
         });
         // Chapter turns sit either side of the chapter's name, where a reader looks for them.
         const turnChapter = (direction: number) => {
-            const next = this.chapter + direction;
+            const next = this.shownChapter() + direction;
             if (next >= 0 && next < book.chapters.length) void this.showChapter(next);
         };
         icon('Previous chapter', 'skip-back', () => turnChapter(-1), 'annotator-chapter-turn');
@@ -614,8 +615,10 @@ export class EpubView extends FileView {
         publisher.createEl('span', { text: 'Publisher style' });
         this.publisherStyleControl = publisher.createEl('select', { attr: { 'aria-label': 'Publisher style' } });
         this.publisherStyleControl.onchange = () => {
-            const offset = this.readingOffset();
-            this.publisherStyle = this.publisherStyleControl.value || null;
+            // Read before the place is measured: measuring may name the chapter in view again, and with it this control.
+            const chosen = this.publisherStyleControl.value || null,
+                offset = this.readingOffset();
+            this.publisherStyle = chosen;
             void this.showChapter(this.chapter, '', offset);
         };
         const findRow = panel.createDiv({ cls: 'annotator-book-find' });
@@ -1069,13 +1072,37 @@ export class EpubView extends FileView {
         const omitted = [...this.mounts.values()].some(mount => mount.projection.removed);
         const stylesOmitted = [...this.mounts.values()].some(mount => mount.styles?.omitted);
         this.updateProgress();
+        const shown = this.shownChapter();
+        this.shownIndex = shown;
+        this.select.value = String(shown);
         this.statusEl.setText(
-            `${this.chapter + 1} / ${this.book.chapters.length} · ${this.book.chapters[this.chapter].title}${omitted ? ' · Active/unsupported book content omitted' : ''}${stylesOmitted ? ' · Unsupported publisher styling omitted' : ''}`
+            `${shown + 1} / ${this.book.chapters.length} · ${this.book.chapters[shown].title}${omitted ? ' · Active/unsupported book content omitted' : ''}${stylesOmitted ? ' · Unsupported publisher styling omitted' : ''}`
         );
+    }
+    /** The chapter last named in the header and the status line. */
+    private shownIndex = -1;
+    /**
+     * The chapter the reader is in, as the header, the status line and the contents name it. Scrolling, it is the
+     * chapter that has begun by a third of the way down the view, so that a chapter that fills the view is named
+     * though the end of the one before is still at its top. (Where the reading position is kept is the first line in
+     * view, which may be that end: `this.chapter`.)
+     */
+    private shownChapter(): number {
+        if (this.renderedMode !== 'scroll' || this.restoring || !this.hasVisibleLayout()) return this.chapter;
+        const bounds = this.scrollport(),
+            axis = this.readingAxis(),
+            line = axis.start(bounds) + axis.size(this.viewport) / 3;
+        let shown = this.chapter;
+        for (const [index, mount] of [...this.mounts].sort(([a], [b]) => a - b)) {
+            const rect = mount.root.getBoundingClientRect();
+            if (index > this.chapter && axis.start(rect) <= line && axis.end(rect) > axis.start(bounds) + 1)
+                shown = index;
+        }
+        return shown;
     }
     private updateCurrentChapter() {
         if (this.renderedMode !== 'scroll' || !this.hasVisibleLayout() || this.restoring) return;
-        const bounds = this.viewport.getBoundingClientRect(),
+        const bounds = this.scrollport(),
             axis = this.readingAxis();
         const visible = [...this.mounts]
             .sort(([a], [b]) => a - b)
@@ -1086,12 +1113,15 @@ export class EpubView extends FileView {
         if (visible && visible[0] !== this.chapter) {
             this.chapter = visible[0];
             this.projection = visible[1].projection;
-            this.select.value = String(this.chapter);
             if (this.chapterWritingMode() !== this.renderedWritingMode) {
                 const offset = this.visibleOffset();
                 this.layout();
                 this.restoreOffset(offset);
             }
+            this.updateStatus();
+            this.callbacks.changed();
+        } else if (this.book && this.shownChapter() !== this.shownIndex) {
+            // The next chapter has come to fill the view: named, though the reading position is still in this one.
             this.updateStatus();
             this.callbacks.changed();
         }
@@ -1118,7 +1148,7 @@ export class EpubView extends FileView {
             indices = [...this.mounts.keys()].sort((a, b) => a - b),
             first = indices[0],
             last = lastOf(indices)!;
-        const bounds = this.viewport.getBoundingClientRect(),
+        const bounds = this.scrollport(),
             axis = this.readingAxis(),
             height = axis.size(this.viewport);
         return (
@@ -1171,7 +1201,7 @@ export class EpubView extends FileView {
     }
     private async expandWindow(epoch: number) {
         if (!this.book || !this.viewport.clientHeight) return;
-        const bounds = this.viewport.getBoundingClientRect(),
+        const bounds = this.scrollport(),
             axis = this.readingAxis(),
             height = axis.size(this.viewport);
         const order = this.readingOrder(),
@@ -1294,6 +1324,19 @@ export class EpubView extends FileView {
                 this.callbacks.changed();
             }
         }
+    }
+    /**
+     * Where the book's text can be seen: the viewport inside its border (the gap above the text is a border, so that
+     * nothing is drawn behind it) and its scroll bar. A place is put at the top of this, not under the border.
+     */
+    private scrollport() {
+        const box = this.viewport.getBoundingClientRect(),
+            left = box.left + this.viewport.clientLeft,
+            top = box.top + this.viewport.clientTop,
+            // Without layout (a hidden pane, a test) the box is all there is.
+            width = this.viewport.clientWidth || box.width,
+            height = this.viewport.clientHeight || box.height;
+        return { left, top, right: left + width, bottom: top + height, width, height };
     }
     private hasVisibleLayout() {
         return !!this.viewport && this.viewport.clientWidth > 0 && this.viewport.clientHeight > 0;
@@ -1612,7 +1655,7 @@ export class EpubView extends FileView {
         if (anchor?.chapter === this.chapter && root) {
             if (!this.hasVisibleLayout()) return anchor.offset;
             const range = domRange(indexLayer(root), anchor.offset, anchor.offset + 1),
-                bounds = this.viewport.getBoundingClientRect();
+                bounds = this.scrollport();
             if (
                 range &&
                 Array.from(range.getClientRects()).some(
@@ -1638,7 +1681,7 @@ export class EpubView extends FileView {
             return this.layoutPosition?.chapter === this.chapter ? this.layoutPosition.offset : 0;
         // Preferences may already name the destination mode while this DOM still
         // uses the outgoing layout. Measure what is actually rendered.
-        const bounds = this.viewport.getBoundingClientRect(),
+        const bounds = this.scrollport(),
             axis = this.readingAxis();
         this.updateCurrentChapter();
         const mount = this.mounts.get(this.chapter),
@@ -1705,7 +1748,7 @@ export class EpubView extends FileView {
         const root = this.mounts.get(this.chapter)?.root || this.body;
         const index = indexLayer(root),
             at = Math.max(0, Math.min(offset, index.text.length - 1));
-        const bounds = this.viewport.getBoundingClientRect(),
+        const bounds = this.scrollport(),
             axis = this.readingAxis();
         let rect: DOMRect | null = null;
         if (index.text.length && (at > 0 || this.renderedMode === 'scroll')) {
@@ -1979,6 +2022,9 @@ export class EpubView extends FileView {
             const range = this.ranges.get(annotation.id),
                 start = range?.startContainer,
                 node = start && start.nodeType === 1 ? start.childNodes[range.startOffset] || start : start;
+            // A passage already in view (the one just highlighted, or one opened from its card while it is read) is
+            // left where it is: the text does not move under the reader.
+            if (node && range && this.viewport && wholly(range.getClientRects(), this.scrollport())) return;
             if (node) {
                 this.restoredAnchor = null;
                 revealDisclosures(node);

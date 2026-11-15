@@ -184,6 +184,12 @@ What changed for someone using Annotator. How to use each thing is in
   is written to them until they are put right; a PDF with one note and no
   `annotation-pages` works exactly as before. Asked for by someone working
   through a textbook.
+- In a book, the text no longer moves when you highlight a passage: what is
+  opened and already in view stays where it is. A chapter or a place you go
+  to starts at the top of the text instead of a line higher, under the gap
+  above it, and scrolling, the header and the status line name the chapter
+  that fills the view rather than the one whose last lines are still at the
+  top.
 
 ## 0.3.1 (2026-11-13)
 

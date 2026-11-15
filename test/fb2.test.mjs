@@ -199,11 +199,17 @@ test('the contents follow the section tree, and a chapter no section names is na
     const { book } = await read(fb2(NESTED));
     assert.deepEqual(book.nav, [
         { title: 'Part One', path: 's1-1.xhtml', fragment: 'fb2-s1', depth: 0 },
-        { title: 'Chapter 1 The Start', path: 's1-1.xhtml', fragment: 'ch1', depth: 1 },
+        { title: 'Chapter 1: The Start', path: 's1-1.xhtml', fragment: 'ch1', depth: 1 },
         { title: 'Chapter 2', path: 's1-2.xhtml', fragment: '', depth: 1 }
     ]);
     // A chapter is named by the sections it is in, so "Chapter 1" of one part is not mistaken for that of another.
-    assert.deepEqual(book.chapters.map(chapter => chapter.title), ['Part One · Chapter 1 The Start', 'Part One · Chapter 2', 'A chapter no section names, flat at the top.']);
+    assert.deepEqual(book.chapters.map(chapter => chapter.title), ['Part One · Chapter 1: The Start', 'Part One · Chapter 2', 'A chapter no section names, flat at the top.']);
+    // A heading of two lines is shown with a colon between them; the chapter's name in an annotation is still made from
+    // its words as they always were, so annotations made before find their chapter.
+    const { createHash } = await import('node:crypto');
+    assert.equal(book.chapters[0].idref, `t${createHash('sha256').update(`${JSON.stringify(['Part One', 'Chapter 1 The Start'])}\n1`).digest('hex').slice(0, 12)}`);
+    const lined = await read(fb2('<body><section><title><p>Part I.</p><p>Arrival</p></title><p>One.</p></section><section><title><p>Chapter 2</p><p>The</p><p>End</p></title><p>Two.</p></section><section><title><p>Plain</p></title><p>Three.</p></section></body>'));
+    assert.deepEqual(lined.book.nav.map(entry => entry.title), ['Part I. Arrival', 'Chapter 2: The End', 'Plain'], 'a colon after the first line, unless it ends in a mark of its own');
     // The place a contents entry leads to is in its chapter.
     const { sections } = await read(fb2(NESTED));
     assert.equal(sections[0].root.querySelector('#ch1').localName, 'h3'); assert.equal(sections[0].root.querySelector('#fb2-s1').textContent, 'Part One');
@@ -377,7 +383,7 @@ test('a highlight made in a FictionBook is stored as a book annotation, and is r
         assert.match(content.querySelector('.annotator-epub-chapter').textContent, /First paragraph, with stress and weight\./);
         select(win, content, 'Second paragraph & an ampersand');
         const capture = view.capture(); assert.equal(typeof capture, 'object', String(capture));
-        assert.equal(capture.exact, 'Second paragraph & an ampersand'); assert.equal(capture.label, 'Part One · Chapter 1 The Start'); assert.equal(capture.file, 'Books/A Small Book.fb2');
+        assert.equal(capture.exact, 'Second paragraph & an ampersand'); assert.equal(capture.label, 'Part One · Chapter 1: The Start'); assert.equal(capture.file, 'Books/A Small Book.fb2');
         const annotation = await view.payload(capture, 'A thought', 'h1');
         // The same shape as an EPUB annotation: an address, the book and chapter it is part of, and the three selectors.
         assert.match(annotation.uri, /\?loc=s1-1\.xhtml$/); assert.equal(annotation.target[0].source, annotation.uri);
@@ -388,7 +394,7 @@ test('a highlight made in a FictionBook is stored as a book annotation, and is r
         assert.deepEqual(Object.keys(annotation).sort(), ['created', 'document', 'id', 'tags', 'target', 'text', 'updated', 'uri']);
         view.setAnnotations([annotation]); await frames();
         assert.equal(view.status('h1'), 'Highlight restored · Verified passage');
-        assert.deepEqual(view.section(annotation), { key: 'chapter:0', label: 'Part One · Chapter 1 The Start' });
+        assert.deepEqual(view.section(annotation), { key: 'chapter:0', label: 'Part One · Chapter 1: The Start' });
         return JSON.stringify(annotation);
     });
     // Closed, and opened again from the same bytes: the stored annotation is found where it was made.
@@ -398,7 +404,10 @@ test('a highlight made in a FictionBook is stored as a book annotation, and is r
         assert.equal(view.status('h1'), 'Highlight restored · Verified passage');
         assert.equal(view.ranges.get('h1').toString(), 'Second paragraph & an ampersand');
         assert.equal(content.querySelectorAll('.annotator-native-mark').length > 0, true);
-        view.activate(annotation); assert.deepEqual(opened, ['h1']); assert.ok(win.scrolledTo);
+        // In view, it is opened where it is; further down the book, it is gone to.
+        view.activate(annotation); assert.deepEqual(opened, ['h1']); assert.equal(win.scrolledTo, undefined);
+        win.Range.prototype.getClientRects = function () { return [{ left: 10, right: 110, top: 900, bottom: 960, width: 100, height: 60 }]; };
+        view.activate(annotation); assert.deepEqual(opened, ['h1', 'h1']); assert.ok(win.scrolledTo);
     });
     // The zipped file is the same book: the same annotation, no change of revision.
     const zip = new JSZip(); zip.file('book.fb2', new Uint8Array(bytes));
