@@ -4,15 +4,16 @@ Written 2026-11-14 for issue 263 ("Ability to watch fb2/fb3 files", 2022,
 "and maybe MOBI later"), which [ISSUE_PLAN.md](ISSUE_PLAN.md) had as "decline
 or defer: convert to EPUB with Calibre".
 
-**Recommendation: build it, after looking at a corpus.** An FB2 file can be
-turned into exactly what the book reader already consumes, at one call, and
-everything after that call (reading controls, contents, find, highlights,
-notes, picture notes, reading position) works unchanged. A prototype on this
-branch does it; section 9 says what it does and what was tried. The stored
-note format is not touched. What must not be hurried is the rule for what a
-chapter is (section 3): notes will rest on it, and the only real books looked
-at so far are two flat ones. Section 11 is a reviewer's criticism of this
-design and what changed because of it.
+**Status (2026-11-15): built to release quality on this branch, not
+released.** The owner's standing rule is to build what is asked for without
+waiting on the decisions this note listed; section 10 records how each was
+decided. Section 12 is the corpus of 229 real books that settled the chapter
+rule, section 13 the laws in `proofs/`, section 14 the check in a running
+Obsidian. An FB2 file is turned into exactly what the book reader already
+consumes, at one call, and everything after that call (reading controls,
+contents, find, highlights, notes, picture notes, reading position) works
+unchanged. The stored note format is not touched. Section 11 is a reviewer's
+criticism of an earlier form of this design and what changed because of it.
 
 ## 1. The format as it is found
 
@@ -214,7 +215,10 @@ order. Untitled sections inside a chapter are its scenes and stay in it. What
 a section says before its first inner section (title, epigraph, picture,
 annotation), and a section that says nothing but its heading, opens the
 chapter that follows, so no text is without a chapter and no chapter is only
-a heading. Each body after the first (notes, comments) is one chapter outside
+a heading. Words set after a section inside a larger one close the chapter
+before them, unless a heading is already waiting for the next chapter, in
+which case they wait behind it, so nothing changes places. Which chapter each
+piece belongs to is decided by `proofs/chapters.bend` (section 13). Each body after the first (notes, comments) is one chapter outside
 the reading order.
 
 This is the second form of the rule. The first, "a section with no section
@@ -255,9 +259,17 @@ path of section numbers down to it: `s3-2` is the second section of the third
 section of the first body (`body2` for a notes body, `cover`). The place is
 the chapter's file name and so the `loc` of its address. Its *name* is the
 `dc.identifier` stored with every annotation: for a chapter with titles,
-`t` and twelve hex digits of the SHA-256 of the titles around it and its own
-(and which of several chapters with the same titles it is); for a chapter
-with none, its place. In a file that has not changed both lead to the same
+`t` and twelve hex digits of the SHA-256 of the headings it stands under and
+its own title (and which of several chapters with the same headings it is);
+for a chapter with none, its place. The headings it stands under are the
+titles of the sections it is inside; a section with no title of its own whose
+first inner section is only a heading (an act's title, then its scenes) stands
+under that heading. Nothing is carried from a section to its siblings: in a
+file that sets everything side by side, which titles group which is not
+written down, and carrying a heading forward put one poem's title on the next
+poem in the corpus (section 12). The same list, joined with `·`, is the
+chapter's name in the reader; a chapter with no title of its own is also
+named by how it begins. In a file that has not changed both lead to the same
 chapter. If a section is added before it, the place is now another chapter's
 and the name is not, and `epubCandidates` reports the two as a conflict:
 `EpubResolver.locate` then trusts neither, looks for a passage by its words
@@ -636,29 +648,39 @@ closed and reopened.
   only.
 - Memory and time on a large illustrated book.
 
-## 10. Decisions for the owner
+## 10. Decisions, as made
 
-1. **Build it at all**, at about 13 more points (section 7), the corpus
-   first.
-2. **A corpus**: fetching a few hundred real FB2 files needs the owner's yes
-   (or the owner's own shelf). Without it rule 1 rests on two flat books.
-3. **The three rules of section 3 are the release's contract.** What a
-   chapter is, its text character for character, and its two names. They
-   should be agreed before anything ships, because notes will depend on them.
-4. **Open `.fb2`/`.fbz` in Annotator by default**, or only from **Annotate**,
-   the command and annotation notes. Proposed: by default, guarded.
-5. **`.fb2.zip`**: the command and annotation notes (as built), or also unzip
-   to `.fb2` in the vault on first opening.
-6. **A different FB2 of the same book**: keep the strict rule (kept, not
-   painted) or add an explicit "these notes are for this book too". Proposed:
-   strict for the first release; the explicit command if people ask.
-7. **Malformed files and document types**: strict with a message (proposed),
-   or a repair pass and a more forgiving reading of document types.
-8. **Books of more than 2,000 flat sections**: refused (as built), or grouped.
-9. **Footnotes**: jump and back now, a pop-up later for both formats
-   (proposed), or wait for the pop-up.
-10. **Remote FB2 addresses** as `annotation-target`: not supported (proposed).
-11. **What to say on issue 263** about FB3 and MOBI (section 8).
+The owner's standing rule (relayed 2026-11-15): implement what is asked
+without waiting, ask only before closing something as not planned, and keep
+publishing and posting on issues for the owner. Each decision this note had
+left open was taken as it proposed:
+
+1. **Built**, to release quality, on this branch.
+2. **A corpus** of 229 public-domain or freely licensed books was read
+   (section 12). None of its files is in the repository; the tests' books are
+   written by hand.
+3. **The three rules of section 3** are as stated there, after the corpus.
+   They are the contract for notes from the first release on.
+4. **`.fb2` and `.fbz` open in Annotator by default**, each registration
+   guarded so that the plugin still starts beside another FB2 plugin.
+5. **`.fb2.zip`** is opened through **Open a FictionBook (FB2) from this
+   vault…**, **Annotate** and annotation notes. Nothing is unzipped into the
+   vault.
+6. **A different FB2 of the same book** stays a different publication: its
+   annotations are kept and listed, not painted.
+7. **Malformed files and document types** are refused with a message. The
+   corpus had none of either (section 12).
+8. **Books of more than 2,000 flat sections** are refused with a message.
+   The largest book of the corpus has 524 chapters.
+9. **Footnotes**: jump and Back. A pop-up for both formats is a follow-up.
+10. **Remote FB2 addresses** as `annotation-target` are not supported.
+11. **Issue 263**: what to say about FB3 and MOBI is the owner's (below).
+
+**For the owner to put to the issue, not done here**: FB3 and MOBI are
+proposed as not planned (section 8: FB3's public specification is a 2008
+beta that no popular reader supports; MOBI is a retired, often protected
+binary format that Calibre converts well). Nothing has been closed or
+answered.
 
 ## 11. A reviewer's criticism, and what changed
 
@@ -696,3 +718,143 @@ What this review did not cover, and so is still unreviewed: the reader's
 behaviour with a FictionBook in Obsidian itself; memory on a phone; whether
 anything is fetched for an external document type (now refused, so moot
 unless that is relaxed).
+
+## 12. A corpus of real books
+
+229 files, fetched once, politely (one request at a time, with pauses), and
+kept outside the repository: none is a fixture, so their licences do not
+bear on the repository.
+
+| Source | Files | Size | What they are |
+| --- | ---: | ---: | --- |
+| [Wolne Lektury](https://wolnelektury.pl) | 160 | 8 MB | Polish public-domain and freely licensed literature, every 48th of its 7,693 titles; FB2 made by its own `book2fb2`. Prose, poetry (111 with poems), drama. |
+| The Tolstoy museum's [ninety-volume edition](https://tolstoy.ru/creativity/90-volume-collection-of-the-works/) | 16 | 87 MB | Every third volume of the complete works, public domain; made with an FB2 editor. Deep (up to 6 levels), with covers, pictures, poems and up to 2,704 footnotes. |
+| [Lib.ru classics](http://az.lib.ru) | 53 | 14 MB | Pushkin, Gogol, Lermontov, Turgenev, Dostoevsky, Chekhov, Leskov, Goncharov, Saltykov: about six texts each, as `.fb2.zip` from the library's generator. |
+
+What was measured, on each file, with the converter as built
+(`openFictionBook`, then `publicationSections`):
+
+- **All 229 open.** No file was malformed; none had a document type or an
+  entity declaration; every file declares UTF-8 or nothing. (So the legacy
+  encodings are covered by hand-made tests only; the corpus has none.) 227 of
+  229 carry a `document-info/id`.
+- **Shapes.** Nesting from none to 6 levels. Untitled sections inside titled
+  ones (scenes) in 11 of 16 Tolstoy volumes; sections that are only a heading
+  in 30 of 53 Lib.ru books, 26 of 160 Wolne Lektury books and all 16 Tolstoy
+  volumes; a notes body in 169 books (always named `notes`).
+- **Three chapter rules compared**: A, the top-level sections (what
+  foliate-js does); B, every section with no section inside; C, the rule as
+  built.
+
+| | A | B | C (built) |
+| --- | --- | --- | --- |
+| Tolstoy: largest chapter, median of volumes | 649,317 characters | 76,963 | 78,417 |
+| Tolstoy: volumes with a chapter over 300,000 characters | 16 of 16 | 0 | 0 |
+| Wolne Lektury: books with a chapter over 300,000 | 5 of 160 | 0 | 0 |
+| Chapters under 200 characters (all three sources) | 267 of 1,251 | 659 of 5,670 | 245 of 5,270 |
+
+  A makes megabyte chapters of the books that most need dividing; B makes a
+  chapter of every bare heading. C divides like B without B's empty
+  chapters. What is left under 200 characters is mostly real: a title page, a
+  dedication, a one-line letter.
+- **Names.** Named by their own titles and the sections around them, 39
+  chapters of 4 Wolne Lektury books shared a name ("SCENA I" in every act of
+  a play, "1" in every part of a novel): the act's title there is a
+  heading-only section at the head of an untitled section holding the scenes.
+  Letting such a heading name what follows it in that section (section 3)
+  leaves 3 shared names in 2 Wolne Lektury books (scenes with the same title
+  in the same act) and none among the Tolstoy volumes. A first attempt
+  carried a heading-only section's title over every later chapter beside it;
+  in the flat Lib.ru files it named Pushkin's *Prisoner of the Caucasus* and
+  its dedication as parts of *Ruslan and Lyudmila*, and was dropped. In 6 of
+  the 53 flat Lib.ru books 85 chapters share a name with another (each poem's
+  "Dedication", "Epilogue"); those books do not say which heading groups
+  which, and the contents list shows the headings in order.
+- **Time.** The slowest file (8 MB, 363 chapters, 2,704 notes) converted in
+  0.6 to 1.1 s in Node and opened in 0.64 s in Obsidian (section 14). In the tests'
+  DOM it first took 11.6 s: the converter read child elements through the
+  `children` collection, whose by-name lookups are slow there; it now walks
+  `childNodes`.
+
+The scripts that fetched and measured the corpus are not in the repository
+(they hold nothing the plugin needs); the counts above are their output.
+
+## 13. The laws in `proofs/`
+
+`proofs/chapters.bend` decides which chapter each piece of a book belongs to.
+The converter reads the book, in its order, as a row of pieces, each of which
+opens a chapter, waits for the next one (a heading) or follows the one before
+(words set after an inner section), and `src/fb2-book.ts` calls
+`gatherChapters` (`proofs/chapters.mjs`) on that row. Proved in
+`proofs/PROOF.bend`, and checked a second time by the kernel:
+
+- `chapters_keep`: spread out again, the chapters are the row as it was;
+  nothing is dropped, doubled or moved.
+- `chapters_count`: there are as many chapters as pieces that open one (and a
+  chapter is one opening piece with quiet pieces around it by its type, so no
+  chapter is only headings).
+- `chapters_stretches`: a long row read a stretch at a time, the last first,
+  reads as the whole row does. The wrapper hands the row over 1,000 pieces at
+  a time, carrying the Bend value between stretches.
+
+Four negative controls in `proofs/verify.mjs` break the definition (words
+overtaking a waiting heading, waiting pieces dropped, pieces before the first
+chapter lost, a stretch forgetting what was read) and must be refused.
+Stating `chapters_keep` found a defect in the converter as first written:
+words after a heading-only section were put in the chapter before that
+heading.
+
+What is not in Bend, and why: deciding what each section is (a walk of the
+parsed XML: is it divided, does it say anything, is it a heading) and writing
+a chapter's HTML. Those are DOM work; they are tested, including against
+generated books whose expected text, separators and all, is written down
+beside them (rule 2), not proved. Rule 3's names are a hash, and are tested.
+
+## 14. In a running Obsidian
+
+Obsidian 1.15.0 for macOS, started as a separate instance of its own (its
+own `--user-data-dir`, a scratch vault, a debugging port; not the shared test
+vault other sessions use), with the plugin as built on this branch, the
+hand-made book of section 9, the Chekhov `.fb2.zip`, the 8 MB Tolstoy volume
+and one Wolne Lektury book. Driven through the debugging port; screenshots
+in [evidence/fb2](evidence/fb2) (08 to 11).
+
+- Obsidian gave `.fb2` and `.fbz` to the book view; the file list showed the
+  `.fb2` files with an FB2 badge and hid the `.fb2.zip` (*Detect all file
+  extensions* is off by default), as section 4 says.
+- Opening `Handmade.fb2` as a click in the file list does: the book view, the
+  cover first, "Book reader controls", chapters named `Часть первая · Глава 1
+  Начало`. (That run was of the build before the naming change of section 3;
+  the chapter's stored name in the next item is that build's.)
+- A highlight from the selection bar, saved from the note composer, wrote
+  `Handmade.fb2.annotations.md` with `loc=s1-1.xhtml`, the chapter's name
+  `t4671f5339127` and the document id, and showed in the sidebar under its
+  chapter.
+- The tab closed and the book opened again: same chapter, "Highlight restored
+  · Verified passage". Obsidian quit and started again: the tab was restored
+  with the highlight painted.
+- A footnote reference went to the notes (5 / 5) and **Back** returned.
+- **Open a FictionBook (FB2) from this vault…** listed all four books; the
+  `.fb2.zip` chosen there opened in the book view with the sidebar.
+- The 8 MB volume opened in 0.64 s with 363 chapters and 392 contents
+  entries.
+
+How it was run, plainly: the window was behind other windows, where Chromium
+pauses animation frames and slows timers to about one a minute, which made
+the first attempts at the large book appear to hang (the reader yields with a
+timer every four chapters; this is so for an EPUB too). The final runs used
+a restarted instance with Chromium's background throttling switched off, and
+for some steps animation frames were stood in for by timers. Clicks and
+selection were made by script, not by hand.
+
+Not tried: Windows, Linux, Android, iOS (the iOS WebKit harness run of
+section 9 is the closest); a FictionBook beside another FB2 plugin in the app
+(covered by a test with a stand-in for Obsidian); rename of a book; the
+reading controls and the Pages layout with an FB2 on screen.
+
+Found in passing, not FictionBook's and not changed here: a reflowable book's
+viewport has a 26 px transparent top border, and `restoreOffset` aligns the
+chapter's first character with the border's top edge, not the content's, so
+on going to a chapter its first line sits under the toolbar's edge (seen with
+a two-line chapter heading). By reading, EPUB is affected the same way. A
+follow-up for the book reader.

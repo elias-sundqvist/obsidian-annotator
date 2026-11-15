@@ -3,6 +3,18 @@
 What changed for someone using Annotator. How to use each thing is in
 [README.md](README.md).
 
+## Unreleased
+
+- FictionBook (FB2) books open in the book reader: `.fb2`, and zipped as
+  `.fb2.zip` or `.fbz`. Contents, find, highlights, notes, picture notes,
+  reading position and the reading controls work as for an EPUB, and
+  annotations are kept in the same notes. The cover is the first page,
+  footnotes are links to the notes with **Back** to return, and older Russian
+  encodings are read. **Open a FictionBook (FB2) from this vault…** finds a
+  zipped one, which Obsidian's file list hides.
+- The reader's labels, two settings (**Book layout**, **Book text size**) and
+  a command say "book" where they meant any book rather than only EPUB.
+
 ## 0.3.1 (2026-11-13)
 
 - A note whose property is nearly `annotation-target` (the colon typed into

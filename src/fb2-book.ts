@@ -309,44 +309,37 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
     const plan = (splitBelow: number): Draft[] => {
         const row: Row[] = [];
         const holds = (nodes: Node[], owner?: Element) => nodes.some(matters) || !!owner?.getAttribute('id');
-        // The headings a chapter stands under, outermost first: the titles of the sections it is inside, and of the
-        // heading-only sections before it at its own level or above (a part's title set among its chapters).
-        const above: { depth: number; title: string; around: boolean }[] = [];
-        const section = (element: Element, depth: number) => {
+        // The headings a chapter stands under, outermost first: the titles of the sections it is inside. A section with
+        // no title of its own whose first inner section is only a heading (an act's title, then its scenes) stands
+        // under that heading. Nothing is carried from one section to its siblings: in a file that sets everything side
+        // by side, which titles group which is not written down, and a name that guesses can name the wrong work.
+        const headingOnly = (element: Element | undefined) =>
+            !!element && !!first(element, 'title') && !Array.from(element.childNodes).some(says);
+        const section = (element: Element, depth: number, trail: string[]) => {
             const all = Array.from(element.childNodes),
                 here = plain(first(element, 'title'));
-            // Coming to a section, the headings of deeper levels are behind us, and so is a section of this level that held the last ones.
-            while (
-                above.length &&
-                (above[above.length - 1].depth > depth ||
-                    (above[above.length - 1].depth === depth && above[above.length - 1].around))
-            )
-                above.pop();
             if (divided.has(element) && depth < splitBelow) {
-                const at = all.indexOf(named(element, 'section')[0]),
-                    head = all.slice(0, at);
+                const inner = named(element, 'section'),
+                    at = all.indexOf(inner[0]),
+                    head = all.slice(0, at),
+                    given = here || (headingOnly(inner[0]) ? plain(first(inner[0], 'title')) : ''),
+                    around = given ? [...trail, given] : trail;
                 if (holds(head, element)) row.push({ kind: 'waits', piece: { owner: element, nodes: head, depth } });
-                if (here) above.push({ depth, title: here, around: true });
                 for (const node of all.slice(at))
                     if (node.nodeType === 1 && (node as Element).localName === 'section')
-                        section(node as Element, depth + 1);
+                        // The heading that names the section is not said again in the name of what is under it.
+                        section(node as Element, depth + 1, !here && node === inner[0] ? trail : around);
                     else if (matters(node)) row.push({ kind: 'follows', piece: { nodes: [node], depth } });
             } else if (all.some(says))
                 row.push({
                     kind: 'opens',
                     piece: { owner: element, nodes: all, depth },
                     place: placeOfSection.get(element)!,
-                    trail: [...above.map(item => item.title), ...(here ? [here] : [])],
+                    trail: here ? [...trail, here] : trail,
                     titled: !!here
                 });
-            // A section that says nothing but its heading opens the chapter that follows it, and stands over the chapters after it.
-            else if (holds(all, element)) {
-                row.push({ kind: 'waits', piece: { owner: element, nodes: all, depth } });
-                if (here) {
-                    while (above.length && above[above.length - 1].depth >= depth) above.pop();
-                    above.push({ depth, title: here, around: false });
-                }
-            }
+            // A section that says nothing but its heading opens the chapter that follows it.
+            else if (holds(all, element)) row.push({ kind: 'waits', piece: { owner: element, nodes: all, depth } });
         };
         const all = Array.from(main.childNodes),
             sections = named(main, 'section');
@@ -362,7 +355,7 @@ export async function openFictionBook(source: ArrayBuffer, doc: Document): Promi
             const head = all.slice(0, all.indexOf(sections[0]));
             if (holds(head)) row.push({ kind: 'waits', piece: { owner: main, nodes: head, depth: 0 } });
             for (const node of all.slice(all.indexOf(sections[0])))
-                if (node.nodeType === 1 && (node as Element).localName === 'section') section(node as Element, 1);
+                if (node.nodeType === 1 && (node as Element).localName === 'section') section(node as Element, 1, []);
                 else if (matters(node)) row.push({ kind: 'follows', piece: { nodes: [node], depth: 0 } });
         }
         let gathered: {
