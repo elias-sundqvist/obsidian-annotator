@@ -1653,3 +1653,6 @@ body.annotator-reading-fullscreen .workspace-leaf.mod-active > .workspace-leaf-c
 .annotator-citation-flash-box { position: absolute; border-radius: 3px; outline: 2px solid var(--annotator-citation-flash, var(--text-accent)); background: color-mix(in srgb, var(--annotator-citation-flash, var(--text-accent)) 22%, transparent); animation: annotator-citation-flash 1.8s var(--annotator-ease, ease-out) forwards; }
 @keyframes annotator-citation-flash { 0%, 55% { opacity: 1; } 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .annotator-citation-flash-box { animation-duration: .01s; animation-delay: 1.7s; } }
+/* Open from outside Obsidian: the recipe as text to copy, and the button in the notice for a file outside the vault. */
+.annotator-open-with-recipe { width: 24em; max-width: 100%; font-family: var(--font-monospace); font-size: var(--font-smallest); white-space: pre; resize: vertical; }
+.notice .annotator-outside-copy { display: block; margin-top: var(--size-4-2); }

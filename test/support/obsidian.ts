@@ -2,7 +2,7 @@
 import {StateField} from '@codemirror/state';
 export const editorInfoField = StateField.define({create:()=>null,update:value=>value});
 export const editorLivePreviewField = StateField.define<boolean>({ create: () => true, update: value => value });
-export const Platform = {isMobile:false,isPhone:false,isTablet:false,isWin:false};
+export const Platform = {isMobile:false,isPhone:false,isTablet:false,isWin:false,isMacOS:false,isLinux:false,isDesktopApp:false};
 export const Keymap = { isModEvent:(event:MouseEvent)=>event.ctrlKey || event.metaKey || event.button === 1 ? 'tab' : event.shiftKey ? 'split' : false };
 export class Component { private domCleanups:(()=>void)[]=[];registerDomEvent(element:HTMLElement,type:string,fn:EventListener){element.addEventListener(type,fn);this.domCleanups.push(()=>element.removeEventListener(type,fn));} load(){} unload(){for(const cleanup of this.domCleanups.splice(0))cleanup();} addChild<T>(child:T){return child;} removeChild(_child:unknown){} }
 export class Scope {
@@ -22,11 +22,11 @@ export class MarkdownView extends FileView {}
 export class ItemView extends FileView {addChild<T>(child:T){return child;}removeChild(_child:unknown){} }
 export class WorkspaceLeaf { async setViewState(state:any){(this as any).state=state;} }
 export class TFile {
-    stat={mtime:1,size:0}; extension:string; basename:string;
-    constructor(public path:string){this.extension=path.split('.').at(-1)||'';this.basename=path.split('/').at(-1)!.replace(/\.[^.]+$/,'');}
+    stat={mtime:1,size:0}; extension:string; basename:string; name:string;
+    constructor(public path:string){this.extension=path.split('.').at(-1)||'';this.name=path.split('/').at(-1)!;this.basename=this.name.replace(/\.[^.]+$/,'');}
 }
 export class Menu { items:any[]=[]; shown=0; native=true; setUseNativeMenu(on:boolean){this.native=on;return this;} addItem(build:(item:any)=>void){const item:any={title:'',checked:false,warning:false,run:()=>{}};for(const key of ['setIcon','setDisabled','setSection'])item[key]=()=>item;item.setTitle=(title:string)=>{item.title=title;return item;};item.setChecked=(on:boolean)=>{item.checked=!!on;return item;};item.setWarning=(on:boolean)=>{item.warning=!!on;return item;};item.onClick=(run:()=>void)=>{item.run=run;return item;};build(item);this.items.push(item);return this;} addSeparator(){return this;} showAtMouseEvent(_event:unknown){this.shown++;return this;} showAtPosition(_position:unknown){this.shown++;return this;} }
-export class Notice { static messages:string[]=[];constructor(message:string){Notice.messages.push(message);} hide(){} }
+export class Notice { static messages:any[]=[];static shown:Notice[]=[];hidden=false;constructor(public message:any){Notice.messages.push(message);Notice.shown.push(this);} hide(){this.hidden=true;} }
 export class Modal {contentEl!:HTMLElement;modalEl!:HTMLElement;constructor(public app:any){}open(){}close(){} }
 export class FuzzySuggestModal<T> extends Modal { emptyStateText='';limit=0;setPlaceholder(_text:string){} setInstructions(_items:unknown[]){} getItems():T[]{return [];} }
 export class PluginSettingTab {containerEl!:HTMLElement;constructor(public app:any,_plugin:any){} }
@@ -47,6 +47,8 @@ export class Plugin {
         try { await this.app.vault.adapter.write(`${this.manifest.dir || `${this.app.vault.configDir}/plugins/${this.manifest.id}`}/data.json`,JSON.stringify(value,null,2)); this.data=structuredClone(value); } catch { /* host writeJson catches adapter failures */ }
     }
     register(fn:()=>void){this.cleanups.push(fn);} registerView(..._args:any[]){} registerExtensions(..._args:any[]){} registerEditorExtension(..._args:any[]){} addSettingTab(..._args:any[]){} registerMarkdownPostProcessor(..._args:any[]){} registerEvent(..._args:any[]){}
+    protocolHandlers=new Map<string,(params:any)=>unknown>();
+    registerObsidianProtocolHandler(action:string,handler:(params:any)=>unknown){if(this.protocolHandlers.has(action))throw new Error(`Action "${action}" is already registered as a handler.`);this.protocolHandlers.set(action,handler);}
     addCommand(command:any){this.commands.push(command);} registerInterval(id:number){this.register(()=>window.clearInterval(id));}
     registerDomEvent(element:EventTarget,type:string,fn:EventListener,...options:any[]){element.addEventListener(type,fn,...options);this.register(()=>element.removeEventListener(type,fn,...options));}
 }

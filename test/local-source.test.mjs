@@ -9,7 +9,9 @@ import {remoteRevisions} from './.generated/readers/remote-source.js';
 test('local targets map in-vault absolute and file URLs without sibling/traversal or encoding confusion',()=>{
  const root='/Users/test/Vault';
  for(const raw of ['/Users/test/Vault/books/Paper #1?.pdf','file:///Users/test/Vault/books/Paper%20%231%3F.pdf'])assert.equal(localTarget(raw,root).vaultPath,'books/Paper #1?.pdf');
- assert.equal(localTarget('/Users/test/Vault/../Other/p.pdf',root).vaultPath,undefined);assert.equal(localTarget('/Users/test/Vault-copy/p.pdf',root).vaultPath,undefined);
+ assert.equal(localTarget('/Users/test/Vault/../Other/p.pdf',root).vaultPath,undefined);
+ // A disk that ignores the case of letters is said so by the caller; without that, another case is another folder. Windows paths always fold.
+ assert.equal(localTarget('/users/TEST/vault/Books/p.pdf',root).vaultPath,undefined);assert.equal(localTarget('/users/TEST/vault/Books/p.pdf',root,true).vaultPath,'Books/p.pdf');assert.equal(localTarget('/users/TEST/vault-copy/p.pdf',root,true).vaultPath,undefined);assert.equal(localTarget('/users/TEST/vaul/p.pdf',root,true).vaultPath,undefined);assert.equal(localTarget('c:\\users\\me\\VAULT\\a.pdf','C:\\Users\\Me\\Vault').vaultPath,'a.pdf');assert.equal(localTarget('/Users/test/Vault-copy/p.pdf',root).vaultPath,undefined);
  assert.equal(localTarget('file://localhost/Users/test/Vault/p.pdf#page=4',root).vaultPath,'p.pdf');
  assert.equal(localTarget('/Users/test/Vault/é 📝.epub',root).uri,'file:///Users/test/Vault/%C3%A9%20%F0%9F%93%9D.epub');
  assert.equal(localTarget('books/a.pdf',root),null);assert.equal(localTarget('https://example.org/a.pdf'),null);

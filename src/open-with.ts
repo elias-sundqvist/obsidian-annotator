@@ -168,14 +168,18 @@ export class OpenQueue<T> {
     add(item: T): boolean {
         if (this.waiting.length + (this.busy ? 1 : 0) >= this.limit) return false;
         this.waiting.push(item);
-        void this.drain();
+        if (!this.busy) this.served = this.drain();
         return true;
     }
     clear() {
         this.waiting = [];
     }
+    /** Resolves when nothing is being served and nothing waits. */
+    idle(): Promise<void> {
+        return this.served;
+    }
+    private served: Promise<void> = Promise.resolve();
     private async drain() {
-        if (this.busy) return;
         this.busy = true;
         try {
             for (let item = this.waiting.shift(); item !== undefined; item = this.waiting.shift()) {

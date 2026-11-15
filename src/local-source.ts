@@ -30,7 +30,11 @@ function absolute(raw: string): { path: string; windows: boolean } | null {
     }
     return { path: root + '/' + normal.join('/'), windows };
 }
-export function localTarget(raw: string, basePath?: string): LocalTarget | null {
+/**
+ * `foldCase` says the vault's disk takes "Vault" and "VAULT" for one folder (as a Mac's usually does): a path that
+ * differs from the vault's only in the case of its letters is then a path of the vault. Windows paths always are.
+ */
+export function localTarget(raw: string, basePath?: string, foldCase = false): LocalTarget | null {
     const target = absolute(raw);
     if (!target) return null;
     const rest = target.windows ? target.path.slice(3) : target.path.slice(1),
@@ -39,8 +43,9 @@ export function localTarget(raw: string, basePath?: string): LocalTarget | null 
     const base = basePath ? absolute(basePath) : null;
     let vaultPath: string | undefined;
     if (base && base.windows === target.windows) {
-        const path = target.windows ? target.path.toLowerCase() : target.path,
-            root = (base.windows ? base.path.toLowerCase() : base.path).replace(/\/$/, '');
+        const fold = base.windows || foldCase,
+            path = fold ? target.path.toLowerCase() : target.path,
+            root = (fold ? base.path.toLowerCase() : base.path).replace(/\/$/, '');
         if (path.startsWith(root + '/'))
             vaultPath = target.path.split('/').slice(base.path.replace(/\/$/, '').split('/').length).join('/');
     }
