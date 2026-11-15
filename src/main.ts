@@ -140,7 +140,7 @@ import { fictionBookName } from './epub-book';
 import { makeSnapshot, SnapshotHost } from './snapshot';
 import { refreshSnapshotEditors, snapshotEditorExtension } from './snapshot-editor';
 import { noteFolding, refold } from './note-folding';
-import { appLink, calibreFile, followedLinks, zoteroFile } from './app-links';
+import { appLink, calibreFile, devonthinkFile, followedLinks, zoteroFile, type ScriptRunner } from './app-links';
 import { rectLink, selectionLink, type RectLink, type SelectionLink } from './selection-links';
 import { MATCH_LIMIT, matchWords, type MatchOptions, type MatchSource } from './every-match';
 import {
@@ -304,7 +304,7 @@ export default class AnnotatorPlugin extends Plugin {
     }
     private positions: Record<string, ReadingPosition> = {};
     private localVaultTargets: Record<string, string> = {};
-    /** Zotero and Calibre links already followed: the link as written, and the file it was found to mean. */
+    /** Zotero, Calibre and DEVONthink links already followed: the link as written, and the file it was found to mean. */
     private appLinkPaths: Record<string, string> = {};
     private remoteSources: Record<string, string> = {};
     /** Targets outside the vault the user has allowed: exact addresses, and `origin:https://host` for a whole site. */
@@ -334,6 +334,25 @@ export default class AnnotatorPlugin extends Plugin {
                 web && host ? `Always from ${host}` : undefined
             ).open();
         });
+    /** Asks before DEVONthink is first asked for a file this session (and started, if it is not running). Replaceable (tests). */
+    devonthinkApproval: (link: string, running: boolean) => Promise<'yes' | 'always' | 'no'> = (link, running) =>
+        new Promise(resolve => {
+            new ConfirmModal(
+                this.app,
+                'Ask DEVONthink for this file?',
+                [
+                    "This note's source is a DEVONthink item. To find its file, the reader asks DEVONthink where the item is kept. The file is then asked about before it is copied into the vault.",
+                    link,
+                    running
+                        ? 'macOS may ask whether Obsidian may control DEVONthink. Allow it, or the file cannot be found.'
+                        : 'DEVONthink is not running: asking opens it. macOS may then ask whether Obsidian may control DEVONthink. Allow it, or the file cannot be found.'
+                ],
+                running ? 'Ask DEVONthink' : 'Open DEVONthink and ask',
+                resolve
+            ).open();
+        });
+    /** Whether DEVONthink may be asked (and started) this session: yes once, until Obsidian is closed. */
+    private devonthinkAllowed = false;
     private async approveSource(url: string, kind: string) {
         let origin: string | null = null;
         try {
@@ -6644,6 +6663,14 @@ export default class AnnotatorPlugin extends Plugin {
             await this.followAppLink(key.slice(8));
             requireCurrent();
             key = this.targetKey(note);
+        } else if (key?.startsWith('remote:file:') && (await this.followedFileGone(note))) {
+            requireCurrent();
+            key = this.targetKey(note);
+            if (key?.startsWith('applink:')) {
+                await this.followAppLink(key.slice(8));
+                requireCurrent();
+                key = this.targetKey(note);
+            }
         }
         if (!key) throw new Error(this.unresolvedTarget(note));
         if (this.targetType(note) === 'video') {
@@ -7232,10 +7259,41 @@ export default class AnnotatorPlugin extends Plugin {
      * A Zotero or Calibre link names a file those programs keep, not where it is. It is found once, by looking in the
      * folder the settings name (Zotero's usual place in the home folder when none is named), and remembered. Nothing is
      * read yet: the file found is then an ordinary file outside the vault, asked about before it is copied.
+     * A DEVONthink link is followed by asking DEVONthink, on a Mac, after asking the reader once a session.
      */
     private async followAppLink(raw: string) {
         const link = appLink(raw);
-        if (!link) throw new Error('This is not a Zotero or Calibre link the reader can follow.');
+        if (!link) throw new Error('This is not a Zotero, Calibre or DEVONthink link the reader can follow.');
+        if (link.app === 'devonthink') {
+            if (Platform.isMobile)
+                throw new Error(
+                    'DEVONthink links are followed on a Mac only. Open this note in Obsidian on the Mac that has the database first: the copy it keeps in the vault is read here afterwards. Or point annotation-target at the file in the vault.'
+                );
+            if (!Platform.isDesktopApp || !Platform.isMacOS)
+                throw new Error(
+                    "DEVONthink links are followed on a Mac only. On this computer, point annotation-target at the file's path, or at a copy of it in the vault."
+                );
+            const path = await devonthinkFile(link, this.desktopScriptRunner(), async running => {
+                if (this.devonthinkAllowed) return true;
+                const choice = await this.devonthinkApproval(raw.trim(), running);
+                this.devonthinkAllowed = choice !== 'no';
+                return this.devonthinkAllowed;
+            });
+            // DEVONthink can name a file it has since renamed or lost; such a path is not remembered.
+            let there = false;
+            try {
+                there = (await this.desktopFileSystem().stat(path)).isFile();
+            } catch {
+                there = false;
+            }
+            if (!there)
+                throw new Error(
+                    `DEVONthink says this item's file is ${path}, but there is no file there. Run Verify & Repair on its database in DEVONthink, then open the note again.`
+                );
+            this.appLinkPaths[raw] = path;
+            await this.persist();
+            return;
+        }
         if (Platform.isMobile)
             throw new Error(
                 'Open this note on a computer first: the link is followed there, and the copy kept in the vault is read here afterwards.'
@@ -7253,6 +7311,22 @@ export default class AnnotatorPlugin extends Plugin {
         this.appLinkPaths[raw] = path;
         await this.persist();
     }
+    /**
+     * Whether the note's source is a link followed earlier whose file is no longer where it was found (renamed or
+     * moved by its program) and has not been copied in. If so the path is forgotten, so the link is followed again.
+     */
+    private async followedFileGone(note: TFile): Promise<boolean> {
+        const raw = annotationTarget(this.targetProperty(note, 'annotation-target'))?.trim(),
+            followed = raw && appLink(raw) ? this.appLinkPaths[raw] : undefined;
+        if (!raw || !followed || Platform.isMobile) return false;
+        try {
+            if ((await this.desktopFileSystem().stat(followed)).isFile()) return false;
+        } catch {
+            // Not there: forgotten below.
+        }
+        delete this.appLinkPaths[raw];
+        return true;
+    }
     private homeFolder(): string {
         // The desktop app's own process says where the home folder is; a phone has none to name.
         const env = (globalThis as unknown as { process?: { env?: Record<string, string | undefined> } }).process?.env,
@@ -7267,6 +7341,30 @@ export default class AnnotatorPlugin extends Plugin {
         // Desktop only, and only when a file outside the vault is read: an import at the top would be loaded on phones too.
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         return require('fs').promises;
+    }
+    /** Runs osascript, to ask DEVONthink for a file. Loaded on a Mac's desktop app only, when such a link is followed. */
+    private desktopScriptRunner(): ScriptRunner {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { execFile } = require('child_process') as typeof import('node:child_process');
+        return args =>
+            new Promise((resolve, reject) => {
+                // Three minutes: long enough for DEVONthink to start and for macOS's question about controlling it to be answered.
+                execFile(
+                    '/usr/bin/osascript',
+                    args,
+                    { timeout: 180000, maxBuffer: 1024 * 1024, encoding: 'utf8', windowsHide: true },
+                    (error, stdout, stderr) => {
+                        const failed = error as (Error & { code?: unknown; killed?: boolean }) | null;
+                        if (failed && typeof failed.code === 'string') return reject(failed);
+                        resolve({
+                            status: failed ? (typeof failed.code === 'number' ? failed.code : null) : 0,
+                            stdout: String(stdout),
+                            stderr: String(stderr),
+                            timedOut: !!failed?.killed
+                        });
+                    }
+                );
+            });
     }
     /** Sign-ins given for sources' servers, by origin: in memory only, gone when the plugin is. */
     private readonly signIns = new Map<string, string>();

@@ -60,8 +60,9 @@ assets…" (`readers.test.mjs`), "network CSS, dynamic selectors…"
   on this computer the answer is for the one copy then made, and is not
   kept: while the copy is in the vault the file outside is not read again,
   and if it is read again it is asked about again. A Zotero or Calibre link
-  is first followed to a path inside the folder the settings name, and that
-  path is then asked about in the same way.
+  is first followed to a path inside the folder the settings name, and a
+  DEVONthink link to the path DEVONthink gives (see below); that path is then
+  asked about in the same way.
 - **An address cannot make the reader read outside the vault without this
   computer's key.** `obsidian://annotator-open` can be opened by any web
   page or program. With `file=` it opens a PDF or EPUB that is already in
@@ -171,6 +172,40 @@ plugin.
 Known and not yet changed: the files are kept in the plugin's folder, so a
 tool that syncs that folder carries them to other devices, where they are
 checked again.
+
+## Asking DEVONthink for a file
+
+A DEVONthink item link names an item, not a file; where DEVONthink keeps
+the file is in its own database. To follow such a link the plugin runs a
+program, and this is the only program it runs.
+
+- **What is run.** `/usr/bin/osascript -l JavaScript -e <script> <question>
+  <UUID>`, through Node's `execFile`: no shell, and the arguments are a list.
+  The script is a constant in the plugin (`DEVONTHINK_SCRIPT` in
+  `src/app-links.ts`); nothing from the note is written into its text. The
+  item's UUID is passed as an argument, and only after it has matched
+  DEVONthink's form exactly (five groups of hexadecimal digits, 8-4-4-4-12);
+  any other link is not a DEVONthink link and nothing is run for it.
+- **What it asks.** First whether DEVONthink 4 or 3 is installed and running
+  (asked of macOS; this starts nothing). Then, after the reader's yes, the
+  path of the record with that UUID, and whether its file is still to be
+  downloaded from a sync location. Nothing in DEVONthink is changed.
+- **When.** Only on a Mac's desktop app, only when a note whose
+  `annotation-target` is such a link is opened and the link has not been
+  followed yet (or the file it was followed to is gone), and only after a
+  dialog that says so. The dialog says when DEVONthink is not running and
+  asking will start it. A yes holds until Obsidian is closed and is not
+  stored. The module that runs programs is loaded only then; on a phone, a
+  tablet, Windows or Linux it is never loaded, and such a link says it is
+  followed on a Mac only.
+- **What macOS asks.** The first time, macOS asks whether Obsidian may
+  control DEVONthink. Refused (error -1743), the reader says where to allow
+  it (System Settings, Privacy & Security, Automation). The plugin does not
+  change that setting.
+- **What is done with the answer.** The path must be a whole path to a PDF
+  or EPUB that exists. It is remembered for the link in the plugin's
+  settings, and is then asked about and copied in like any file outside the
+  vault. osascript is stopped after three minutes.
 
 ## What is kept on the device outside the vault
 

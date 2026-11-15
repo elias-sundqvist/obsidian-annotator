@@ -5,6 +5,12 @@ What changed for someone using Annotator. How to use each thing is in
 
 ## Unreleased
 
+- A note's source can be a DEVONthink item link (`x-devonthink-item://…`).
+  On a Mac the reader asks DEVONthink where the item's PDF or EPUB is, after
+  asking you once a session, and the file is then asked about and copied in
+  like any file outside the vault. A Zotero, Calibre or DEVONthink link
+  whose file has moved since it was followed, and was not copied yet, is
+  followed again.
 - A PDF or book on a server that asks for a user name and password (HTTP
   Basic, for example a Calibre-Web library behind nginx) can be downloaded:
   the reader asks for them when the server does, and keeps them only until
