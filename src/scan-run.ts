@@ -2,6 +2,7 @@ import { pageWords } from './scan-words';
 import type { PageRead } from './scan-engine';
 import type { PagePicture } from './scan-read';
 import type { ScanPage } from './pdf-searchable';
+import type { PageArea } from './area';
 
 /**
  * One run of the recogniser over pages of a PDF: draw a page, read it, sift
@@ -23,6 +24,10 @@ export interface ScanRunHost {
     now?(): number;
     /** A breath between pages, so the interface stays the reader's. */
     pause?(): Promise<void>;
+    /** Where page `page` already has text of its own (a stamp, a header over a scan): words read there again are left out. Null when the page is all text and no scan. */
+    own?(page: number): Promise<PageArea[] | null>;
+    /** Told after every page what has been read so far, so that it can be kept if the run does not live to its end. */
+    keep?(pages: readonly ScanPage[], empty: readonly number[]): void;
 }
 export interface ScanProgress {
     /** Pages finished, of how many, and the page just finished. */ done: number;
@@ -43,14 +48,31 @@ export interface ScanOutcome {
 /** A page whose kept words the recogniser was, on average, less sure of than this was hard to read: handwriting, a faint or tilted scan, another language. */
 export const SCAN_HARD = 65;
 
-/** Read `wanted` pages (numbers from 1) in `language`. Pages are taken in order, each once. */
+/** What an earlier run that did not reach its end had read: taken as read, not read again. */
+export interface ScanEarlier {
+    pages: readonly ScanPage[];
+    empty: readonly number[];
+}
+/**
+ * Read `wanted` pages (numbers from 1) in `language`. Pages are taken in
+ * order, each once. Pages `earlier` holds are not drawn or read again: what
+ * was read of them then is part of what comes out now.
+ */
 export async function recognisePages(
     host: ScanRunHost,
     wanted: readonly number[],
-    language: string
+    language: string,
+    earlier?: ScanEarlier
 ): Promise<ScanOutcome> {
-    const pages = [...new Set(wanted.filter(page => Number.isSafeInteger(page) && page >= 1))].sort((a, b) => a - b),
-        out: ScanOutcome = { pages: [], read: [], empty: [], hard: [], failed: [], stopped: false },
+    const asked = [...new Set(wanted.filter(page => Number.isSafeInteger(page) && page >= 1))].sort((a, b) => a - b),
+        out: ScanOutcome = { pages: [], read: [], empty: [], hard: [], failed: [], stopped: false };
+    for (const page of earlier?.pages || [])
+        if (asked.includes(page.page + 1) && page.language === language && !out.read.includes(page.page + 1)) {
+            out.pages.push(page);
+            out.read.push(page.page + 1);
+        }
+    for (const page of earlier?.empty || []) if (asked.includes(page) && !out.read.includes(page)) out.empty.push(page);
+    const pages = asked.filter(page => !out.read.includes(page) && !out.empty.includes(page)),
         now = host.now || (() => Date.now()),
         began = now();
     let done = 0;
@@ -60,11 +82,14 @@ export async function recognisePages(
             break;
         }
         try {
-            const picture = await host.picture(page);
-            if (!picture) out.failed.push({ page, reason: 'The page could not be drawn.' });
+            // A page that is all text of its own is no scan: it is not drawn, let alone read.
+            const own = host.own ? await host.own(page) : [],
+                picture = own ? await host.picture(page) : null;
+            if (!own) out.failed.push({ page, reason: 'The page has its own text.' });
+            else if (!picture) out.failed.push({ page, reason: 'The page could not be drawn.' });
             else {
                 const read = await host.read(picture),
-                    sifted = pageWords(read.lines, read.width, read.height, page);
+                    sifted = pageWords(read.lines, read.width, read.height, page, own);
                 if (!sifted) out.failed.push({ page, reason: 'The page could not be read.' });
                 else if (!sifted.kept) out.empty.push(page);
                 else {
@@ -82,6 +107,7 @@ export async function recognisePages(
             out.failed.push({ page, reason: String(error instanceof Error ? error.message : error) });
         }
         done++;
+        host.keep?.(out.pages, out.empty);
         const spent = now() - began;
         host.progress?.({
             done,
@@ -93,6 +119,9 @@ export async function recognisePages(
         });
         if (done < pages.length) await host.pause?.();
     }
+    out.pages.sort((a, b) => a.page - b.page);
+    out.read.sort((a, b) => a - b);
+    out.empty.sort((a, b) => a - b);
     return out;
 }
 /** How long is left, in the reader's words. */
@@ -126,4 +155,13 @@ export function outcomeWords(outcome: ScanOutcome, copy: string): string {
 export function searchableName(folder: string, basename: string, copy = 1): string {
     const at = folder && folder !== '/' ? `${folder.replace(/\/+$/, '')}/` : '';
     return `${at}${basename} (searchable)${copy > 1 ? ` ${copy}` : ''}.pdf`;
+}
+/** The words of an area as one piece of text: its lines in order, a space between words and between lines, no longer than an area's words may be. */
+export function areaText(lines: readonly (readonly { text: string }[])[]): string {
+    return lines
+        .map(line => line.map(word => word.text).join(' '))
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 4000);
 }

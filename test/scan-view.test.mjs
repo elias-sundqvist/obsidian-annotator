@@ -4,7 +4,7 @@ import { JSDOM } from 'jsdom';
 import { NativePdf } from './.generated/readers/native-pdf.js';
 
 /** Obsidian's PDF view, as far as the reader's recogniser side needs it: pages with or without text, each drawable. */
-function view(texts, { rotate = 0, size = [612, 792] } = {}) {
+function view(texts, { rotate = 0, size = [612, 792], runs = null } = {}) {
     const dom = new JSDOM('<div id="root"></div>', { pretendToBeVisual: true }), win = dom.window, root = win.document.querySelector('#root'), frames = new Map(), drawn = [];
     let serial = 0;
     win.requestAnimationFrame = fn => { frames.set(++serial, fn); return serial; }; win.cancelAnimationFrame = id => frames.delete(id);
@@ -13,13 +13,13 @@ function view(texts, { rotate = 0, size = [612, 792] } = {}) {
     win.HTMLElement.prototype.createEl = function (tag, { cls, attr = {}, text } = {}) { const node = win.document.createElement(tag); if (cls) node.className = cls; if (text) node.textContent = text; for (const [key, value] of Object.entries(attr)) node.setAttribute(key, value); this.append(node); return node; };
     // A canvas that remembers what was done to it.
     win.HTMLCanvasElement.prototype.getContext = function () { const canvas = this, done = []; return { done, set fillStyle(value) { done.push(`fill ${value}`); }, fillRect: (...box) => done.push(`rect ${box.join(' ')}`), getImageData: (x, y, width, height) => ({ pixels: true, width, height, from: canvas }) }; };
-    win.createImageBitmap = async canvas => ({ bitmap: true, width: canvas.width, height: canvas.height });
+    win.createImageBitmap = async (canvas, ...part) => (part.length ? { bitmap: true, part, of: [canvas.width, canvas.height] } : { bitmap: true, width: canvas.width, height: canvas.height });
     const document = {
         fingerprints: ['scan'], numPages: texts.length,
         async getPage(number) {
             return {
-                rotate, async getTextContent() { return { items: [{ str: texts[number - 1] }] }; },
-                getViewport({ scale, rotation }) { const turned = rotation % 180 !== 0; return { width: (turned ? size[1] : size[0]) * scale, height: (turned ? size[0] : size[1]) * scale, scale, rotation }; },
+                rotate, async getTextContent() { return { items: runs?.[number] || [{ str: texts[number - 1] }] }; },
+                getViewport({ scale, rotation }) { const turned = rotation % 180 !== 0; return { width: (turned ? size[1] : size[0]) * scale, height: (turned ? size[0] : size[1]) * scale, scale, rotation, convertToViewportPoint: (x, y) => rotation === 90 ? [y * scale, x * scale] : [x * scale, (size[1] - y) * scale] }; },
                 render(options) { drawn.push({ number, ...options, canvas: [options.canvasContext.done.slice()] }); return { promise: Promise.resolve() }; },
                 cleanup() { drawn.push({ cleaned: number }); }
             };
@@ -83,5 +83,32 @@ test('a run says how far it is in a strip over the page, with one way to stop it
         assert.equal(h.root.querySelectorAll('.annotator-scan-strip').length, 1); assert.equal(h.root.querySelector('.annotator-scan-strip span').textContent, 'Two');
         h.adapter.dispose(); assert.equal(h.root.querySelector('.annotator-scan-strip'), null);
         h.adapter.showRun('Three', stop); assert.equal(h.root.querySelector('.annotator-scan-strip'), null);
+    } finally { h.close(); }
+});
+test('pages with only a little text of their own are known, and where that text is', async () => {
+    const stamp = { str: 'Downloaded from a library on 12 March', transform: [10, 0, 0, 10, 61.2, 752.4], width: 244.8, height: 10 };
+    const h = view(['', 'Downloaded from a library on 12 March', 'x'.repeat(301), '  '], { runs: { 2: [stamp, { str: '' }] } });
+    try {
+        assert.equal(h.adapter.pagesWithLittleText, null, 'not said before the pages are read');
+        h.adapter.setAnnotations([]); await h.flush();
+        assert.deepEqual(h.adapter.pagesWithoutText, [1, 4]); assert.deepEqual(h.adapter.pagesWithLittleText, [2], 'a page of text is not a scan with a stamp');
+        // The stamp: a tenth in from the left, four tenths wide, at the page's top.
+        assert.deepEqual(await h.adapter.ownText(2), [{ page: 2, x: 1000, y: 374, w: 4000, h: 126 }]);
+        assert.deepEqual(await h.adapter.ownText(1), [], 'a page with no text has none to keep clear of');
+        h.adapter.dispose(); assert.equal(await h.adapter.ownText(2), null);
+    } finally { h.close(); }
+});
+test('a marked area of a page is handed over on its own, as sharp as on the whole page', async () => {
+    const h = view(['']);
+    try {
+        h.adapter.setAnnotations([]); await h.flush();
+        // A quarter of the page's width and a tenth of its height, from two tenths in and half-way down.
+        const picture = await h.adapter.pagePicture(1, 3600, { page: 1, x: 2000, y: 5000, w: 2500, h: 1000 });
+        assert.deepEqual(picture, { bitmap: true, part: [510, 1650, 638, 330], of: [2550, 3300] });
+        // An area that runs to the page's edge stops there, and one of no size is still a picture.
+        assert.deepEqual((await h.adapter.pagePicture(1, 3600, { page: 1, x: 9000, y: 9000, w: 1000, h: 1000 })).part, [2295, 2970, 255, 330]);
+        assert.deepEqual((await h.adapter.pagePicture(1, 3600, { page: 1, x: 5000, y: 5000, w: 0, h: 0 })).part, [1275, 1650, 1, 1]);
+        h.win.createImageBitmap = undefined;
+        const pixels = await h.adapter.pagePicture(1, 792, { page: 1, x: 0, y: 0, w: 5000, h: 5000 }); assert.deepEqual([pixels.width, pixels.height], [306, 396]);
     } finally { h.close(); }
 });

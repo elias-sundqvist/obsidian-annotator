@@ -509,6 +509,15 @@ export class AnnotationView extends ItemView {
                             void plugin.recogniseText(file).catch(error => new Notice(String(error)));
                         })
                 );
+            if (file && plugin.canRecogniseAgain(file))
+                menu.addItem(item =>
+                    item
+                        .setTitle('Recognise text again in another language…')
+                        .setIcon('languages')
+                        .onClick(() => {
+                            void plugin.recogniseAgain(file).catch(error => new Notice(String(error)));
+                        })
+                );
             if (file && plugin.canExportPdf(file))
                 menu.addItem(item =>
                     item
@@ -1272,6 +1281,25 @@ export class AnnotationView extends ItemView {
                             if (icon?.dataset) icon.dataset.annotatorInk = ink;
                         });
                 }
+                // The picture of a passage, a table or a formula can have its words read, so that it is found by them.
+                if (
+                    file &&
+                    !quoteOf(annotation) &&
+                    areaOf(annotation) &&
+                    !drawingOf(annotation) &&
+                    plugin.canReadArea(file)
+                )
+                    menu.addItem(item =>
+                        item
+                            .setTitle(areaWords(annotation) ? 'Recognise its words again…' : 'Recognise its words…')
+                            .setIcon('scan-text')
+                            .onClick(() => {
+                                if (current(card))
+                                    void plugin
+                                        .recogniseArea(file, annotation)
+                                        .catch(error => new Notice(String(error)));
+                            })
+                    );
                 menu.addSeparator();
                 // Deleting asks first, the same way from the menu as from the card.
                 menu.addItem(item =>
@@ -1932,6 +1960,22 @@ export class AnnotationView extends ItemView {
         hint.createEl('span', { text: '–' });
         hint.createEl('kbd', { text: '6' });
         hint.createEl('span', { text: ' for a colour.' });
+        // Some pages of this PDF are pictures of pages: say so, and offer to have their words read.
+        const scanned = file ? this.plugin.scannedPages(file) : 0;
+        if (file && scanned) {
+            empty.createDiv({
+                cls: 'annotator-empty-hint',
+                text:
+                    scanned === 1
+                        ? 'One page of this PDF is a picture of a page, with no words to select.'
+                        : `${scanned} pages of this PDF are pictures of pages, with no words to select.`
+            });
+            const actions = empty.createDiv({ cls: 'annotator-empty-actions' });
+            const read = actions.createEl('button', { text: 'Recognise text…', attr: { type: 'button' } });
+            read.onclick = () => {
+                void this.plugin.recogniseText(file).catch(error => new Notice(String(error)));
+            };
+        }
     }
 }
 

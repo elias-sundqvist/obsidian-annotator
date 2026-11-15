@@ -26,12 +26,14 @@ import {
 import { installCollectionWorkspace, retainCollectionState } from './collection-workspace';
 import { VideoView, VIDEO_VIEW } from './video-view';
 import { annotatePdf, PdfExportError } from './pdf-write';
-import { searchablePdf, recognisedPages } from './pdf-searchable';
+import { searchablePdf, recognisedPages, withoutRecognisedText } from './pdf-searchable';
 import { Recogniser, recogniserAvailable } from './scan-engine';
-import { fetchFile, fetchSummary, heldFile, missingFiles, ScanFileError } from './scan-files';
+import { fetchFile, fetchSummary, heldFile, missingFiles, ScanFileError, type ScanFile } from './scan-files';
 import { SCAN_ENGINE, SCAN_FOLDER, SCAN_LANGUAGES } from './scan-manifest';
-import { outcomeWords, recognisePages, searchableName, timeLeft } from './scan-run';
-import { ScanDialog, type ScanChoice } from './scan-dialog';
+import { areaText, outcomeWords, recognisePages, searchableName, timeLeft, type ScanEarlier } from './scan-run';
+import { clearPending, readPending, writePending } from './scan-pending';
+import { pageWords } from './scan-words';
+import { ScanDialog, type ScanChoice, type ScanQuestion } from './scan-dialog';
 import { readPdfAnnotations, replacing } from './pdf-read';
 import { addDetails } from './pdf-details';
 import { newNoteText, DEFAULT_NOTE_HEADING } from './note-template';
@@ -743,6 +745,13 @@ export default class AnnotatorPlugin extends Plugin {
             name: 'Recognise text in this scanned PDF…',
             callback: () => {
                 void this.recogniseText().catch(error => this.fail(error));
+            }
+        });
+        this.addCommand({
+            id: 'recognise-scanned-text-again',
+            name: 'Recognise the text of this searchable copy again in another language…',
+            callback: () => {
+                void this.recogniseAgain().catch(error => this.fail(error));
             }
         });
         this.register(() => this.scanRun?.stop());
@@ -3808,14 +3817,101 @@ export default class AnnotatorPlugin extends Plugin {
             this.fail(error);
         }
     }
-    /** Whether this source is a PDF with a page that has no text of its own: one whose words a recogniser could read. */
+    /** Whether this source is a PDF with pages a recogniser could read: pages with no text of their own, or with only a little. */
     canRecogniseText(key: string): boolean {
         const host: unknown = this.bindingFor(key)?.host;
-        return host instanceof NativePdf && !!host.pagesWithoutText?.length;
+        return host instanceof NativePdf && (!!host.pagesWithoutText?.length || !!host.pagesWithLittleText?.length);
+    }
+    /** How many pages of this PDF are pictures with no text of their own. */
+    scannedPages(key: string): number {
+        const host: unknown = this.bindingFor(key)?.host;
+        return host instanceof NativePdf ? host.pagesWithoutText?.length || 0 : 0;
+    }
+    /** Whether this PDF is, by its name, a searchable copy, whose pages can be read again in another language. */
+    canRecogniseAgain(key: string): boolean {
+        const host: unknown = this.bindingFor(key)?.host;
+        return host instanceof NativePdf && / \(searchable\)(?: \d+)?$/.test(host.view.file?.basename || '');
+    }
+    /** Whether the words of a marked area of this source can be read: it is a PDF open in the reader. */
+    canReadArea(key: string): boolean {
+        return this.bindingFor(key)?.host instanceof NativePdf;
     }
     /** Where the recogniser's files are kept: a folder of the plugin's own. */
     private scanFolder() {
         return `${this.settingsDirectory()}/${SCAN_FOLDER}`;
+    }
+    /** The language last read in, offered first the next time. */
+    private scanLanguage = '';
+    /** The recogniser's files as they are on this device: for the settings, which list them and can remove them. */
+    async scanFilesHeld(): Promise<{ file: ScanFile; held: boolean }[]> {
+        const adapter = this.app.vault.adapter,
+            folder = this.scanFolder(),
+            out: { file: ScanFile; held: boolean }[] = [];
+        for (const file of [SCAN_ENGINE, ...SCAN_LANGUAGES.map(language => language.file)])
+            out.push({ file, held: await adapter.exists(`${folder}/${file.name}`).catch(() => false) });
+        return out;
+    }
+    /** Remove one of the recogniser's files from this device; it is fetched again when it is next needed. */
+    async removeScanFile(file: ScanFile) {
+        if (this.scanRun) throw new Error('Text is being recognised; stop that first.');
+        const path = `${this.scanFolder()}/${file.name}`;
+        if (await this.app.vault.adapter.exists(path)) await this.app.vault.adapter.remove(path);
+    }
+    /** What each language would need fetched, found out before a dialog opens so that it can say so at once. */
+    private async scanNeeds() {
+        const needs = new Map<string, ReturnType<typeof fetchSummary> | null>();
+        for (const language of SCAN_LANGUAGES) {
+            const missing = await missingFiles(this.app.vault.adapter, this.scanFolder(), [SCAN_ENGINE, language.file]);
+            needs.set(language.code, missing.length ? fetchSummary(missing) : null);
+        }
+        return needs;
+    }
+    private askScan(
+        question: Omit<ScanQuestion, 'languages' | 'phone' | 'needs'>,
+        needs: Awaited<ReturnType<AnnotatorPlugin['scanNeeds']>>
+    ) {
+        return new Promise<ScanChoice | null>(resolve =>
+            new ScanDialog(
+                this.app,
+                {
+                    ...question,
+                    languages: SCAN_LANGUAGES.map(language => ({ code: language.code, name: language.name })),
+                    language: question.language || this.scanLanguage,
+                    needs: code => needs.get(code) ?? null,
+                    phone: Platform.isPhone
+                },
+                resolve
+            ).open()
+        );
+    }
+    /** The open PDF as something a recogniser can be run on, or a word to the reader why not. */
+    private scanSource(key: string | null): { host: NativePdf; source: TFile } | null {
+        const host: unknown = key ? this.bindingFor(key)?.host : undefined,
+            source = host instanceof NativePdf ? host.view.file : null;
+        if (!(host instanceof NativePdf) || !(source instanceof TFile) || source.extension.toLowerCase() !== 'pdf') {
+            new Notice('Open a scanned PDF to recognise its text.');
+            return null;
+        }
+        if (this.scanRun) {
+            new Notice(`Text is being recognised in ${this.scanRun.file}. Stop that first.`);
+            return null;
+        }
+        if (!recogniserAvailable()) {
+            new Notice(
+                'Text cannot be recognised on this device. A searchable copy made on another device can be read here.',
+                10000
+            );
+            return null;
+        }
+        return { host, source };
+    }
+    /** The PDF's fingerprint, by which what a run has read is kept; empty when the PDF is not ready to say. */
+    private scanPrint(host: NativePdf): string {
+        try {
+            return host.identity().document.documentFingerprint;
+        } catch {
+            return '';
+        }
     }
     /**
      * Ask the reader whether, in which language and on which pages the words
@@ -3825,67 +3921,142 @@ export default class AnnotatorPlugin extends Plugin {
      * is not changed.
      */
     async recogniseText(key: string | null = this.currentFile) {
-        const host: unknown = key ? this.bindingFor(key)?.host : undefined,
-            source = host instanceof NativePdf ? host.view.file : null;
-        if (!(host instanceof NativePdf) || !(source instanceof TFile) || source.extension.toLowerCase() !== 'pdf') {
-            new Notice('Open a scanned PDF to recognise its text.');
-            return;
-        }
-        if (this.scanRun) {
-            new Notice(`Text is being recognised in ${this.scanRun.file}. Stop that first.`);
-            return;
-        }
-        const without = host.pagesWithoutText;
-        if (!without) {
+        const open = this.scanSource(key);
+        if (!open) return;
+        const { host, source } = open,
+            without = host.pagesWithoutText,
+            little = host.pagesWithLittleText;
+        if (!without || !little) {
             new Notice('The PDF is still being read; try again in a moment.');
             return;
         }
-        if (!without.length) {
+        if (!without.length && !little.length) {
             new Notice('Every page of this PDF has text already, so there is nothing to recognise.');
             return;
         }
-        if (!recogniserAvailable()) {
+        const needs = await this.scanNeeds(),
+            print = this.scanPrint(host),
+            kept = new Map<string, ScanEarlier>();
+        // What a run that did not reach its end has read, for each language: it is not read again.
+        if (print)
+            for (const language of SCAN_LANGUAGES) {
+                const earlier = await readPending(this.app.vault.adapter, this.scanFolder(), print, language.code);
+                if (earlier) kept.set(language.code, earlier);
+            }
+        const choice = await this.askScan(
+            {
+                what: 'pages',
+                // A PDF that is itself a searchable copy takes the words into itself.
+                copy: this.canRecogniseAgain(key!) ? null : searchableName('', source.basename),
+                current: host.currentPage() ?? 0,
+                without,
+                little,
+                kept: code => {
+                    const earlier = kept.get(code);
+                    return earlier ? earlier.pages.length + earlier.empty.length : 0;
+                }
+            },
+            needs
+        );
+        if (!choice || this.stopped) return;
+        await this.runRecognition(host, source, choice, {
+            earlier: kept.get(choice.language),
+            little: new Set(little)
+        });
+    }
+    /**
+     * Read the recognised pages of a searchable copy again in another
+     * language: the words read before are taken out of the copy and the new
+     * ones put in. A run that is stopped leaves the copy as it was.
+     */
+    async recogniseAgain(key: string | null = this.currentFile) {
+        const open = this.scanSource(key);
+        if (!open) return;
+        const { host, source } = open,
+            bytes = new Uint8Array(await this.app.vault.readBinary(source));
+        let read: Map<number, string>;
+        try {
+            read = recognisedPages(bytes);
+        } catch (error) {
+            if (error instanceof PdfExportError) {
+                new Notice(error.message, 10000);
+                return;
+            }
+            throw error;
+        }
+        if (!read.size) {
+            new Notice('This PDF holds no recognised text to read again. Recognise its text first.');
+            return;
+        }
+        const base = withoutRecognisedText(bytes);
+        if (!base) {
             new Notice(
-                'Text cannot be recognised on this device. A searchable copy made on another device can be read here.',
-                10000
+                'This copy has been changed by another program since its text was recognised, so that text cannot be taken out of it again. Recognise the original PDF instead.',
+                12000
             );
             return;
         }
-        const adapter = this.app.vault.adapter,
-            folder = this.scanFolder();
-        // What each language would need fetched, found out before the dialog opens so that it can say so at once.
-        const needs = new Map<string, ReturnType<typeof fetchSummary> | null>();
-        for (const language of SCAN_LANGUAGES) {
-            const missing = await missingFiles(adapter, folder, [SCAN_ENGINE, language.file]);
-            needs.set(language.code, missing.length ? fetchSummary(missing) : null);
-        }
-        const choice = await new Promise<ScanChoice | null>(resolve =>
-            new ScanDialog(
-                this.app,
-                {
-                    // A PDF that is itself a searchable copy takes the words into itself.
-                    copy: / \(searchable\)(?: \d+)?$/.test(source.basename)
-                        ? null
-                        : searchableName('', source.basename),
-                    current: host.currentPage() ?? 0,
-                    without,
-                    languages: SCAN_LANGUAGES.map(language => ({ code: language.code, name: language.name })),
-                    needs: code => needs.get(code) ?? null,
-                    phone: Platform.isPhone
-                },
-                resolve
-            ).open()
+        const names = [...new Set(read.values())].map(
+                code => SCAN_LANGUAGES.find(language => language.code === code)?.name || code
+            ),
+            before =
+                names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`,
+            other = SCAN_LANGUAGES.find(language => ![...read.values()].includes(language.code));
+        const choice = await this.askScan(
+            {
+                what: 'again',
+                copy: null,
+                current: host.currentPage() ?? 0,
+                without: [...read.keys()].map(index => index + 1).sort((a, b) => a - b),
+                little: [],
+                before,
+                language: other?.code
+            },
+            await this.scanNeeds()
         );
         if (!choice || this.stopped) return;
-        await this.runRecognition(host, source, choice);
+        await this.runRecognition(host, source, choice, { again: base });
     }
-    private async runRecognition(host: NativePdf, source: TFile, choice: ScanChoice) {
+    /** Fetch what is missing (now that the reader has said so), check everything, and start the recogniser. Null when the run is over before it began. */
+    private async startRecogniser(
+        recogniser: Recogniser,
+        language: (typeof SCAN_LANGUAGES)[number],
+        say: (words: string) => void,
+        over: () => boolean
+    ): Promise<boolean> {
+        const adapter = this.app.vault.adapter,
+            folder = this.scanFolder();
+        // Each file is read from the plugin's folder and checked; one that is not there is fetched, from the one
+        // address the plugin's code names.
+        const ready = async (file: ScanFile) => {
+            const held = await heldFile(adapter, folder, file).catch(error => {
+                // A file that was there and wrong is gone now, and is fetched afresh like one that never was.
+                if (error instanceof ScanFileError && error.reason !== 'entry') return null;
+                throw error;
+            });
+            if (held || over()) return held;
+            say(`Fetching ${file.what.toLowerCase()}…`);
+            return fetchFile(adapter, folder, file, async url => (await requestUrl({ url, throw: true })).arrayBuffer);
+        };
+        const engine = await ready(SCAN_ENGINE),
+            model = engine && (await ready(language.file));
+        if (!engine || !model || over()) return false;
+        await recogniser.open(engine, model);
+        return true;
+    }
+    private async runRecognition(
+        host: NativePdf,
+        source: TFile,
+        choice: ScanChoice,
+        more: { earlier?: ScanEarlier; little?: ReadonlySet<number>; again?: Uint8Array } = {}
+    ) {
         const language = SCAN_LANGUAGES.find(each => each.code === choice.language);
         if (!language || this.scanRun) return;
         const recogniser = new Recogniser(),
             token = host.documentToken,
             adapter = this.app.vault.adapter,
-            folder = this.scanFolder();
+            folder = this.scanFolder(),
+            print = more.again ? '' : this.scanPrint(host);
         let stopped = false;
         const stop = () => {
             stopped = true;
@@ -3893,55 +4064,90 @@ export default class AnnotatorPlugin extends Plugin {
         };
         const over = () => stopped || this.stopped || host.documentToken !== token;
         this.scanRun = { file: source.name, stop };
+        this.scanLanguage = language.code;
         try {
             host.showRun('Preparing the recogniser…', stop);
-            // Each file is read from the plugin's folder and checked; one that is not there is fetched, from the one
-            // address the plugin's code names, and only now that the reader has said so.
-            const ready = async (file: typeof SCAN_ENGINE) => {
-                const held = await heldFile(adapter, folder, file).catch(error => {
-                    // A file that was there and wrong is gone now, and is fetched afresh like one that never was.
-                    if (error instanceof ScanFileError && error.reason !== 'entry') return null;
-                    throw error;
-                });
-                if (held || over()) return held;
-                host.showRun(`Fetching ${file.what.toLowerCase()}…`, stop);
-                return fetchFile(
-                    adapter,
-                    folder,
-                    file,
-                    async url => (await requestUrl({ url, throw: true })).arrayBuffer
-                );
-            };
-            const engine = await ready(SCAN_ENGINE),
-                model = engine && (await ready(language.file));
-            if (!engine || !model) return;
-            if (over()) return;
-            await recogniser.open(engine, model);
+            if (!(await this.startRecogniser(recogniser, language, words => host.showRun(words, stop), over))) return;
+            // What has been read is kept every few pages, so that an app closed in the middle loses little.
+            let keptAt = 0,
+                keptCount = (more.earlier?.pages.length || 0) + (more.earlier?.empty.length || 0);
             const outcome = await recognisePages(
                 {
                     picture: page =>
                         over() ? Promise.resolve(null) : host.pagePicture(page, Platform.isMobile ? 2400 : 3600),
                     read: picture => recogniser.read(picture),
+                    own: page => (more.little?.has(page) ? host.ownText(page) : Promise.resolve([])),
                     stopped: over,
                     progress: state =>
                         host.showRun(
                             `Recognising text: page ${state.done} of ${state.of}${state.secondsLeft ? ` · ${timeLeft(state.secondsLeft)}` : ''}${state.hard ? ` · ${state.hard} hard to read` : ''}`,
                             stop
                         ),
-                    pause: () => new Promise(resolve => setTimeout(resolve, 0))
+                    pause: () => new Promise(resolve => setTimeout(resolve, 0)),
+                    keep: (pages, empty) => {
+                        const count = pages.length + empty.length,
+                            now = Date.now();
+                        if (!print || (count - keptCount < 5 && now - keptAt < 20000)) return;
+                        keptAt = now;
+                        keptCount = count;
+                        void writePending(adapter, folder, print, language.code, {
+                            pages: [...pages],
+                            empty: [...empty]
+                        });
+                    }
                 },
                 choice.pages,
-                language.code
+                language.code,
+                more.earlier
             );
             recogniser.close();
+            if (this.stopped) {
+                // The app is closing: what was read is kept for the next run.
+                if (print)
+                    await writePending(adapter, folder, print, language.code, {
+                        pages: outcome.pages,
+                        empty: outcome.empty
+                    });
+                return;
+            }
+            if (more.again) {
+                // The copy is changed only by a run that reached its end: a stopped one leaves it as it was.
+                if (outcome.stopped) {
+                    new Notice('Stopped. The copy is as it was.', 8000);
+                    return;
+                }
+                if (!outcome.pages.length) {
+                    new Notice(`No words were recognised in ${language.name}, so the copy is as it was.`, 10000);
+                    return;
+                }
+                host.showRun('Writing the copy…', stop);
+                const made = searchablePdf(more.again, outcome.pages);
+                await this.app.vault.modifyBinary(
+                    source,
+                    made.bytes.buffer.slice(
+                        made.bytes.byteOffset,
+                        made.bytes.byteOffset + made.bytes.byteLength
+                    ) as ArrayBuffer
+                );
+                new Notice(
+                    outcomeWords(outcome, source.path).replace(
+                        'Text recognised on',
+                        `Text recognised again in ${language.name} on`
+                    ),
+                    12000
+                );
+                return;
+            }
             host.showRun('Writing the copy…', stop);
-            if (this.stopped) return;
             if (!outcome.pages.length) {
+                if (print) await clearPending(adapter, folder, print, language.code);
                 new Notice(outcomeWords(outcome, ''), 12000);
                 return;
             }
             const saved = await this.writeSearchableCopy(source, outcome.pages);
             if (!saved) return;
+            // In the copy now: nothing is left to keep.
+            if (print) await clearPending(adapter, folder, print, language.code);
             this.offerSearchableCopy(source, saved, outcomeWords(outcome, saved.path));
         } catch (error) {
             if (over() && !(error instanceof ScanFileError)) return;
@@ -3954,6 +4160,101 @@ export default class AnnotatorPlugin extends Plugin {
             recogniser.close();
             host.endRun();
             this.scanRun = null;
+        }
+    }
+    /**
+     * Read the words in a marked area of a PDF page and keep them with the
+     * area, so that a picture of a passage, a table or a formula is found by
+     * what it says: on a scan, and on a PDF whose own text comes out wrong.
+     */
+    async recogniseArea(key: string, annotation: Annotation) {
+        const open = this.scanSource(key),
+            area = areaOf(annotation);
+        if (!open || !area) return;
+        if (this.busy || this.damaged(key)) {
+            new Notice('Still saving the last change; try again in a moment.');
+            return;
+        }
+        const { host } = open,
+            choice = await this.askScan(
+                { what: 'area', copy: null, current: area.page, without: [area.page], little: [] },
+                await this.scanNeeds()
+            );
+        if (!choice || this.stopped) return;
+        const language = SCAN_LANGUAGES.find(each => each.code === choice.language);
+        if (!language || this.scanRun) return;
+        const recogniser = new Recogniser(),
+            token = host.documentToken;
+        let stopped = false;
+        const stop = () => {
+            stopped = true;
+            recogniser.close();
+        };
+        const over = () => stopped || this.stopped || host.documentToken !== token;
+        this.scanRun = { file: open.source.name, stop };
+        this.scanLanguage = language.code;
+        let words = '';
+        try {
+            host.showRun('Preparing the recogniser…', stop);
+            if (!(await this.startRecogniser(recogniser, language, said => host.showRun(said, stop), over))) return;
+            host.showRun('Reading the words in the area…', stop);
+            const picture = await host.pagePicture(area.page, Platform.isMobile ? 2400 : 3600, area);
+            if (!picture || over()) {
+                if (!over()) new Notice('The area could not be drawn to be read.', 8000);
+                return;
+            }
+            const read = await recogniser.read(picture),
+                sifted = pageWords(read.lines, read.width, read.height, area.page);
+            words = areaText(sifted?.lines || []);
+        } catch (error) {
+            if (over() && !(error instanceof ScanFileError)) return;
+            if (error instanceof ScanFileError) {
+                new Notice(error.message, 12000);
+                return;
+            }
+            throw error;
+        } finally {
+            recogniser.close();
+            host.endRun();
+            this.scanRun = null;
+        }
+        if (!words) {
+            new Notice('No words were recognised in this area.', 8000);
+            return;
+        }
+        await this.setAreaWords(key, annotation, words);
+    }
+    /** Keep `words` as what an area says. The area, its picture and its note are untouched. */
+    private async setAreaWords(file: string, annotation: Annotation, words: string) {
+        if (this.busy) return;
+        this.busy = true;
+        try {
+            const note = this.notes.get(file)?.note;
+            if (!note) throw new Error('Annotation note is unavailable.');
+            const own = (annotation as { nativePdf?: Record<string, unknown> }).nativePdf || { version: 1 },
+                next = { ...annotation, nativePdf: { ...own, words } } as Annotation;
+            await this.rewrite(note, async source => {
+                if (this.stopped) throw new Error('Plugin was unloaded before the words were kept.');
+                const current = (await this.codec.readAll(source)).find(row => row.id === annotation.id);
+                if (JSON.stringify(current) !== JSON.stringify(annotation))
+                    throw new Error('Annotation changed externally; reopen it before reading its words.');
+                return await this.codec.update(source, next);
+            });
+            await this.loadNote(file);
+            const message = createFragment(fragment => {
+                fragment.createDiv({
+                    text: `Words recognised in the area and kept with it: “${words.length > 140 ? `${words.slice(0, 140)}…` : words}”`
+                });
+                const copy = fragment.createEl('button', { text: 'Copy the words', attr: { type: 'button' } });
+                copy.style.marginTop = '6px';
+                copy.onclick = () => void this.copyText(words, 'Words copied.');
+            });
+            new Notice(message, 15000);
+        } catch (error) {
+            this.fail(error);
+        } finally {
+            this.busy = false;
+            this.refresh();
         }
     }
     /**
@@ -5443,6 +5744,39 @@ class NativeSettings extends PluginSettingTab {
                     .setDynamicTooltip()
                     .onChange(value => save(plugin.setReader({ ...plugin.reader, [key]: value })))
             );
+
+        new Setting(root)
+            .setName('Text recognition')
+            .setHeading()
+            .setDesc(
+                'Recognising the text of a scanned PDF needs the recogniser and the data of a language. They are not part of the plugin: each is fetched the first time it is needed, when you say so, kept in the plugin\u2019s folder and checked before every use. Removing one frees its space; it is fetched again when it is next needed.'
+            );
+        const files = root.createDiv({ cls: 'annotator-scan-files' });
+        const megabytes = (bytes: number) => `${(bytes / 1e6).toFixed(1)} MB`;
+        const list = () => {
+            void plugin.scanFilesHeld().then(
+                held => {
+                    files.empty();
+                    for (const { file, held: there } of held) {
+                        const row = new Setting(files)
+                            .setName(file.what)
+                            .setDesc(
+                                there
+                                    ? `On this device, ${megabytes(file.bytes)}.`
+                                    : `Not on this device (${megabytes(file.bytes)} when fetched).`
+                            );
+                        if (there)
+                            row.addButton(control =>
+                                control.setButtonText('Remove').onClick(() => {
+                                    void plugin.removeScanFile(file).then(list, error => new Notice(String(error)));
+                                })
+                            );
+                    }
+                },
+                error => new Notice(String(error))
+            );
+        };
+        list();
 
         new Setting(root)
             .setName('Coming from Annotator 0.2')

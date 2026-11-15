@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { inflateSync } from 'node:zlib';
-import { pageWords, SCAN_FLOOR, SCAN_OWN_MOST } from './.generated/readers/scan-words.js';
+import { pageWords, ownTextBoxes, SCAN_FLOOR, SCAN_OWN_MOST } from './.generated/readers/scan-words.js';
 import { searchablePdf, PdfFile } from './.generated/readers/pdf-searchable.js';
 
 const word = (text, left, top, right, bottom, confidence = 90) => ({ text, confidence, left, top, right, bottom });
@@ -70,4 +70,27 @@ test('a page as a recogniser would report it (in pixels, with specks among the w
     const file = new PdfFile(made.bytes), dict = file.object(file.pageRef(0).num).value, last = file.resolve(dict.get('Contents')).items.at(-1);
     const text = inflateSync(file.object(last.num).stream).toString('latin1'), written = [...text.matchAll(/<([0-9A-F]+)> Tj/g)].map(found => found[1].match(/.{4}/g).map(code => String.fromCharCode(parseInt(code, 16))).join('')).filter(each => each !== ' ');
     assert.deepEqual(written, GEOMETRY.pages[0].lines.flat().map(each => each.text));
+});
+test('where a page has text of its own is found from the runs of text the PDF reports, whichever way the text and the page are turned', () => {
+    // A page 600 by 800 in PDF units, shown upright: a point's place is its fraction across, and its fraction down from the top.
+    const upright = (x, y) => [x / 600, 1 - y / 800];
+    const run = (str, x, y, width, height = 10, extra = {}) => ({ str, transform: [height, 0, 0, height, x, y], width, height, ...extra });
+    assert.deepEqual(ownTextBoxes([run('Downloaded from a library', 60, 760, 240, 12)], upright, 3), [{ page: 3, x: 1000, y: 350, w: 4000, h: 150 }]);
+    // Runs without letters, without a place or without size are not text to keep clear of.
+    assert.deepEqual(ownTextBoxes([run('', 60, 700, 100), run('   ', 60, 700, 100), run('x', 60, 700, 0), run('x', NaN, 700, 100), { str: 'x' }, { str: 'x', transform: [1, 2], width: 5, height: 5 }, null, run('kept', 300, 400, 60)], upright, 1), [{ page: 1, x: 5000, y: 4875, w: 1000, h: 125 }]);
+    // Text that runs up the page (turned a quarter): its box is tall and narrow.
+    assert.deepEqual(ownTextBoxes([{ str: 'margin', transform: [0, 10, -10, 0, 300, 400], width: 80, height: 10 }], upright, 1), [{ page: 1, x: 4833, y: 4000, w: 167, h: 1000 }]);
+    // A page shown a quarter turned (800 across, 600 down): across is the paper's way up, down is its way across.
+    const turned = (x, y) => [y / 800, x / 600];
+    assert.deepEqual(ownTextBoxes([run('stamp', 60, 760, 240, 12)], turned, 2), [{ page: 2, x: 9500, y: 1000, w: 150, h: 4000 }]);
+    // Text that runs past the page is held on it; text wholly off it is nowhere on it.
+    assert.deepEqual(ownTextBoxes([run('wide', 540, 400, 200), run('gone', 900, 400, 50)], upright, 1), [{ page: 1, x: 9000, y: 4875, w: 1000, h: 125 }]);
+    // A page with more runs than a stamp or a header has is a page of text.
+    const many = Array.from({ length: SCAN_OWN_MOST + 1 }, (_, i) => run('word', 10 + (i % 50) * 10, 20 + Math.floor(i / 50) * 12, 8));
+    assert.equal(ownTextBoxes(many, upright, 1), null); assert.equal(ownTextBoxes(many.slice(0, SCAN_OWN_MOST), upright, 1).length, SCAN_OWN_MOST); assert.equal(ownTextBoxes(many, upright, 1, 3), null);
+    assert.deepEqual(ownTextBoxes('runs', upright, 1), []); assert.deepEqual(ownTextBoxes([], upright, 1), []);
+    // What comes out is what the sifting takes: a word read on the stamp is left out, the body is kept.
+    const own = ownTextBoxes([run('Downloaded from a library', 60, 760, 240, 12)], upright, 1);
+    const page = pageWords([[word('Downloaded', 130, 58, 230, 78)], [word('Body', 130, 300, 230, 330)]], 1200, 1600, 1, own);
+    assert.deepEqual(page.lines.map(line => line.map(each => each.text)), [['Body']]);
 });

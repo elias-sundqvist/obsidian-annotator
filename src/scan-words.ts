@@ -101,3 +101,61 @@ export function pageWords(
     }
     return { lines: out, seen, kept: kept.length, sure: kept.length ? Math.round(total / kept.length) : 0 };
 }
+
+/** A run of text as the PDF library reports it for a page: where it starts, which way it runs, how long and how tall it is, in the PDF's own units. */
+export interface OwnTextRun {
+    str?: string;
+    /** The run's matrix: its first two numbers are the way it runs, the next two the way up, the last two where it starts. */
+    transform?: readonly number[];
+    width?: number;
+    height?: number;
+}
+/**
+ * Where a page already has text of its own, as boxes in page units: what a
+ * recognised word must not lie on to be kept. `toPage` turns a point in the
+ * PDF's own units into a place on the page as it is shown, as fractions from
+ * its top-left corner (the PDF library's viewport does this). Runs without
+ * letters, without a place or without size are passed over; at most `most`
+ * boxes come back, and null when the page has more runs than that (it is a
+ * page of text, not a scan with a stamp on it).
+ */
+export function ownTextBoxes(
+    runs: readonly OwnTextRun[],
+    toPage: (x: number, y: number) => readonly [number, number],
+    page: number,
+    most: number = SCAN_OWN_MOST
+): PageArea[] | null {
+    const out: PageArea[] = [];
+    for (const run of Array.isArray(runs) ? runs : []) {
+        const matrix = run?.transform;
+        if (!letters(run?.str) || !Array.isArray(matrix) || matrix.length < 6) continue;
+        const [a, b, c, d, e, f] = matrix as number[],
+            width = Number(run.width),
+            height = Number(run.height) || Math.hypot(c, d),
+            along = Math.hypot(a, b),
+            up = Math.hypot(c, d);
+        if (![a, b, c, d, e, f, width, height].every(Number.isFinite) || !(width > 0) || !(height > 0)) continue;
+        if (!(along > 0) || !(up > 0)) continue;
+        // The run's four corners on the page as shown, whichever way the text and the page are turned.
+        const ax = (a / along) * width,
+            ay = (b / along) * width,
+            ux = (c / up) * height,
+            uy = (d / up) * height;
+        const corners = [
+            toPage(e, f),
+            toPage(e + ax, f + ay),
+            toPage(e + ux, f + uy),
+            toPage(e + ax + ux, f + ay + uy)
+        ];
+        if (!corners.every(point => Number.isFinite(point[0]) && Number.isFinite(point[1]))) continue;
+        const hold = (value: number) => Math.round(Math.max(0, Math.min(1, value)) * FULL),
+            x0 = hold(Math.min(...corners.map(point => point[0]))),
+            y0 = hold(Math.min(...corners.map(point => point[1]))),
+            x1 = hold(Math.max(...corners.map(point => point[0]))),
+            y1 = hold(Math.max(...corners.map(point => point[1])));
+        if (x1 <= x0 || y1 <= y0) continue;
+        if (out.length >= most) return null;
+        out.push({ page, x: x0, y: y0, w: x1 - x0, h: y1 - y0 });
+    }
+    return out;
+}
