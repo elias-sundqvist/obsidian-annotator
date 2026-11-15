@@ -839,6 +839,8 @@ export class NativePdf {
             this.resolveAnnotations();
             this.schedule();
             this.onChange();
+            // Which pages with a little text of their own are pictures of pages: looked at once, after the rest.
+            void this.findStampedScans(doc, pages, generation);
             // Remembered for next time, unless it is what was remembered already.
             if (
                 key &&
@@ -2163,12 +2165,50 @@ export class NativePdf {
      */
     get pagesWithLittleText(): number[] | null {
         if (this.error || this.disposed || !this.pages.length) return null;
-        return this.pages
-            .filter(page => {
-                const letters = page.text.replace(/\s+/g, '').length;
-                return letters > 0 && letters <= LITTLE_TEXT;
-            })
-            .map(page => page.number);
+        return this.stampedScans.generation === this.generation ? [...this.stampedScans.pages] : [];
+    }
+    /** The pages found to be scans with a little text of their own, and for which document. */
+    private stampedScans: { generation: number; pages: number[] } = { generation: -1, pages: [] };
+    /**
+     * A page with a little text of its own is a scan with a stamp or a header on it only if it also draws a
+     * picture; a short page of text (a title page, the end of a chapter) is not. Each such page's drawing
+     * instructions are looked at once, after the document's text has been read.
+     */
+    private async findStampedScans(doc: PdfDocument, pages: readonly TextPage[], generation: number) {
+        const candidates = pages.filter(page => {
+            const letters = page.text.replace(/\s+/g, '').length;
+            return letters > 0 && letters <= LITTLE_TEXT;
+        });
+        const found: number[] = [];
+        // pdf.js's own numbers for "draw a picture"; the library says them where it is at hand.
+        const ops = (globalThis as { pdfjsLib?: { OPS?: Record<string, number> } }).pdfjsLib?.OPS,
+            pictures = new Set(
+                ops
+                    ? [
+                          'paintImageXObject',
+                          'paintInlineImageXObject',
+                          'paintImageMaskXObject',
+                          'paintImageXObjectRepeat'
+                      ]
+                          .map(name => ops[name])
+                          .filter(value => typeof value === 'number')
+                    : [83, 85, 86, 88]
+            );
+        for (const page of candidates.slice(0, 2000)) {
+            if (this.disposed || generation !== this.generation) return;
+            try {
+                const source = (await doc.getPage(page.number)) as unknown as {
+                    getOperatorList?(): Promise<{ fnArray: number[] }>;
+                };
+                const list = await source.getOperatorList?.();
+                if (list?.fnArray.some(op => pictures.has(op))) found.push(page.number);
+            } catch {
+                /* Not looked at: not offered. */
+            }
+        }
+        if (this.disposed || generation !== this.generation) return;
+        this.stampedScans = { generation, pages: found };
+        if (found.length) this.onChange();
     }
     /** Where a page has text of its own, as boxes in page units; null when it has too much to be a scan, or cannot be read. */
     async ownText(number: number): Promise<PageArea[] | null> {

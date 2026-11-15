@@ -3936,6 +3936,30 @@ export default class AnnotatorPlugin extends Plugin {
             new Notice('Every page of this PDF has text already, so there is nothing to recognise.');
             return;
         }
+        // Pages its copy beside it has the words of already are not read again here.
+        const copy = this.canRecogniseAgain(key!) ? null : await this.searchableCopyOf(source),
+            done = copy ? new Set([...recognisedPages(copy.bytes).keys()].map(index => index + 1)) : new Set<number>();
+        const left = without.filter(page => !done.has(page)),
+            leftLittle = little.filter(page => !done.has(page));
+        if (copy && !left.length && !leftLittle.length) {
+            const saved = copy.file;
+            new Notice(
+                createFragment(fragment => {
+                    fragment.createDiv({
+                        text: `The copy, ${saved.path}, has the words of every scanned page already. To read them in another language, open it and use "Recognise text again in another language…".`
+                    });
+                    const open = fragment.createEl('button', { text: 'Open the copy', attr: { type: 'button' } });
+                    open.style.marginTop = '6px';
+                    open.onclick = () =>
+                        void this.app.workspace
+                            .getLeaf('tab')
+                            .openFile(saved)
+                            .catch(error => this.fail(error));
+                }),
+                12000
+            );
+            return;
+        }
         const needs = await this.scanNeeds(),
             print = this.scanPrint(host),
             kept = new Map<string, ScanEarlier>();
@@ -3949,10 +3973,10 @@ export default class AnnotatorPlugin extends Plugin {
             {
                 what: 'pages',
                 // A PDF that is itself a searchable copy takes the words into itself.
-                copy: this.canRecogniseAgain(key!) ? null : searchableName('', source.basename),
+                copy: this.canRecogniseAgain(key!) ? null : copy ? copy.file.name : searchableName('', source.basename),
                 current: host.currentPage() ?? 0,
-                without,
-                little,
+                without: left,
+                little: leftLittle,
                 kept: code => {
                     const earlier = kept.get(code);
                     return earlier ? earlier.pages.length + earlier.empty.length : 0;
@@ -3963,7 +3987,7 @@ export default class AnnotatorPlugin extends Plugin {
         if (!choice || this.stopped) return;
         await this.runRecognition(host, source, choice, {
             earlier: kept.get(choice.language),
-            little: new Set(little)
+            little: new Set(leftLittle)
         });
     }
     /**
@@ -4147,7 +4171,11 @@ export default class AnnotatorPlugin extends Plugin {
                 return;
             }
             const saved = await this.writeSearchableCopy(source, outcome.pages);
-            if (!saved) return;
+            if (!saved) {
+                // Nothing new to write (the copy has these pages already): nothing is left to keep either.
+                if (print && !this.stopped) await clearPending(adapter, folder, print, language.code);
+                return;
+            }
             // In the copy now: nothing is left to keep.
             if (print) await clearPending(adapter, folder, print, language.code);
             this.offerSearchableCopy(source, saved, outcomeWords(outcome, saved.path));
@@ -4257,6 +4285,31 @@ export default class AnnotatorPlugin extends Plugin {
             this.refresh();
         }
     }
+    /** The searchable copy of this PDF beside it, if there is one: a file of the copy's name that starts with the PDF's own bytes. */
+    private async searchableCopyOf(
+        source: TFile,
+        original?: Uint8Array
+    ): Promise<{ file: TFile; bytes: Uint8Array } | null> {
+        const own = original || new Uint8Array(await this.app.vault.readBinary(source)),
+            folder = source.parent?.path || '';
+        for (let copy = 1; copy < 100; copy++) {
+            const existing = this.app.vault.getAbstractFileByPath(searchableName(folder, source.basename, copy));
+            if (!existing) return null;
+            if (existing instanceof TFile) {
+                const bytes = new Uint8Array(await this.app.vault.readBinary(existing));
+                if (startsWithBytes(bytes, own)) return { file: existing, bytes };
+            }
+        }
+        return null;
+    }
+    /** The first free name for a new copy of this PDF beside it. */
+    private freeCopyName(source: TFile): string {
+        const folder = source.parent?.path || '';
+        for (let copy = 1; ; copy++) {
+            const path = searchableName(folder, source.basename, copy);
+            if (!this.app.vault.getAbstractFileByPath(path)) return path;
+        }
+    }
     /**
      * Write recognised pages into the PDF's searchable copy and save it. The
      * copy is the PDF's own bytes with the words added after them. A PDF that
@@ -4269,24 +4322,14 @@ export default class AnnotatorPlugin extends Plugin {
         pages: Parameters<typeof searchablePdf>[1]
     ): Promise<TFile | null> {
         const original = new Uint8Array(await this.app.vault.readBinary(source));
-        let base = original,
-            target: TFile | null = null,
-            path = source.path;
+        let base: Uint8Array = original,
+            target: TFile | null = null;
         if (recognisedPages(original).size) target = source;
         else {
-            const folder = source.parent?.path || '';
-            for (let copy = 1; ; copy++) {
-                path = searchableName(folder, source.basename, copy);
-                const existing = this.app.vault.getAbstractFileByPath(path);
-                if (!existing) break;
-                if (existing instanceof TFile) {
-                    const old = new Uint8Array(await this.app.vault.readBinary(existing));
-                    if (startsWithBytes(old, original)) {
-                        target = existing;
-                        base = old;
-                        break;
-                    }
-                }
+            const found = await this.searchableCopyOf(source, original);
+            if (found) {
+                target = found.file;
+                base = found.bytes;
             }
         }
         const made = searchablePdf(base, pages);
@@ -4303,7 +4346,7 @@ export default class AnnotatorPlugin extends Plugin {
             await this.app.vault.modifyBinary(target, buffer);
             return target;
         }
-        return this.app.vault.createBinary(path, buffer);
+        return this.app.vault.createBinary(this.freeCopyName(source), buffer);
     }
     /** Say what a run came to, with a way to open the copy and, where the PDF has an annotation note, to make the copy what that note is about. */
     private offerSearchableCopy(source: TFile, saved: TFile, words: string) {

@@ -4,7 +4,7 @@ import {JSDOM} from 'jsdom';
 import {createRequire} from 'node:module';
 const nodeRequire=createRequire(import.meta.url);
 const setup=new JSDOM('<body></body>',{pretendToBeVisual:true});globalThis.window=setup.window;globalThis.document=setup.window.document;
-const {Native,TFile,Platform,AnnotationView,FileView,MarkdownView,WorkspaceLeaf,VideoView,MarkdownRenderer,SnapshotHost,ReadingCopyModal,scanIntroduction,chosenPages,scanStanding}=await import('./.generated/plugin-boundary.mjs');
+const {Native,TFile,Platform,AnnotationView,FileView,MarkdownView,WorkspaceLeaf,VideoView,MarkdownRenderer,SnapshotHost,ReadingCopyModal,scanIntroduction,chosenPages,scanStanding,Notice}=await import('./.generated/plugin-boundary.mjs');
 setup.window.close();
 function host(){
  const dom=new JSDOM('<body></body>',{pretendToBeVisual:true});globalThis.window=dom.window;globalThis.document=dom.window.document;
@@ -981,4 +981,24 @@ test('the recogniser\'s dialog says what it will do, which pages a choice comes 
  assert.match(scanStanding({...question,phone:true,kept:()=>0},'eng',[1,2,3,4,5,6],false).caution,/^Reading 6 pages takes a phone a long while/);assert.equal(scanStanding({...question,phone:true,kept:()=>0},'eng',[1,2],false).caution,'');
  // Reading again in the language it was read in is no reading again.
  const again={...question,what:'again',copy:null,before:'English'};assert.deepEqual([scanStanding(again,'eng',[1],false).ready,scanStanding(again,'eng',[1],false).caution],[false,'The pages were read in English already.']);assert.deepEqual([scanStanding(again,'swe',[1],false).ready,scanStanding(again,'swe',[1],false).button],[true,'Download and recognise again']);
+});
+test('recognising a PDF whose searchable copy has the words of every scanned page already says so instead of reading them again',async()=>{
+ const h=host();const {readFileSync}=await import('node:fs'),{searchablePdf}=await import('./.generated/readers/pdf-searchable.js');
+ const fixture=new Uint8Array(readFileSync(new URL('./support/fixtures/scanned-pages.pdf',import.meta.url))),geometry=JSON.parse(readFileSync(new URL('./support/fixtures/scanned-pages.geometry.json',import.meta.url),'utf8'));
+ const copyBytes=searchablePdf(fixture,geometry.pages.map(page=>({page:page.page-1,language:'eng',lines:page.lines}))).bytes;
+ // The recogniser is there to be had: a worker, a canvas a worker can draw on, WebAssembly (Node's has SIMD).
+ const had={Worker:globalThis.Worker,OffscreenCanvas:globalThis.OffscreenCanvas};globalThis.Worker=function(){};globalThis.OffscreenCanvas=function(){};
+ // Fragments as Obsidian makes them: here, their words.
+ globalThis.createFragment=build=>{const fragment=h.dom.window.document.createDocumentFragment();const el=h.dom.window.document.createElement('div');fragment.append(el);const make=(tag,options={})=>{const node=h.dom.window.document.createElement(tag);if(options.text)node.textContent=options.text;el.append(node);node.createEl=make;return node;};fragment.createDiv=options=>make('div',options);fragment.createEl=make;build(fragment);return fragment.textContent;};
+ try{
+ const pdf=h.add('Scans/Scan.pdf');h.binaries.set(pdf.path,fixture.buffer.slice(0));const copy=h.add('Scans/Scan (searchable).pdf');h.binaries.set(copy.path,copyBytes.buffer.slice(0));pdf.parent={path:'Scans'};copy.parent={path:'Scans'};
+ h.dom.window.ResizeObserver=class{observe(){}unobserve(){}disconnect(){}};
+ const texts=['','','A page with its own text'];
+ class Leaf extends WorkspaceLeaf{constructor(){super();this.contentEl=h.dom.window.document.createElement('div');h.dom.window.document.body.append(this.contentEl);this.app=h.app;this.view=new FileView(this);this.view.file=pdf;this.view.getViewType=()=>'pdf';this.view.getState=()=>({file:pdf.path});this.view.viewer={child:{pdfViewer:{pdfViewer:{currentPageNumber:1,pdfDocument:{fingerprints:['66aecda23c63f309aa46d94a2e028941'],numPages:3,getPage:async n=>({getTextContent:async()=>({items:[{str:texts[n-1]}]}),getOperatorList:async()=>({fnArray:n<3?[85]:[44]})})}}}}};}async openFile(file){this.view.file=file;}}
+ const leaf=new Leaf();h.app.workspace.getLeavesOfType=type=>type==='pdf'?[leaf]:type==='annotator-sidebar'?[{}]:[];h.app.workspace.getMostRecentLeaf=()=>leaf;h.app.workspace.iterateAllLeaves=fn=>{fn(leaf);};
+ await h.plugin.onload();h.plugin.bindSources();const binding=h.plugin.bindings.get(leaf.view);await binding.host.loading;await new Promise(resolve=>setTimeout(resolve,20));
+ assert.deepEqual(binding.host.pagesWithoutText,[1,2]);assert.equal(h.plugin.canRecogniseText(pdf.path),true);
+ Notice.messages.length=0;await h.plugin.recogniseText(pdf.path);
+ assert.equal(Notice.messages.length,1);assert.match(String(Notice.messages[0]),/^The copy, Scans\/Scan \(searchable\)\.pdf, has the words of every scanned page already\./);assert.match(String(Notice.messages[0]),/Open the copy$/);
+ }finally{globalThis.Worker=had.Worker;globalThis.OffscreenCanvas=had.OffscreenCanvas;delete globalThis.createFragment;h.dispose();}
 });

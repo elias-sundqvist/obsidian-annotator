@@ -194,7 +194,7 @@ any other, here and in any PDF program.
   note at the copy.
 - **Pages with a stamp or a header.** A scan on which a library has set a
   line of real text is still a scan. The dialog offers such pages (those with
-  only a little text of their own); what they have as text is left as it is
+  only a little text of their own over a picture of the page); what they have as text is left as it is
   and the words around it are read, so nothing is in the copy twice.
 - **If the app is closed in the middle,** the pages read so far are kept on
   the device. The next time you recognise that PDF in that language they are
