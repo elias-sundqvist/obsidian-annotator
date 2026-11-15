@@ -1092,3 +1092,120 @@ test('on a tablet the annotations are docked beside the page once, when there is
   Platform.isMobile=false;h.plugin.display.sidebarOnOpen=true;await h.plugin.sidebarForOpened();assert.equal(shown.length,3);assert.equal(drawer.isPinned,false);
  }finally{Platform.isMobile=false;Platform.isPhone=false;h.dispose();}
 });
+// "Highlight every match": a stand-in PDF whose pages the PDF library gives as runs, one of which ends a line.
+function matchPdf(h,pageRuns,{fingerprint='matchfixture',gate=null}={}){
+ h.plugin.manifest={id:'obsidian-annotator'};h.dom.window.ResizeObserver=class{observe(){}unobserve(){}disconnect(){}};
+ const w=h.dom.window,proto=w.HTMLElement.prototype;proto.empty=function(){this.replaceChildren();};proto.addClass=function(...names){this.classList.add(...names);};proto.setText=function(text){this.textContent=text;};proto.createEl=function(tag,options={}){const el=w.document.createElement(tag);if(options.text)el.textContent=options.text;if(options.cls)el.className=options.cls;for(const[k,v]of Object.entries(options.attr||{}))el.setAttribute(k,v);for(const key of ['type','placeholder','value'])if(options[key])el[key]=options[key];this.append(el);return el;};proto.createDiv=function(options){return this.createEl('div',options);};
+ const pdf=h.add('Papers/Paper.pdf'),pages=pageRuns.map(runs=>({getTextContent:async()=>({items:runs.map(run=>typeof run==='string'?{str:run}:run)})}));
+ const leaf=new WorkspaceLeaf();leaf.contentEl=w.document.createElement('div');w.document.body.append(leaf.contentEl);leaf.app=h.app;leaf.view=new FileView(leaf);leaf.view.file=pdf;leaf.view.getViewType=()=>'pdf';leaf.view.getState=()=>({file:pdf.path,page:1});
+ leaf.view.viewer={child:{pdfViewer:{pdfViewer:{currentPageNumber:1,pdfDocument:{fingerprints:[fingerprint],numPages:pages.length,getPage:async n=>{if(gate)await gate;return pages[n-1];}}}}}};
+ h.app.workspace.getLeavesOfType=type=>type==='pdf'?[leaf]:type==='annotator-sidebar'?[{}]:[];h.app.workspace.getMostRecentLeaf=()=>leaf;h.app.workspace.iterateAllLeaves=fn=>{fn(leaf);};
+ h.app.vault.process=async(file,change)=>{const next=change(h.contents.get(file.path));h.contents.set(file.path,next);return next;};h.app.vault.create=async(path,text)=>h.add(path,text,{'annotation-target':'Papers/Paper.pdf'});
+ return {pdf,leaf};
+}
+const settleMatches=async()=>{for(let turn=0;turn<40;turn++)await new Promise(resolve=>setTimeout(resolve,0));};
+const quoteOfRow=row=>row.target[0].selector.find(each=>each.type==='TextQuoteSelector').exact;
+const lastNotice=(Notice,since)=>{const said=Notice.messages.slice(since).at(-1);return typeof said==='string'?said:said?.textContent||'';};
+test('every match of a phrase in a PDF becomes a highlight in one write, across a line end, once; Undo takes back exactly those',async()=>{
+ const {Notice}=await import('./.generated/plugin-boundary.mjs');
+ const h=host();try{
+  // "machine" ends a line and "translation" begins the next, with no space between them in the page's text.
+  const {leaf}=matchPdf(h,[[{str:'Neural machine',hasEOL:true},{str:'translation is studied here. Machine translation, again;',hasEOL:true},{str:'and machinetranslation is one word.'}],['ab '.repeat(600)]]);
+  await h.plugin.onload();h.plugin.bindSources();await settleMatches();const binding=h.plugin.bindings.get(leaf.view);await binding.host.loading;await settleMatches();const key='Papers/Paper.pdf';
+  // Counting changes nothing and makes no note.
+  assert.deepEqual(await h.plugin.countMatches(key,'machine translation',{}),{state:'found',fresh:2,already:0,parts:1,over:false});
+  assert.deepEqual(await h.plugin.countMatches(key,'Machine translation',{exactCase:true}),{state:'found',fresh:1,already:0,parts:1,over:false});
+  assert.deepEqual(await h.plugin.countMatches(key,'a',{}),{state:'found',fresh:0,already:0,parts:0,over:false});
+  assert.equal([...h.files.keys()].some(path=>path.endsWith('.md')),false);
+  // One highlight made first, to see that nothing else is touched.
+  assert.equal((await h.plugin.highlightMatches(key,{query:'studied',options:{},ink:'yellow',tags:[],note:''})).length,1);
+  const note=h.plugin.notes.get(key).note,first=h.contents.get(note.path),firstRecords=h.plugin.notes.get(key).records.map(row=>row.id);
+  let writes=0;const process=h.app.vault.process;h.app.vault.process=async(...args)=>{writes++;return process(...args);};
+  const since=Notice.messages.length,made=await h.plugin.highlightMatches(key,{query:'  machine translation ',options:{},ink:'blue',tags:['method','MT'],note:'Coded as MT.'});
+  assert.equal(made.length,2);assert.equal(writes,1,'all of them in one write');
+  const rows=h.plugin.notes.get(key).records.filter(row=>made.includes(row.id));
+  assert.deepEqual(rows.map(quoteOfRow),['machinetranslation','Machine translation']);
+  for(const row of rows){assert.equal(row.color,'blue');assert.deepEqual(row.tags,['method','MT']);assert.equal(row.text,'Coded as MT.');assert.equal(row.nativePdf.page,1);assert.ok(Array.isArray(binding.host.matches.get(row.id)),'each is placed by the reader like any highlight');}
+  const position=rows[0].target[0].selector.find(each=>each.type==='TextPositionSelector');assert.deepEqual([position.start,position.end],[7,25]);
+  assert.equal(h.plugin.lastInk,'blue','the ink chosen is remembered for the next highlight');
+  const done=Notice.messages.slice(since).find(each=>typeof each!=='string'&&/highlighted\./.test(each.textContent));assert.equal(done.textContent,'2 matches of “machine translation” highlighted.Undo');
+  // Again: what is highlighted already is not made again.
+  assert.deepEqual(await h.plugin.countMatches(key,'machine translation',{}),{state:'found',fresh:0,already:2,parts:0,over:false});
+  const again=Notice.messages.length,afterMade=h.contents.get(note.path);assert.deepEqual(await h.plugin.highlightMatches(key,{query:'machine translation',options:{},ink:'blue',tags:[],note:''}),[]);
+  assert.equal(h.contents.get(note.path),afterMade);assert.match(lastNotice(Notice,again),/Every match of “machine translation” is highlighted already/);
+  // Undo: those two go, in one write, and the note is what it was before them.
+  writes=0;done.querySelector('button').click();await settleMatches();
+  assert.equal(writes,1);assert.equal(h.contents.get(note.path),first);assert.deepEqual(h.plugin.notes.get(key).records.map(row=>row.id),firstRecords);assert.match(lastNotice(Notice,again),/^2 highlights removed\.$/);
+  // A highlight worked on since is the reader's own and is kept.
+  const twice=await h.plugin.highlightMatches(key,{query:'machine translation',options:{},ink:'yellow',tags:[],note:''});assert.equal(twice.length,2);
+  h.plugin.editAnnotation(key,h.plugin.notes.get(key).records.find(row=>row.id===twice[1]));h.plugin.updateComment('Kept: this one matters.');await h.plugin.save();
+  assert.equal(await h.plugin.undoMatches(key,twice,{text:'',tags:[],ink:'yellow'}),1);assert.match(lastNotice(Notice,again),/1 highlight removed\. 1 was changed since and was kept\./);
+  assert.deepEqual(h.plugin.notes.get(key).records.map(row=>row.id),[...firstRecords,twice[1]]);
+  // Too common: said, and nothing is done.
+  assert.deepEqual(await h.plugin.countMatches(key,'ab',{}),{state:'found',fresh:500,already:0,parts:1,over:true});
+  const before=h.contents.get(note.path),limit=Notice.messages.length;assert.deepEqual(await h.plugin.highlightMatches(key,{query:'ab',options:{},ink:'yellow',tags:[],note:''}),[]);
+  assert.equal(h.contents.get(note.path),before);assert.match(lastNotice(Notice,limit),/more than 500 places: too many to highlight in one step\. Nothing was highlighted\./);
+  // Nothing at all, and words too short to look for, change nothing.
+  assert.deepEqual(await h.plugin.highlightMatches(key,{query:'zebra crossing',options:{},ink:'yellow',tags:[],note:''}),[]);assert.match(lastNotice(Notice,limit),/No match of “zebra crossing” here/);
+  assert.deepEqual(await h.plugin.highlightMatches(key,{query:' x ',options:{},ink:'yellow',tags:[],note:''}),[]);assert.equal(h.contents.get(note.path),before);
+ }finally{h.dispose();}
+});
+test('the dialog counts as the reader types, says while the text is still being read, offers the six inks, and its button says what it will do',async()=>{
+ const {EveryMatchModal,Menu,matchStatus}=await import('./.generated/plugin-boundary.mjs');
+ const h=host();let release;const gate=new Promise(resolve=>{release=resolve;});
+ let dialog=null;const open=EveryMatchModal.prototype.open,close=EveryMatchModal.prototype.close;
+ EveryMatchModal.prototype.open=function(){dialog=this;this.contentEl=h.dom.window.document.createElement('div');this.modalEl=h.dom.window.document.createElement('div');this.modalEl.addClass=(...names)=>this.modalEl.classList.add(...names);this.modalEl.append(this.contentEl);h.dom.window.document.body.append(this.modalEl);this.onOpen();};
+ EveryMatchModal.prototype.close=function(){if(dialog===this)dialog=null;this.modalEl.remove();this.onClose();};
+ try{
+  const {leaf}=matchPdf(h,[[{str:'Neural machine',hasEOL:true},{str:'translation is studied here. Machine translation, again.'}]],{gate});
+  await h.plugin.onload();h.plugin.bindSources();await settleMatches();const binding=h.plugin.bindings.get(leaf.view),key='Papers/Paper.pdf';
+  // The selection's words fill the field.
+  binding.host.selectedWords=()=>'machine translation';
+  h.plugin.commands.find(command=>command.id==='highlight-every-match').callback();
+  assert.ok(dialog);assert.ok(dialog.modalEl.classList.contains('annotator-matches'));const body=dialog.contentEl,field=body.querySelector('[aria-label="Words to highlight"]'),status=body.querySelector('.annotator-matches-status'),button=body.querySelector('button.mod-cta');
+  assert.equal(field.value,'machine translation');assert.equal(status.getAttribute('role'),'status');
+  // The text is still being read: said so, and the button waits.
+  await new Promise(resolve=>setTimeout(resolve,30));assert.equal(status.textContent,'Reading the document’s text…');assert.equal(button.disabled,true);
+  release();await binding.host.loading;await new Promise(resolve=>setTimeout(resolve,500));
+  assert.equal(status.textContent,'2 matches on 1 page.');assert.equal(button.textContent,'Highlight 2 matches');assert.equal(button.disabled,false);
+  // The six inks, the remembered one chosen.
+  const swatches=[...body.querySelectorAll('.annotator-editor-inks .annotator-ink-swatch')];assert.deepEqual(swatches.map(dot=>dot.dataset.annotatorInk),['yellow','orange','pink','purple','blue','green']);assert.deepEqual(swatches.filter(dot=>dot.classList.contains('is-current')).map(dot=>dot.dataset.annotatorInk),['yellow']);
+  swatches[5].click();assert.equal(swatches[5].getAttribute('aria-pressed'),'true');assert.equal(swatches[0].getAttribute('aria-pressed'),'false');
+  // Typing counts again after a pause; one letter is not looked for.
+  field.value='M';field.dispatchEvent(new h.dom.window.Event('input'));assert.equal(button.disabled,true);assert.equal(status.textContent,'Type at least two letters.');
+  field.value='Machine translation';field.dispatchEvent(new h.dom.window.Event('input'));await new Promise(resolve=>setTimeout(resolve,400));assert.equal(button.textContent,'Highlight 2 matches');
+  // Match case narrows it, as soon as the toggle is changed.
+  const toggles=[...body.querySelectorAll('.checkbox-container')];assert.equal(toggles.length,2);toggles[1].click();await new Promise(resolve=>setTimeout(resolve,50));assert.equal(status.textContent,'1 match on 1 page.');assert.equal(button.textContent,'Highlight 1 match');
+  const tags=body.querySelector('[aria-label="Tags for every highlight"]'),note=body.querySelector('[aria-label="Note for every highlight"]');
+  tags.value='method, MT, method';tags.dispatchEvent(new h.dom.window.Event('input'));note.value='  Coded.  ';note.dispatchEvent(new h.dom.window.Event('input'));
+  button.click();assert.equal(dialog,null,'the dialog closes');await settleMatches();
+  const rows=h.plugin.notes.get(key).records;assert.deepEqual(rows.map(quoteOfRow),['Machine translation']);assert.deepEqual(rows[0].tags,['method','MT']);assert.equal(rows[0].text,'Coded.');assert.equal(rows[0].color,'green');
+  // In the sidebar's menu, for this PDF.
+  let shown=null;const atPosition=Menu.prototype.showAtPosition,atMouse=Menu.prototype.showAtMouseEvent;Menu.prototype.showAtPosition=Menu.prototype.showAtMouseEvent=function(){shown=this;return this;};
+  try{const content=h.dom.window.document.createElement('div');h.dom.window.document.body.append(content);h.plugin.currentFile=key;const view=new AnnotationView({contentEl:content,app:h.app},h.plugin);view.show();content.querySelector('[aria-label="More actions"]').click();
+   const item=shown.items.find(each=>each.title==='Highlight every match…');assert.ok(item);item.run();assert.ok(dialog);assert.equal(dialog.contentEl.querySelector('[aria-label="Words to highlight"]').value,'machine translation');dialog.close();}
+  finally{Menu.prototype.showAtPosition=atPosition;Menu.prototype.showAtMouseEvent=atMouse;}
+  // What the count line says about too many, and about a book.
+  assert.equal(matchStatus('pdf',{state:'found',fresh:500,already:0,parts:3,over:true}),'More than 500 matches. That is too many to highlight in one step: try a longer phrase, whole words or matching case.');
+  assert.equal(matchStatus('book',{state:'found',fresh:3,already:1,parts:2,over:false}),'3 matches in 2 chapters. 1 more is highlighted already.');
+  assert.equal(matchStatus('book',{state:'found',fresh:0,already:0,parts:0,over:false}),'No match in this book.');
+ }finally{EveryMatchModal.prototype.open=open;EveryMatchModal.prototype.close=close;h.dispose();}
+});
+test('highlighting every match refuses politely where it cannot work: nothing open, a scan, a web page, a video',async()=>{
+ const {Notice,EveryMatchModal}=await import('./.generated/plugin-boundary.mjs');
+ let opened=0;const open=EveryMatchModal.prototype.open;EveryMatchModal.prototype.open=function(){opened++;};
+ try{
+  {const h=host();try{await h.plugin.onload();const since=Notice.messages.length;h.plugin.commands.find(command=>command.id==='highlight-every-match').callback();assert.match(lastNotice(Notice,since),/Open a PDF or a book to highlight every match/);
+   // A web page has a reader but no pages to look through.
+   const view={getViewType:()=>'webviewer'};h.plugin.bindings.set(view,{host:{kind:'web',setAnnotations(){},dispose(){}},file:'web:https://example.org/',owner:'o'});h.plugin.highlightEveryMatch('web:https://example.org/');assert.match(lastNotice(Notice,since),/web pages are not looked through yet/);
+   assert.equal(h.plugin.canHighlightMatches('web:https://example.org/'),false);
+   // A video.
+   h.app.workspace.getMostRecentLeaf=()=>({view:Object.create(VideoView.prototype)});h.plugin.highlightEveryMatch();assert.match(lastNotice(Notice,since),/A video has no text to look through/);
+   h.plugin.bindings.delete(view);
+  }finally{h.dispose();}}
+  // A PDF that is pictures of pages.
+  {const h=host();try{const {leaf}=matchPdf(h,[[''],[' ']]);await h.plugin.onload();h.plugin.bindSources();await settleMatches();await h.plugin.bindings.get(leaf.view).host.loading;await settleMatches();
+   const since=Notice.messages.length;h.plugin.highlightEveryMatch('Papers/Paper.pdf');assert.match(lastNotice(Notice,since),/This PDF has no text to look through: its pages are pictures \(a scan\)/);assert.equal(h.plugin.canHighlightMatches('Papers/Paper.pdf'),true);}finally{h.dispose();}}
+  assert.equal(opened,0);
+ }finally{EveryMatchModal.prototype.open=open;}
+});

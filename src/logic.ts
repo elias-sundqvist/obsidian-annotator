@@ -48,6 +48,12 @@ function createMany(
     }
     return text;
 }
+/** Several annotations taken out of one note as one step; one that is not there is passed over. */
+function removeMany(source: string, ids: string[]): string {
+    let text = source;
+    for (const id of ids) text = remove(text, id);
+    return text;
+}
 /** One tag given another name on every annotation of a note that has it. */
 function renameTag(source: string, from: string, to: string): { source: string; changed: number } {
     let result = source,
@@ -72,6 +78,7 @@ export const logic = {
     replaceFragment,
     replaceStoredString,
     createMany,
+    removeMany,
     renameTag,
     /** Hypothesis JSON in and out of a note. */
     importHypothesis,

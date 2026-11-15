@@ -465,3 +465,28 @@ test('a book goes to how far another device was left: at once when it is open, a
   view.resume({kind:'part',fraction:0});await new Promise(resolve=>setTimeout(resolve,20));assert.equal(view.chapter,0);
  }finally{h.dispose();}
 });
+test('every match in a book is where its find says, each a verified highlight of its chapter whether or not it is on screen; one highlighted already is not offered again',async()=>{
+ const h=await host(0);try{
+  const view=h.view,words='unique  passage';
+  const places=await view.occurrences(words,{},500);
+  // The same places, in the same order, as the find in the reading controls lists.
+  assert.deepEqual(places.fresh.map(place=>place.part),view.matches(words).map(item=>item.chapter));assert.equal(places.fresh.length,5);assert.equal(places.already,0);
+  assert.deepEqual((await view.occurrences('Unique passage',{exactCase:true},500)).fresh,[]);assert.deepEqual((await view.occurrences('uniq',{wholeWords:true},500)).fresh,[]);assert.equal((await view.occurrences('uniq',{},500)).fresh.length,5);
+  assert.equal((await view.occurrences('passage',{},2)).fresh.length,3,'one beyond the limit is enough to say there are too many');
+  // Chapters 2 to 4 are not on screen; their highlights are made all the same, from the book's own text.
+  assert.ok(!view.mounts.has(4));
+  const made=await view.occurrenceAnnotations(places.fresh,'Coded.');assert.equal(made.skipped,0);assert.equal(made.rows.length,5);
+  let source='Prose\n';for(const row of made.rows)source=create(source,row);const stored=readAll(source);
+  for(const [index,row] of stored.entries()){
+   assert.equal(row.text,'Coded.');assert.equal(row.uri,view.resolver.identity(index).uri);
+   const selectors=row.target[0].selector;assert.equal(selectors.find(s=>s.type==='TextQuoteSelector').exact,'unique passage');
+   assert.equal((await published.anchor(view.resolver.sections[index].root,selectors)).toString(),'unique passage','the Hypothesis client finds it too');
+  }
+  // Once they are the book's annotations, the same words have nothing new to offer.
+  view.setAnnotations(stored);const again=await view.occurrences(words,{},500);assert.deepEqual(again,{fresh:[],already:5});
+  // A place that cannot be described is counted and left out.
+  assert.deepEqual((await view.occurrenceAnnotations([{part:0,start:900,end:910}],'')).skipped,1);
+  // The selected words fill the dialog's field.
+  assert.equal(view.selectedWords(),'');const node=h.root(0).querySelector('p').firstChild,range=h.w.document.createRange();range.setStart(node,10);range.setEnd(node,24);h.w.getSelection().addRange(range);assert.equal(view.selectedWords(),'has a unique p');
+ }finally{h.dispose();}
+});
