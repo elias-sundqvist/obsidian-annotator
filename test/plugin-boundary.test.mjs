@@ -918,3 +918,47 @@ test('on a tablet the annotations are docked beside the page once, when there is
   Platform.isMobile=false;h.plugin.display.sidebarOnOpen=true;await h.plugin.sidebarForOpened();assert.equal(shown.length,3);assert.equal(drawer.isPinned,false);
  }finally{Platform.isMobile=false;Platform.isPhone=false;h.dispose();}
 });
+test('the first highlight of a source is saved although the host has not indexed the note that was just made for it',async()=>{
+ const h=host();const {readAll}=await import('./.generated/codec.mjs');
+ try{
+ const pdf=h.add('Scan (searchable).pdf');h.dom.window.ResizeObserver=class{observe(){}unobserve(){}disconnect(){}};
+ class Leaf extends WorkspaceLeaf{constructor(){super();this.contentEl=h.dom.window.document.createElement('div');h.dom.window.document.body.append(this.contentEl);this.app=h.app;this.view=new FileView(this);this.view.file=pdf;this.view.getViewType=()=>'pdf';this.view.getState=()=>({file:pdf.path});this.view.viewer={child:{pdfViewer:{pdfViewer:{currentPageNumber:1,pdfDocument:{fingerprints:['freshnote'],numPages:1,getPage:async()=>({getTextContent:async()=>({items:[{str:'Test PDF passage'}]})})}}}}};}async openFile(file){this.view.file=file;}}
+ const leaf=new Leaf();h.app.workspace.getLeavesOfType=type=>type==='pdf'?[leaf]:type==='annotator-sidebar'?[{}]:[];h.app.workspace.getMostRecentLeaf=()=>leaf;h.app.workspace.getLeaf=()=>leaf;h.app.workspace.iterateAllLeaves=fn=>{fn(leaf);};
+ h.app.vault.process=async(file,change)=>h.contents.set(file.path,change(h.contents.get(file.path)));
+ // As the host does it: a new note is a file at once, and is indexed (its properties readable) only a moment later.
+ const unindexed=[];h.app.vault.create=async(path,text)=>{const file=new TFile(path);h.files.set(path,file);h.contents.set(path,text);unindexed.push(file);return file;};
+ const index=()=>{for(const file of unindexed.splice(0))h.metadata.set(file.path,{frontmatter:{'annotation-target':/annotation-target: "?([^"\n]+)"?/.exec(h.contents.get(file.path))?.[1]}});};
+ await h.plugin.onload();h.plugin.bindSources();await Promise.all([...h.plugin.bindings.values()].map(binding=>binding.host.loading));
+ const binding=h.plugin.bindings.get(leaf.view),capture={file:pdf.path,exact:'PDF',prefix:'Test ',suffix:' passage',page:1,start:5,end:8,revision:`${pdf.path}:1:0:${binding.host.generation}`,nativeOwner:binding.owner};
+ await h.plugin.beginCapture(capture,'annotate');h.plugin.updateComment('The first note on this source');await h.plugin.save();
+ const note=h.files.get('Scan (searchable).pdf.annotations.md');assert.ok(note,'the note was made');assert.equal(h.metadata.get(note.path),undefined,'and the host had not indexed it when the highlight was saved');
+ const rows=readAll(h.contents.get(note.path));assert.equal(rows.length,1);assert.equal(rows[0].text,'The first note on this source');assert.equal(h.plugin.editMode,false,'nothing is left unsaved');
+ // A second highlight before the index, and one after it, go into the same note.
+ await h.plugin.beginCapture({...capture,exact:'passage',prefix:'Test PDF ',suffix:'',start:9,end:16},'annotate');h.plugin.updateComment('Second');await h.plugin.save();assert.equal(readAll(h.contents.get(note.path)).length,2);
+ index();assert.equal(h.metadata.get(note.path).frontmatter['annotation-target'],'Scan (searchable).pdf');
+ await h.plugin.beginCapture({...capture,exact:'Test',prefix:'',suffix:' PDF passage',start:0,end:4},'annotate');h.plugin.updateComment('Third');await h.plugin.save();assert.equal(readAll(h.contents.get(note.path)).length,3);
+ // Once indexed, the note speaks for itself: pointed at another source, it is no longer this one's.
+ h.metadata.get(note.path).frontmatter['annotation-target']='Another.pdf';const before=h.contents.get(note.path);
+ await h.plugin.beginCapture({...capture,exact:'PDF',prefix:'Test ',suffix:' passage',start:5,end:8},'annotate');h.plugin.updateComment('Not saved here');await h.plugin.save();assert.equal(h.contents.get(note.path),before);assert.equal(h.plugin.comment,'Not saved here','the draft is kept');
+ }finally{h.dispose();}
+});
+test('a source that was deleted and is there again under its name can be annotated again',async()=>{
+ const h=host();const {readAll}=await import('./.generated/codec.mjs');
+ try{
+ let pdf=h.add('Scan (searchable).pdf');h.dom.window.ResizeObserver=class{observe(){}unobserve(){}disconnect(){}};
+ class Leaf extends WorkspaceLeaf{constructor(){super();this.contentEl=h.dom.window.document.createElement('div');h.dom.window.document.body.append(this.contentEl);this.app=h.app;this.view=new FileView(this);this.view.file=pdf;this.view.getViewType=()=>'pdf';this.view.getState=()=>({file:pdf.path});this.view.viewer={child:{pdfViewer:{pdfViewer:{currentPageNumber:1,pdfDocument:{fingerprints:['putback'],numPages:1,getPage:async()=>({getTextContent:async()=>({items:[{str:'Test PDF passage'}]})})}}}}};}async openFile(file){this.view.file=file;}}
+ const leaf=new Leaf();h.app.workspace.getLeavesOfType=type=>type==='pdf'?[leaf]:type==='annotator-sidebar'?[{}]:[];h.app.workspace.getMostRecentLeaf=()=>leaf;h.app.workspace.getLeaf=()=>leaf;h.app.workspace.iterateAllLeaves=fn=>{fn(leaf);};
+ h.app.vault.process=async(file,change)=>h.contents.set(file.path,change(h.contents.get(file.path)));h.app.vault.create=async(path,text)=>h.add(path,text,{'annotation-target':pdf.path});
+ await h.plugin.onload();h.plugin.bindSources();await h.plugin.loadNote(pdf.path);
+ // The file goes: the source is said to be gone.
+ h.files.delete(pdf.path);h.events.get('vault:delete')(pdf);assert.match(h.plugin.notes.get(pdf.path).error,/deleted/);
+ // A file of that name is written again (a new searchable copy, the PDF put back): it is read afresh, and takes a highlight.
+ pdf=h.add('Scan (searchable).pdf');leaf.view.file=pdf;h.events.get('vault:create')(pdf);await Promise.all([...h.plugin.loads.values()]);await new Promise(resolve=>setTimeout(resolve,20));
+ assert.equal(h.plugin.notes.get(pdf.path).error,undefined);
+ h.plugin.bindSources();await Promise.all([...h.plugin.bindings.values()].map(binding=>binding.host.loading));
+ const binding=h.plugin.bindings.get(leaf.view);await h.plugin.beginCapture({file:pdf.path,exact:'PDF',prefix:'Test ',suffix:' passage',page:1,start:5,end:8,revision:`${pdf.path}:1:0:${binding.host.generation}`,nativeOwner:binding.owner},'annotate');h.plugin.updateComment('On the file that came back');await h.plugin.save();
+ assert.equal(readAll(h.contents.get('Scan (searchable).pdf.annotations.md'))[0].text,'On the file that came back');
+ // A file of another name coming into the vault changes nothing for it.
+ h.events.get('vault:create')(h.add('Other.pdf'));assert.equal(h.plugin.notes.get(pdf.path).error,undefined);
+ }finally{h.dispose();}
+});
