@@ -1540,11 +1540,11 @@
     {
       "id": "mobi-support",
       "title": "MOBI and AZW3 books in the book reader",
-      "status": "todo",
+      "status": "done",
       "parent": "community",
       "dependsOn": [],
       "estimate": 5,
-      "notes": "Owner's decision 2026-11-15: MOBI is to be supported. MOBI/AZW3 are PalmDB containers with (often compressed) HTML; DRM-protected files cannot be read. Calibre links already choose an EPUB or PDF over MOBI."
+      "notes": "Owner's decision 2026-11-15: MOBI is to be supported. MOBI/AZW3 are PalmDB containers with (often compressed) HTML; DRM-protected files cannot be read. Calibre links already choose an EPUB or PDF over MOBI.\n\nDone 2026-11-16: Built 2026-11-15/16 by a subagent on feature/mobi-books, fast-forwarded into next (not released). MOBI 6, AZW3/KF8 and combined files without DRM open in the book reader (PalmDOC and HUFF/CDIC, KF8 skeleton/fragments, fonts, pictures, contents); DRM refused. Checked against real Calibre 9.18 conversions (Alice, three forms; 4 small fixtures in the repo) and in Obsidian 1.15.1: cover shown, chapters walked in order, contents and links land, find, highlight saved and restored. Limits: very short chapters in scroll mode (as EPUB), Calibre's CSS partly omitted."
     }
   ]
 }
