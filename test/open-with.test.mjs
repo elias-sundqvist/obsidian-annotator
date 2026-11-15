@@ -110,7 +110,11 @@ test('recipes carry the vault and the key as text no script reads as its own',()
  }
  assert.match(macRecipe(values),/LSHandlerRank string Alternate/);assert.match(macRecipe(values),/com\.adobe\.pdf/);assert.match(macRecipe(values),/org\.idpf\.epub-container/);
  assert.match(linuxRecipe(values),/MimeType=application\/pdf;application\/epub\+zip;/);assert.match(linuxRecipe(values),/^Exec="\$HOME\/\.local\/bin\/open-with-annotator" %f$/m);
- assert.match(windowsRecipe(values),/HKCU:\\Software\\Classes\\\$e\\OpenWithProgids/);assert.doesNotMatch(windowsRecipe(values),/HKLM|HKEY_LOCAL_MACHINE/);
+ assert.match(windowsRecipe(values),/HKCU:\\Software\\Classes\\\$e\\OpenWithProgids/);
+ // An extension's list of programs is other apps' too: in Windows PowerShell 5.1 New-Item -Force on a key that exists empties it
+ // (seen on Windows 11), so the list is made only when it is missing, and the recipe never forces a key it does not own.
+ {const lines=windowsRecipe(values).split('\n');assert.ok(lines.some(line=>/if \(-not \(Test-Path \$k\)\) \{ New-Item -Force \$k/.test(line)));
+  for(const line of lines.filter(line=>/New-Item -Force/.test(line)))assert.ok(/\$id\\|\$dir|Test-Path/.test(line),line);}assert.doesNotMatch(windowsRecipe(values),/HKLM|HKEY_LOCAL_MACHINE/);
 });
 
 test('the Linux recipe, run in a scratch home folder, makes a handler that hands over each file as one address',{skip:process.platform==='win32'},async()=>{

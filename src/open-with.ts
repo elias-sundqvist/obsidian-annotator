@@ -303,9 +303,12 @@ export function windowsRecipe(values: RecipeValues): string {
         'New-Item -Force "$id\\shell\\open\\command" | Out-Null',
         'Set-ItemProperty $id "(default)" "Open with Annotator"',
         'Set-ItemProperty "$id\\shell\\open\\command" "(default)" $cmd',
+        // An extension's list of programs is shared with every other app: it is made only when missing (in Windows
+        // PowerShell, New-Item -Force on a key that exists empties it), and only our one entry is added to it.
         'foreach ($e in ".pdf", ".epub") {',
-        '    New-Item -Force "HKCU:\\Software\\Classes\\$e\\OpenWithProgids" | Out-Null',
-        '    New-ItemProperty -Force "HKCU:\\Software\\Classes\\$e\\OpenWithProgids" -Name "Annotator.OpenWith" -Value "" -PropertyType String | Out-Null',
+        '    $k = "HKCU:\\Software\\Classes\\$e\\OpenWithProgids"',
+        '    if (-not (Test-Path $k)) { New-Item -Force $k | Out-Null }',
+        '    New-ItemProperty -Force $k -Name "Annotator.OpenWith" -Value "" -PropertyType String | Out-Null',
         '}',
         ''
     ].join('\n');

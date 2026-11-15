@@ -85,6 +85,9 @@ What changed for someone using Annotator. How to use each thing is in
   a script or a Shortcut can open; it reads a file outside the vault only
   with this computer's key. Before, a file Obsidian opened from outside the
   vault could have had its note made beside it, outside the vault.
+- The Windows recipe for "Open with Annotator" no longer empties the list of
+  programs Windows offers for `.pdf` and `.epub`: it adds its entry beside
+  the others.
 - A yes to copying in a file from this computer is now for that one copy.
   It used to be kept in the synced settings, so the same path was read again
   without asking when the file there had changed, also on another computer.

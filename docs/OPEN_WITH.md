@@ -181,7 +181,16 @@ A Shortcut can do both in one step. It has not been tried on a device yet:
 - Linux: the recipe and its script were run on macOS under `sh`, `dash` and
   `bash`, with names holding quotes, `&`, `#`, `%` and accented letters. Not
   yet on a Linux desktop.
-- Windows: not yet run.
+- Windows: the recipe was run in Windows PowerShell 5.1 on Windows 11 Home,
+  with the file list of `.pdf` already holding another app's entry. It adds
+  "Open with Annotator" beside that entry and leaves it as it was, and the
+  removal steps above give the list back exactly. (An earlier recipe made
+  the list with `New-Item -Force`, which in Windows PowerShell empties a key
+  that exists: it would have taken the other app's entry away.) The address
+  it makes for a path with spaces, `&`, `#`, `%`, accents or Chinese is the
+  one the reader decodes. Not yet tried: choosing it in Explorer's Open with
+  (it needs someone at the screen), Smart App Control, and Obsidian's own
+  Open with on Windows, which needs an installer from 1.14.4.
 - Android: tried on the Android 16 emulator with Obsidian 1.14.4. A PDF
   shared from the Files app to Obsidian, then **Import into vault**, shows
   **Open in Annotator** in Obsidian's menu after the import, and it opens
