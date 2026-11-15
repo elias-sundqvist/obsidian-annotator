@@ -54,6 +54,14 @@ you can choose another heading, or name a template note: its properties and
 text are kept (`{{title}}`, `{{date}}` and `{{target}}` are filled in) and
 annotations are added after it.
 
+New annotations are added at the end of the note. To keep them in one place
+with your own writing after it, name a heading in **Write new annotations
+under this heading**: `## Highlights` (that level only) or `Highlights` (any
+level). Each new annotation then goes at the end of that heading's section,
+before the next heading of the same or a higher level, in the order they
+were made. A note that has no such heading gets it at its end. Annotations
+already in a note stay where they are.
+
 The `annotation-target` may be written in any of the usual ways:
 
 | Written as | Example |

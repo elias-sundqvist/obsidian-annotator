@@ -882,3 +882,20 @@ test('a reader\'s own quote: written from a card, shown, copied, exported and fo
         await h.plugin.requote(h.file.path, a(), null); assert.equal(h.contents.get(h.note.path), raw); assert.equal(h.plugin.ownQuote(h.file.path, a()), null);
     } finally { h.dispose(); }
 });
+
+test('new annotations go under the heading named in the settings, through the plugin\'s own write path', async () => {
+    const h = host();
+    try {
+        h.plugin.data = { nativeDisplay: { writeUnder: '## Highlights\nsecond line' } };
+        await h.plugin.onload();
+        // Read from the settings as one line; nothing else of the display changes.
+        assert.equal(h.plugin.display.writeUnder, '## Highlights second line'); await h.plugin.setDisplay({ writeUnder: '## Highlights' });
+        const note = '# Paper\n\n## Highlights\n\n## Thoughts\n\nMine.\n', rows = [{ annotation: quoted('h1aaaa', 'one') }, { annotation: quoted('h2bbbb', 'two') }];
+        const made = await h.plugin.codec.createMany(note, rows, {}), single = await h.plugin.codec.create(made, quoted('h3cccc', 'three'), {});
+        assert.ok(single.endsWith('## Thoughts\n\nMine.\n')); assert.deepEqual(storeRead(single).map(row => row.id), ['h1aaaa', 'h2bbbb', 'h3cccc']);
+        assert.ok(single.indexOf('^h3cccc') < single.indexOf('## Thoughts'));
+        // Empty: the end of the note, as before.
+        await h.plugin.setDisplay({ writeUnder: '' }); const end = await h.plugin.codec.create(note, quoted('h4dddd', 'four'), {});
+        assert.ok(end.startsWith(note)); assert.ok(end.indexOf('^h4dddd') > end.indexOf('Mine.'));
+    } finally { h.dispose(); }
+});
