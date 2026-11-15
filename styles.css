@@ -416,6 +416,15 @@ button.annotator-ink-swatch:focus-visible { outline: 2px solid var(--interactive
 .annotator-ui .annotator-card-quote:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 3px; border-radius: 3px; }
 .annotator-card-quote.is-collapsed { display: -webkit-box; -webkit-line-clamp: var(--annotator-quote-lines); -webkit-box-orient: vertical; overflow: hidden; }
 .annotator-ui .annotator-quote-toggle { display: block; margin: 3px 0 0; margin-inline-start: 11px; }
+/* The reader's own quote of a passage is their Markdown, drawn as a note's is; the words stay the quote's. */
+.annotator-ui .annotator-card-quote.is-own { white-space: normal; }
+.annotator-ui .annotator-card-quote.is-own > p { margin: 0; }
+.annotator-ui .annotator-card-quote.is-own > p + p { margin-top: .5em; }
+.annotator-ui .annotator-quote-edited { display: block; margin: 3px 0 0; margin-inline-start: 11px; color: var(--text-faint); font-size: var(--font-smallest); }
+.annotator-ui .annotator-quote-edited:hover { color: var(--text-muted); }
+.annotator-quote-dialog .annotator-quote-field { width: 100%; min-height: 7em; resize: vertical; font-family: var(--font-text); line-height: var(--line-height-normal, 1.5); }
+.annotator-quote-dialog .annotator-quote-original { margin-top: var(--size-4-3, 12px); }
+.annotator-quote-dialog .annotator-quote-original blockquote { margin: 4px 0 0; padding: 0; padding-inline-start: 11px; border: 0; border-inline-start: 3px solid var(--background-modifier-border); color: var(--text-muted); max-height: 9em; overflow: auto; overflow-wrap: anywhere; }
 
 .annotator-card-comment { margin-top: 7px; padding-inline-start: 11px; color: var(--text-normal); font-size: var(--font-ui-small); line-height: var(--line-height-normal, 1.5); overflow-wrap: anywhere; user-select: text; }
 .annotator-native-card:not(.has-quote) > .annotator-card-comment { margin-top: 0; padding-inline-start: 0; }

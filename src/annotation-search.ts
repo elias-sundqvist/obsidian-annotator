@@ -48,13 +48,19 @@ export function annotationSearch(query: string): SearchFacets {
  */
 const normalized = (value: unknown) =>
     (typeof value === 'string' ? value : '').normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase();
-export function searchAnnotations(rows: Annotation[], query: string, now = Date.now()): Set<string> {
+export function searchAnnotations(
+    rows: Annotation[],
+    query: string,
+    now = Date.now(),
+    /** The reader's own quote of a passage, when they wrote one: a passage is found by it too. */
+    own?: (row: Annotation) => string
+): Set<string> {
     const facets = annotationSearch(query);
     const strings = (row: Annotation, field: Field): unknown[] => {
         switch (field) {
             // A marked area has no quote of its own; the words that lay inside it are what it is found by.
             case 'quote':
-                return [quoteOf(row)?.exact || '', areaWords(row)];
+                return [quoteOf(row)?.exact || '', areaWords(row), own?.(row) || ''];
             case 'text':
                 return [row.text];
             case 'tag':

@@ -302,7 +302,7 @@ test('a highlight on the page offers a menu: edit, copy, recolour and delete wit
     try {
         const row = id => h.records().find(item => item.id === id), titles = menu => menu.items.map(item => (item.checked ? '✓ ' : '') + item.title);
         const menu = h.plugin.annotationMenu(h.file.path, row('a'));
-        assert.deepEqual(titles(menu), ['Edit note', 'Reply', 'Show in sidebar', 'Copy quote', 'Copy as Markdown', 'Copy annotation link', 'Yellow', 'Orange', 'Pink', 'Purple', '✓ Blue', 'Green', 'Delete']);
+        assert.deepEqual(titles(menu), ['Edit note', 'Edit quote…', 'Reply', 'Show in sidebar', 'Copy quote', 'Copy as Markdown', 'Copy annotation link', 'Yellow', 'Orange', 'Pink', 'Purple', '✓ Blue', 'Green', 'Delete']);
         assert.equal(menu.items.at(-1).warning, true);
         assert.equal(menu.native, false, 'drawn in the app so colour choices can show their ink');
         assert.equal(titles(h.plugin.annotationMenu(h.file.path, row('b')))[0], 'Add note', 'a bare highlight offers to add a note');
@@ -834,5 +834,51 @@ test('an annotation note is an ordinary note too: its own properties sit beside 
         assert.deepEqual(native, ['#My thoughts', 'Paper notes#My thoughts', 'Paper notes', 'Paper notes#^nosuchblock']); assert.deepEqual(opened, []);
         // A link to an annotation opens its source at it.
         await h.app.workspace.openLinkText('Paper notes#^a', 'Elsewhere.md'); assert.deepEqual(opened, [['Paper notes.md', 'a']]); assert.equal(native.length, 4);
+    } finally { h.dispose(); }
+});
+
+test('a reader\'s own quote: written from a card, shown, copied, exported and found; the passage stays as stored', async () => {
+    const { QuoteModal, Menu } = await import('./.generated/plugin-boundary.mjs');
+    const h = await collection([quoted('a', 'the passage as scanned', { text: 'my note' }), quoted('b', 'another passage')]);
+    try {
+        const a = () => h.records()[0], b = () => h.records()[1], before = JSON.stringify(h.records()), raw = h.contents.get(h.note.path);
+        // Nothing of the reader's yet: the passage is shown as it is.
+        assert.equal(h.plugin.ownQuote(h.file.path, a()), null); assert.equal(h.plugin.shownQuote(h.file.path, a()), 'the passage as scanned'); assert.equal(h.plugin.notes.get(h.file.path).quotes, undefined);
+        // The source's own words, or nothing, written back: no write at all.
+        await h.plugin.requote(h.file.path, a(), null); await h.plugin.requote(h.file.path, a(), '   '); assert.equal(h.contents.get(h.note.path), raw);
+        await h.plugin.requote(h.file.path, a(), 'the passage, put right: $x^2$');
+        assert.equal(JSON.stringify(h.records()), before, 'every annotation reads as it did');
+        assert.equal(h.plugin.ownQuote(h.file.path, a()), 'the passage, put right: $x^2$'); assert.equal(h.plugin.shownQuote(h.file.path, a()), 'the passage, put right: $x^2$'); assert.equal(h.plugin.shownQuote(h.file.path, b()), 'another passage');
+        const stored = h.contents.get(h.note.path); assert.ok(stored.includes('"exact":"the passage as scanned"')); assert.ok(stored.includes('==the passage, put right: $x^2$==')); assert.ok(stored.startsWith('Prose that must survive.\n'));
+        // The card: the reader's quote is drawn as their Markdown and says it was edited; the other card is as it was.
+        const { content, view } = h.sidebar(), card = id => content.querySelector(`[data-annotation-id="${id}"]`);
+        assert.ok(card('a').querySelector('.annotator-card-quote.is-own.markdown-rendered')); assert.equal(card('a').querySelector('.annotator-quote-edited').textContent, 'Quote edited');
+        assert.equal(card('b').querySelector('.annotator-card-quote').textContent, 'another passage'); assert.equal(card('b').querySelector('.annotator-card-quote.is-own'), null); assert.equal(card('b').querySelector('.annotator-quote-edited'), null);
+        // Found by the reader's words and still by the passage's own.
+        const ids = () => [...content.querySelectorAll('[data-annotation-id]')].map(el => el.dataset.annotationId);
+        view.query = 'put right'; view.show(); assert.deepEqual(ids(), ['a']); view.query = 'as scanned'; view.show(); assert.deepEqual(ids(), ['a']); view.query = 'quote:"put right"'; view.show(); assert.deepEqual(ids(), ['a']); view.query = ''; view.show();
+        // Copied and exported as the reader's words.
+        const copied = []; h.plugin.copyText = async text => { copied.push(text); };
+        const menu = h.plugin.annotationMenu(h.file.path, a()); assert.ok(menu instanceof Menu); menu.items.find(item => item.title === 'Copy quote').run(); assert.deepEqual(copied, ['the passage, put right: $x^2$']);
+        await h.plugin.copyAnnotationMarkdown(h.file.path, a()); assert.match(copied[1], /the passage, put right: \$x\^2\$/); assert.doesNotMatch(copied[1], /as scanned/);
+        // The dialog, from the card's "Quote edited" and from the menus: the reader's words to change, the source's beside them.
+        const opened = [], calls = []; h.plugin.requote = async (_file, row, text) => { calls.push([row.id, text]); };
+        QuoteModal.prototype.open = function () { opened.push(this); const el = h.dom.window.document.createElement('div'); h.dom.window.document.body.append(el); this.contentEl = el; this.modalEl = el; this.onOpen(); }; QuoteModal.prototype.close = function () { this.onClose(); };
+        card('a').querySelector('.annotator-quote-edited').click(); assert.equal(opened.length, 1);
+        const field = () => opened.at(-1).contentEl.querySelector('textarea'), button = text => [...opened.at(-1).contentEl.querySelectorAll('button')].find(el => el.textContent === text);
+        assert.equal(field().value, 'the passage, put right: $x^2$'); assert.equal(opened[0].contentEl.querySelector('.annotator-quote-original blockquote').textContent, 'the passage as scanned');
+        // Saved unchanged: nothing. Changed: the new words. Emptied: the dialog stays. The source's words typed back, or its button: the passage's own again.
+        button('Save').click(); assert.deepEqual(calls, []);
+        menu.items.find(item => item.title === 'Edit quote…').run(); field().value = '  better\nwords  '; button('Save').click(); assert.deepEqual(calls.pop(), ['a', 'better words']);
+        h.plugin.editQuote(h.file.path, a()); field().value = '   '; button('Save').click(); assert.ok(field(), 'an empty quote is not saved'); button('Cancel').click(); assert.deepEqual(calls, []);
+        h.plugin.editQuote(h.file.path, a()); field().value = 'the passage as scanned'; button('Save').click(); assert.deepEqual(calls.pop(), ['a', null]);
+        h.plugin.editQuote(h.file.path, a()); button("Use the source's words").click(); assert.deepEqual(calls.pop(), ['a', null]);
+        // A passage with no quote of the reader's: the dialog starts from the source's words and has nothing to put back.
+        h.plugin.editQuote(h.file.path, b()); assert.equal(field().value, 'another passage'); assert.equal(button("Use the source's words"), undefined); assert.equal(opened.at(-1).contentEl.querySelector('.annotator-quote-original'), null);
+        button('Save').click(); assert.deepEqual(calls, []);
+        delete h.plugin.requote;
+        // A stale card cannot rewrite an annotation that has since changed; the source's words put back leave the note as it was.
+        await h.plugin.requote(h.file.path, { ...a(), text: 'stale' }, 'never written'); assert.equal(h.contents.get(h.note.path), stored);
+        await h.plugin.requote(h.file.path, a(), null); assert.equal(h.contents.get(h.note.path), raw); assert.equal(h.plugin.ownQuote(h.file.path, a()), null);
     } finally { h.dispose(); }
 });

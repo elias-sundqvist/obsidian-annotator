@@ -123,6 +123,14 @@ Select text. A small bar appears with six inks and **Note**.
 - A selection may run over a page break in a PDF; it is one highlight.
 - In the sidebar, a card's quote takes you to the passage; its actions edit,
   reply, copy a link to the annotation, or delete. Deleting can be undone.
+- A quote can be put right. **Edit quote…**, in the menu of a card or of a
+  highlight, lets you correct what a scan misread, write a formula as
+  `$…$`, or keep only the words that matter. Cards, copies, summaries and
+  exported notes then show your words (as Markdown, so a formula reads as
+  one), search finds the passage by them too, and the card says "Quote
+  edited". The passage itself stays stored as the source has it: that is
+  what finds it again, and it is one press away. Changing the highlighted
+  words in the annotation note by hand does the same.
 - **Page notes** (the second tab) are notes about the whole source. One
   written while a PDF page or a book chapter is in view remembers it: its card
   says "Page 12" (or the chapter) and goes there, and in an exported PDF it

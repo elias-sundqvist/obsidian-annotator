@@ -9,6 +9,7 @@ import {
     update,
     remove,
     recolor,
+    requote,
     replaceFragment,
     replaceStoredString,
     type Annotation
@@ -69,6 +70,7 @@ export const logic = {
     update,
     remove,
     recolor,
+    requote,
     replaceFragment,
     replaceStoredString,
     createMany,

@@ -7,6 +7,7 @@ export {VideoView} from '../../src/video-view';
 
 export {SnapshotHost} from '../../src/snapshot';
 export {ReadingCopyModal} from '../../src/reading-copy';
+export {QuoteModal} from '../../src/quote-dialog';
 
 export {bindMarkdownLinks} from '../../src/markdown-links';
 

@@ -12,6 +12,7 @@ import {
 import { retainUpgradeBackup } from './upgrade-backup';
 import { LogicHost } from './logic-host';
 import { ReadingCopyModal } from './reading-copy';
+import { QuoteModal } from './quote-dialog';
 import { LegacyAnnotationView, LEGACY_VIEW } from './legacy-view';
 import { loadYouTubeTranscript, parseTranscript } from './video-transcript';
 import {
@@ -140,6 +141,10 @@ interface NoteState {
     records: Annotation[];
     error?: string;
     /** Blocks of the note that could not be read; while there are any, the readable annotations are shown and nothing is changed. */ problems?: NoteProblem[];
+    /** The reader's own quotes, by annotation: words put in place of a passage's, in the note or from a card. */ quotes?: Map<
+        string,
+        string
+    >;
 }
 interface RemoteCandidate {
     url: string;
@@ -325,6 +330,7 @@ export default class AnnotatorPlugin extends Plugin {
         update: (source: string, annotation: Annotation) => this.logic.call('update', source, annotation),
         remove: (source: string, id: string) => this.logic.call('remove', source, id),
         recolor: (source: string, id: string, ink: string) => this.logic.call('recolor', source, id, ink),
+        requote: (source: string, id: string, text: string | null) => this.logic.call('requote', source, id, text),
         replaceFragment: (source: string, id: string, from: string, to: string) =>
             this.logic.call('replaceFragment', source, id, from, to),
         replaceStoredString: (source: string, id: string, from: string, to: string) =>
@@ -1923,9 +1929,9 @@ export default class AnnotatorPlugin extends Plugin {
                     );
                 note = candidates[0] || null;
             }
-            const { records, problems } = note
+            const { records, problems, quotes } = note
                 ? await this.logic.call('readSome', await this.app.vault.read(note))
-                : { records: [], problems: [] };
+                : { records: [], problems: [], quotes: undefined };
             if (this.stopped || this.versions.get(pdf) !== generation) return;
             if ((collectionContext(pdf)?.note || this.associations[pdf]) !== associated)
                 throw new Error('The annotation collection changed while loading. Reopen its target to reconnect.');
@@ -1938,7 +1944,12 @@ export default class AnnotatorPlugin extends Plugin {
                     'The annotation note was replaced or its target changed while loading. Reopen its target to reconnect.'
                 );
             if (this.stopped || this.versions.get(pdf) !== generation) return;
-            this.notes.set(pdf, problems.length ? { note, records, problems } : { note, records });
+            this.notes.set(pdf, {
+                note,
+                records,
+                ...(problems.length ? { problems } : {}),
+                ...(quotes?.length ? { quotes: new Map(quotes) } : {})
+            });
             this.updateHosts(pdf);
             this.resumeElsewhere(pdf);
             this.refresh();
@@ -2304,18 +2315,20 @@ export default class AnnotatorPlugin extends Plugin {
         const menu = new Menu().setUseNativeMenu(false),
             quote = annotationQuote(annotation)?.exact,
             fail = (error: unknown) => this.fail(error);
-        let shown = quote;
-        try {
-            shown = (quote && this.hostFor(file)?.display?.(annotation)) || quote;
-        } catch {
-            shown = quote;
-        }
+        const shown = this.shownQuote(file, annotation);
         menu.addItem(item =>
             item
                 .setTitle(annotation.text?.trim() ? 'Edit note' : 'Add note')
                 .setIcon('pencil')
                 .onClick(() => this.editAnnotation(file, annotation))
         );
+        if (quote)
+            menu.addItem(item =>
+                item
+                    .setTitle('Edit quote…')
+                    .setIcon('text-cursor-input')
+                    .onClick(() => this.editQuote(file, annotation))
+            );
         menu.addItem(item =>
             item
                 .setTitle('Reply')
@@ -2408,6 +2421,63 @@ export default class AnnotatorPlugin extends Plugin {
         this.refresh();
     }
     /** Recolour a saved annotation directly; its comment, tags and anchors are untouched. */
+    /**
+     * A passage as the reader's cards, copies and exports show it: the reader's own quote when there is one, else
+     * the passage as the page reads. What is stored, and finds the passage again, is neither.
+     */
+    shownQuote(file: string, annotation: Annotation): string | undefined {
+        const stored = annotationQuote(annotation)?.exact;
+        if (!stored) return stored;
+        const own = this.ownQuote(file, annotation);
+        if (own) return own;
+        try {
+            return this.hostFor(file)?.display?.(annotation) || stored;
+        } catch {
+            return stored;
+        }
+    }
+    /** The words the reader put in place of a passage's, when they did. */
+    ownQuote(file: string, annotation: Annotation): string | null {
+        return this.notes.get(file)?.quotes?.get(annotation.id) || null;
+    }
+    /** Ask for a passage's words as the reader wants them shown, and write them. */
+    editQuote(file: string, annotation: Annotation) {
+        const stored = annotationQuote(annotation)?.exact;
+        if (!stored || this.damaged(file)) return;
+        let source = stored;
+        try {
+            source = this.hostFor(file)?.display?.(annotation) || stored;
+        } catch {
+            source = stored;
+        }
+        new QuoteModal(this.app, this.ownQuote(file, annotation), source.replace(/\s+/g, ' ').trim(), text => {
+            void this.requote(file, annotation, text);
+        }).open();
+    }
+    /** The reader's own words for a passage, written into its note; `null` puts the passage's words back. */
+    async requote(file: string, annotation: Annotation, text: string | null) {
+        if (this.busy || this.damaged(file)) return;
+        if (text !== null && !text.trim()) return;
+        if (text === null && !this.ownQuote(file, annotation)) return;
+        this.busy = true;
+        try {
+            const note = this.notes.get(file)?.note;
+            if (!note) throw new Error('Annotation note is unavailable.');
+            await this.rewrite(note, async source => {
+                if (this.stopped) throw new Error('Plugin was unloaded before the quote was written.');
+                const current = (await this.codec.readAll(source)).find(row => row.id === annotation.id);
+                if (JSON.stringify(current) !== JSON.stringify(annotation))
+                    throw new Error('Annotation changed externally; reopen it before editing its quote.');
+                return await this.codec.requote(source, annotation.id, text);
+            });
+            await this.loadNote(file);
+        } catch (error) {
+            this.fail(error);
+        } finally {
+            this.busy = false;
+            this.refresh();
+        }
+    }
     async recolor(file: string, annotation: Annotation, ink: Ink) {
         if (this.busy || ink === inkOf(annotation) || this.damaged(file)) return;
         this.busy = true;
@@ -3573,13 +3643,7 @@ export default class AnnotatorPlugin extends Plugin {
             this.selection?.exact ||
             annotationQuote(this.editing!.annotation)?.exact ||
             (region ? `Area on page ${region.page}` : figure ? areaWords(editing!.annotation) || 'Picture' : '');
-        if (editing) {
-            try {
-                quote = host.display?.(editing.annotation) || quote;
-            } catch {
-                /* Keep the stored quote. */
-            }
-        }
+        if (editing) quote = this.shownQuote(file!, editing.annotation) || quote;
         const live = () => !this.stopped && this.editMode && session === `${this.currentFile}:${this.editorSessionKey}`;
         this.floating = FloatingComposer.open({
             app: this.app,
@@ -3800,13 +3864,7 @@ export default class AnnotatorPlugin extends Plugin {
                     return null;
                 }
             },
-            quote: row => {
-                try {
-                    return host?.display?.(row) || null;
-                } catch {
-                    return null;
-                }
-            },
+            quote: row => this.shownQuote(file, row) || null,
             order: (a, b) => compareLocations(location(a), location(b))
         };
     }

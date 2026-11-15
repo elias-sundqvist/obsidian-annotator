@@ -1104,7 +1104,10 @@ export class AnnotationView extends ItemView {
                 tabindex: '0'
             }
         });
-        const matches = this.query ? searchAnnotations(records, this.query) : null;
+        // A passage is found by its own words and by the reader's quote of it.
+        const matches = this.query
+            ? searchAnnotations(records, this.query, Date.now(), row => (file && plugin.ownQuote(file, row)) || '')
+            : null;
         let visible = this.query
             ? records.filter(row => matches?.has(row.id)).map(row => threads.nodes.get(row.id)!)
             : threads.roots.filter(node => inTab(node, this.tab));
@@ -1174,15 +1177,9 @@ export class AnnotationView extends ItemView {
             const active = editing?.annotation.id === annotation.id,
                 stored = quoteOf(annotation)?.exact,
                 editingHere = composerOpen && active;
-            // What is shown reads as on the page; what is stored stays exactly as anchored.
-            let quote = stored;
-            if (stored) {
-                try {
-                    quote = host?.display?.(annotation) || stored;
-                } catch {
-                    quote = stored;
-                }
-            }
+            // What is shown reads as on the page, or as the reader rewrote it; what is stored stays exactly as anchored.
+            const own = stored ? plugin.ownQuote(file!, annotation) : null,
+                quote = stored ? plugin.shownQuote(file!, annotation) || stored : stored;
             const card = parent.createDiv({
                 cls: `annotator-native-card${active ? ' is-selected' : ''}${reply ? ' is-reply' : ''}${quote ? ' has-quote' : ''}${editingHere ? ' is-editing' : ''}`,
                 attr: { 'data-annotation-id': annotation.id }
@@ -1225,6 +1222,13 @@ export class AnnotationView extends ItemView {
                         .setIcon('pencil')
                         .onClick(() => plugin.editAnnotation(file!, annotation))
                 );
+                if (quote)
+                    menu.addItem(item =>
+                        item
+                            .setTitle('Edit quote…')
+                            .setIcon('text-cursor-input')
+                            .onClick(() => plugin.editQuote(file!, annotation))
+                    );
                 menu.addItem(item =>
                     item
                         .setTitle('Reply')
@@ -1411,13 +1415,18 @@ export class AnnotationView extends ItemView {
                 // The passage and the note are the source's and the reader's words: each runs in its own direction, whatever the interface's.
                 // A book's file breaks its lines where it likes; a quote is shown as running text, with a break only between paragraphs.
                 const excerpt = card.createEl('blockquote', {
-                    text: quote
-                        .split(/\r?\n[ \t]*\r?\n\s*/)
-                        .map(part => part.replace(/[ \t]*\r?\n[ \t]*/g, ' '))
-                        .join('\n\n'),
-                    cls: 'annotator-card-quote',
+                    cls: `annotator-card-quote${own ? ' is-own markdown-rendered' : ''}`,
                     attr: { tabindex: '0', role: 'button', 'aria-label': 'Go to highlighted passage', dir: 'auto' }
                 });
+                // The source's words are shown as words. The reader's own quote is their Markdown, as a note is: a formula reads as one.
+                if (own) this.renderComment(own, excerpt, notePath, component);
+                else
+                    excerpt.setText(
+                        quote
+                            .split(/\r?\n[ \t]*\r?\n\s*/)
+                            .map(part => part.replace(/[ \t]*\r?\n[ \t]*/g, ' '))
+                            .join('\n\n')
+                    );
                 // Screen readers should hear the passage itself, not the same label on every card.
                 excerpt.id = `${this.tabsId}-quote-${++this.quoteSerial}`;
                 excerpt.setAttribute('aria-labelledby', excerpt.id);
@@ -1443,6 +1452,17 @@ export class AnnotationView extends ItemView {
                         open();
                     }
                 };
+                if (own) {
+                    // Said once, quietly: these are the reader's words, and the source's are a press away.
+                    const edited = card.createEl('button', {
+                        text: 'Quote edited',
+                        cls: 'annotator-text-button annotator-quote-edited',
+                        attr: { type: 'button', 'aria-label': 'Quote edited. Show or change it.' }
+                    });
+                    edited.onclick = () => {
+                        if (current(edited)) plugin.editQuote(file!, annotation);
+                    };
+                }
                 if (quote.length > 280) {
                     excerpt.addClass('is-collapsed');
                     const expand = card.createEl('button', {

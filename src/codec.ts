@@ -15,6 +15,7 @@ import { createTypedAnnotation, deleteTypedAnnotation } from '../proofs/typed-cr
 import { displayText, readDisplayText } from '../proofs/display-text.mjs';
 // @ts-expect-error The proofs' JavaScript wrappers carry no type declarations.
 import { recolorJson } from '../proofs/reader.mjs';
+import { editedQuote, quoteText, withQuote } from './shown-quote';
 export interface Annotation {
     id: string;
     text: string;
@@ -71,6 +72,31 @@ function annotationOf(block: StoredBlock): Annotation {
 export function readAll(source: string): Annotation[] {
     return parseDocument(source).blocks.map((block: StoredBlock) => annotationOf(block));
 }
+/** The passage an annotation stores, as its visible line is written from it. */
+const storedQuote = (row: Annotation) =>
+    row.target?.flatMap(target => target.selector || []).find(selector => selector.type === 'TextQuoteSelector')?.exact;
+const visibleLine = (block: StoredBlock) => array(block.fields.display).join('\n');
+/**
+ * The readers' own quotes of a note (shown-quote.ts): for each annotation
+ * whose visible words are not its stored passage, its ID and those words.
+ * The first block of an ID speaks for it, as in reading.
+ */
+function quoteEdits(blocks: StoredBlock[]): [string, string][] {
+    const out: [string, string][] = [],
+        seen = new Set<string>();
+    for (const block of blocks) {
+        if (seen.has(block.id)) continue;
+        seen.add(block.id);
+        try {
+            const exact = storedQuote(annotationOf(block)),
+                edited = exact ? editedQuote(visibleLine(block), exact) : null;
+            if (edited !== null) out.push([block.id, edited]);
+        } catch {
+            /* A block that cannot be read has no quote to show. */
+        }
+    }
+    return out;
+}
 /** Something in a note that could not be read as an annotation, and the line it is on (from 1). */
 export interface NoteProblem {
     line: number;
@@ -83,9 +109,19 @@ export interface NoteProblem {
  * while there are problems the note is refused by every operation that would
  * change it, as before.
  */
-export function readSome(source: string): { records: Annotation[]; problems: NoteProblem[] } {
+export function readSome(source: string): {
+    records: Annotation[];
+    problems: NoteProblem[];
+    /** The readers' own quotes, by annotation ID; left out when there are none. */
+    quotes?: [string, string][];
+} {
+    const withQuotes = <T extends object>(result: T, blocks: StoredBlock[]): T & { quotes?: [string, string][] } => {
+        const quotes = quoteEdits(blocks);
+        return quotes.length ? { ...result, quotes } : result;
+    };
     try {
-        return { records: readAll(source), problems: [] };
+        const blocks: StoredBlock[] = parseDocument(source).blocks;
+        return withQuotes({ records: blocks.map(block => annotationOf(block)), problems: [] }, blocks);
     } catch (whole) {
         let parsed: { blocks: StoredBlock[]; diagnostics: NoteProblem[] };
         try {
@@ -112,7 +148,7 @@ export function readSome(source: string): { records: Annotation[]; problems: Not
             }
         }
         if (!problems.length) problems.push({ line: 1, message: String((whole as Error)?.message || whole) });
-        return { records, problems: problems.sort((a, b) => a.line - b.line) };
+        return withQuotes({ records, problems: problems.sort((a, b) => a.line - b.line) }, parsed.blocks);
     }
 }
 export function create(source: string, annotation: Annotation, settings?: Record<string, boolean>): string {
@@ -142,6 +178,25 @@ export function recolor(source: string, id: string, ink: string): string {
     if (!block) throw new Error('Annotation was removed externally; reload before recolouring.');
     const result = updateAnnotation(source, id, { json: recolorJson(block.fields.json, ink) });
     readAll(result);
+    return result;
+}
+/**
+ * Put the reader's own words in place of the passage an annotation shows, or
+ * (`null`) the stored passage back. Only the visible line's words change:
+ * the stored data, the words kept before and after the passage, the note and
+ * the tags are what they were, and the write is refused unless the annotation
+ * reads back exactly as it read before.
+ */
+export function requote(source: string, id: string, text: string | null): string {
+    const block: StoredBlock | undefined = parseDocument(source).blocks.find((row: { id: string }) => row.id === id);
+    if (!block) throw new Error('Annotation was removed externally; reload before editing its quote.');
+    const before = annotationOf(block),
+        exact = storedQuote(before);
+    if (!exact) throw new Error('This annotation has no quoted passage.');
+    const result = updateAnnotation(source, id, { display: withQuote(visibleLine(block), text, exact) });
+    const after = readAll(result).find(row => row.id === id);
+    if (JSON.stringify(after) !== JSON.stringify(before))
+        throw new Error("This annotation's quote cannot be rewritten in place.");
     return result;
 }
 /**
@@ -206,7 +261,11 @@ export function write(source: string, annotation: Annotation, settings?: Record<
             const suffix =
                 settings?.includePostfix !== false ? `%%POSTFIX%%${displayText((quote?.suffix || '').trim())}` : '';
             const mark = settings?.highlightHighlightedText !== false;
-            patch.display = `*${prefix}%%HIGHLIGHT%%${mark ? ' ==' : ''}${displayText((quote?.exact || '').trim())}${mark ? '== ' : ''}${suffix}*`;
+            // A reader's own quote outlives a passage that is anchored anew: it is theirs, not the source's.
+            const was = storedQuote(current),
+                edited = was ? editedQuote(visibleLine(block), was) : null,
+                words = edited !== null ? quoteText(edited) : displayText((quote?.exact || '').trim());
+            patch.display = `*${prefix}%%HIGHLIGHT%%${mark ? ' ==' : ''}${words}${mark ? '== ' : ''}${suffix}*`;
         }
     }
     const result = updateAnnotation(source, annotation.id, patch);

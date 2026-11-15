@@ -5,6 +5,13 @@ What changed for someone using Annotator. How to use each thing is in
 
 ## Unreleased
 
+- **Edit quote.** A passage's quoted words can be put right from the menu
+  of its card or highlight: a scan's misread letters, a formula written as
+  `$…$`, a passage cut down to what matters. Your cards, copies, summaries
+  and exported notes show your words, and search finds the passage by them.
+  The passage is still stored as the source has it, so it is found again
+  as before; words changed by hand in the annotation note are now shown
+  the same way.
 - In Live Preview, an annotation note now reads as passages, links, notes
   and tags: each annotation's stored data is folded to a small mark, and
   shown again when the cursor is in it. The file is not changed, and the
