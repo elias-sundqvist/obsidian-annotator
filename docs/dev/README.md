@@ -28,7 +28,9 @@ Where to start:
   (built as an export; as storage it was tried and not taken up).
 - [PDF_APPEARANCE.md](PDF_APPEARANCE.md): page colours and dark pages.
 - [SCAN_TEXT_DESIGN.md](SCAN_TEXT_DESIGN.md): recognising the text of
-  scanned PDFs (a design awaiting the owner's answer; nothing built).
+  scanned PDFs: the design, what was built on it and where it was tried.
+  [RECOGNITION_RELEASE.md](RECOGNITION_RELEASE.md): the files a release
+  must put up for it, and how.
 - [RELEASE_EVIDENCE_MATRIX.md](RELEASE_EVIDENCE_MATRIX.md) and
   [PARITY.md](PARITY.md): what was checked, version by version.
 

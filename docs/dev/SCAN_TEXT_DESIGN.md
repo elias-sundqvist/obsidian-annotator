@@ -628,16 +628,93 @@ One fault met on the way was the harness's, and was put right there: its
 stand-in for "does this file exist" fetched the whole file and never read
 it, which left the page without connections after a few large files.
 
-## 16. Not built yet
+## 16. Taken to release quality (2026-11-15)
 
-- Any language but English (each needs its data downloaded once, to pin its
-  checksum).
-- Pages that have some text of their own: `pageWords` and the checked logic
-  take the boxes of that text, but nothing gives them yet, so only pages
-  with no text are offered.
-- *Recognise again in another language* (the writer can take the addition
-  off again; nothing asks it to).
-- A list of the recogniser's files in the settings, with Remove.
-- Remembering the pages done if the app closes in the middle of a run: what
-  is done is written only when the run ends or is stopped.
-- The measurements of section 8 inside Obsidian and on a phone.
+The owner's standing rule for the project: implement, at high quality,
+without waiting for answers; only publishing stays with him. The choices
+the decision list of section 12 left open were therefore made here, and are
+recorded with what was built on them:
+
+| Open in section 12 | Chosen | Where it would be changed |
+| --- | --- | --- |
+| Recogniser | Tesseract, as `tesseract-wasm` 0.11.0 (section 14) | `src/scan-read.ts` |
+| How it arrives | The driving script in `main.js`; the engine and a language fetched on first use, pinned by checksum | `startRecogniser` in `src/main.ts`, `src/scan-manifest.ts` |
+| From where | This repository's release assets, tag `recognition-1` | `SCAN_FILES_FROM` |
+| Languages | English, French, German, Spanish, Swedish | `SCAN_LANGUAGES` |
+| Fixture | A generated scan | `test/support/fixtures/scanned-pages.swift` |
+| Asking the Obsidian team | Left to the owner; the question is written out | [RECOGNITION_RELEASE.md](RECOGNITION_RELEASE.md) |
+
+Built since section 15:
+
+- **Pages with a little text of their own** (300 letters at most: a stamp, a
+  header) are offered, and taken by default when a PDF has no page without
+  text. Where the page has its text comes from the PDF library's runs of
+  text (`ownTextBoxes`), and the checked sifting (`apart`, section 9) leaves
+  out what is read there again. Seen in Obsidian: a stamped scan's copy has
+  its stamp once.
+- **An interrupted run:** what has been read is written to the plugin's
+  folder every five pages or twenty seconds (`src/scan-pending.ts`) and let
+  go when the copy is written. The next run on that PDF in that language
+  takes those pages as read. The file is read back through a strict check.
+- **Another language:** the words read before are taken off the copy
+  (`withoutRecognisedText`) and the new ones written. Only a run that
+  reached its end changes the copy.
+- **The words of a marked area** (`recogniseArea`): the area's part of the
+  page is drawn at the same sharpness as a whole page, read, sifted, and the
+  words kept in the area's own details by a note operation that changes that
+  one value and reads everything else back (`keepAreaWords` in `codec.ts`).
+  This is the answer for PDFs whose own text is gibberish, and for figures
+  and tables on scans.
+- **The settings** list the recogniser's files with Remove.
+- **The release's files** are gathered and checked by
+  `tools/recognition-assets.mjs`; the upload is described, not done.
+
+Three faults were found by trying it in Obsidian, and are not in text
+recognition but in the reader's shared code. They are fixed here, each with
+a test that fails without its fix:
+
+1. **The first highlight on a source with no note yet could be refused**
+   ("The annotation note target changed. Your draft was retained."), on a
+   cold start. `main.ts`: every save asks `noteMatchesSource` right after
+   `ensureNote` has made the note, and that asks the note's properties,
+   which Obsidian has not indexed yet. A note this session made is now known
+   by what was written into it until it is indexed (`madeNotes`).
+2. **A source deleted and written again under its name stayed "deleted"**
+   for the session. `main.ts`: the vault's `delete` handler marks it, and
+   nothing looked again. A `create` handler now has it read anew.
+3. **A passage was lost when only the text around it changed**, though its
+   own words were still there. `pdf-annotation.ts` (`resolvePdfAnnotation`):
+   a passage that names its page is now also found where its words are on
+   that page exactly once.
+
+## 17. Where it was tried, in full
+
+| | Obsidian 1.15.1, desktop (a separate instance, a throwaway vault) | iOS WebKit in the Simulator (harness) | Chromium (harness) |
+| --- | --- | --- | --- |
+| The dialog; a run; the copy written; the original byte for byte unchanged | yes | yes | yes |
+| The copy opened: its pages have their text | yes | yes | yes |
+| A highlight on recognised words, the first one on a new note included | yes | not tried | yes |
+| A second run on the copy for the remaining pages | not tried | yes | not tried |
+| A stamped scan read around its stamp | yes | not tried | not tried |
+| Pages kept from an interrupted run taken as read (the kept file was written by hand, the app was not actually closed mid-run) | yes | not tried | not tried |
+| *Annotate the copy from now on*: the note points at the copy and the area made on the original is on it | yes | not tried | not tried |
+| Read again in another language (Swedish, then German); a highlight keeps its place | yes | not tried | not tried |
+| The words of a marked area read and kept, shown on its card | yes | not tried | not tried |
+| The recogniser's files listed and one removed (through the plugin, not by clicking in the settings window) | yes | not tried | not tried |
+
+The files were put into the plugin's folder by hand everywhere: nothing is
+at the address yet. **Not tried anywhere:** fetching; Stop in the middle of
+a long run; a long document; the settings rows clicked by hand; Obsidian on
+Android or iOS (the Android emulator's Obsidian could be reached, but the
+attempt to connect to it was refused by the permission system of the
+session that did this work, and was not pressed).
+
+## 18. Not built
+
+- A PDF whose pages carry a poor text layer from another program: text
+  cannot be taken out of a page by adding to the file. The area route above
+  is what there is for it.
+- Recognising a selection of pages again (reading again takes every
+  recognised page).
+- Vertical text, right-to-left scripts, sideways pages.
+- The measurements of section 8 on a long document and on a phone.

@@ -174,15 +174,16 @@ Cancel.
 
 ### Scanned PDFs: recognising the text
 
-**Recognise text…** (in the sidebar of a scan, its menu, or the command
-*Recognise text in this scanned PDF…*) reads the words on scanned pages and
-saves them in a copy, `<name> (searchable).pdf`, beside the PDF. The copy is a
-PDF with text: select, highlight, quote, find and export in it as in any
-other, here and in any PDF program.
+**Recognise text…** (in the sidebar of a PDF with scanned pages, its menu, or
+the command *Recognise text in this scanned PDF…*) reads the words on scanned
+pages and saves them in a copy, `<name> (searchable).pdf`, beside the PDF. The
+copy is a PDF with text: select, highlight, quote, find and export in it as in
+any other, here and in any PDF program.
 
-- **It asks first.** A dialog asks the language and the pages (this page, a
-  range, or every page that has no text) and says what it needs. Nothing is
-  read or fetched before its button is pressed.
+- **It asks first.** A dialog asks the language (English, French, German,
+  Spanish or Swedish) and the pages (this page, a range, or every page that
+  has no text) and says what it needs. Nothing is read or fetched before its
+  button is pressed.
 - **It runs on your device.** No page, picture or word is sent anywhere. A
   strip at the foot of the page says how far it is; **Stop** keeps the pages
   done. Running it again on the copy reads the pages still without text.
@@ -191,6 +192,18 @@ other, here and in any PDF program.
   document to the reader, so areas, drawings and page notes made before
   belong to it too; the closing message offers to point the PDF's annotation
   note at the copy.
+- **Pages with a stamp or a header.** A scan on which a library has set a
+  line of real text is still a scan. The dialog offers such pages (those with
+  only a little text of their own); what they have as text is left as it is
+  and the words around it are read, so nothing is in the copy twice.
+- **If the app is closed in the middle,** the pages read so far are kept on
+  the device. The next time you recognise that PDF in that language they are
+  not read again; the dialog says how many there are.
+- **Another language.** *Recognise text again in another language…* (the
+  sidebar's menu on a copy, or the command) takes the words read before out
+  of the copy and puts the new ones in. A highlight keeps its place where its
+  words still read the same; one whose words now read differently stays in
+  its note, without a place on the page. Stopping leaves the copy as it was.
 - **What to expect.** It reads print, not handwriting, on upright pages, in
   one language at a time. A full page takes some seconds (about six on a
   recent laptop), so a long scan takes a while; a phone is slower, and a copy
@@ -198,17 +211,26 @@ other, here and in any PDF program.
   read worse, and the closing message says how many pages were hard to read.
   A speck on the scan may come out as a stray full stop.
 
+**The words in a marked area.** An area's card has **Recognise its words…**
+in its menu. It reads the words in that area and keeps them with it: the card
+shows them, search finds the area by them, and they can be copied. This is
+for a figure, a table or a passage on a scan, and for a PDF whose own text
+comes out wrong (symbols and formulas whose font has no proper text behind
+it): mark the passage as an area and have its words read off the picture.
+
 **Network use.** The recogniser is not part of the plugin, which would
-otherwise be several megabytes larger for everyone. The first time, and only when
-you press **Download and recognise**, two files are fetched from this
+otherwise be several megabytes larger for everyone. The first time, and only
+when you press **Download and recognise**, files are fetched from this
 project's releases on GitHub (`github.com`, which hands the download to its
-file host `githubusercontent.com`): the recogniser (Tesseract, 1.8 MB) and the
-language's data (English, 3.0 MB). They are kept in the plugin's folder under
-`recognition` and checked against checksums written in the plugin's code
-before every use; a file that differs is deleted and refused. GitHub learns
-that a download happened, and nothing else. Where GitHub cannot be reached,
-the same two files put into that folder by hand (under the names
-[SECURITY.md](docs/SECURITY.md) gives) are accepted if their checksums match. No script is ever fetched.
+file host `githubusercontent.com`): the recogniser (Tesseract, 1.8 MB) and
+the data of the language you chose (0.7 to 3.0 MB). They are kept in the
+plugin's folder under `recognition` and checked against checksums written in
+the plugin's code before every use; a file that differs is deleted and
+refused. GitHub learns that a download happened, and nothing else. No script
+is ever fetched. The settings list the files that are on the device, with
+**Remove**. Where GitHub cannot be reached, the same files put into that
+folder by hand (under the names [SECURITY.md](docs/SECURITY.md) gives) are
+accepted if their checksums match.
 
 ### Export a PDF with its annotations
 
@@ -539,12 +561,12 @@ and the PDF export is read back with two independent PDF readers. See
   yet updated) on one page only.
 - A frame of a paused YouTube video includes the player's own controls; take
   it while the video plays.
-- Recognising the text of a scan: English only so far; pages that already
-  have some text (a stamp over a scanned page, or a poor text layer from
-  another program) are not offered; handwriting, sideways pages and vertical
-  text are not read; not offered on iOS and iPadOS before 16.4. On a strongly
-  tilted scan, Apple's PDF programs (Preview, Files) may give the copy's words
-  out of order; Obsidian does not.
+- Recognising the text of a scan: five languages so far; a PDF whose pages
+  carry a poor text layer from another program is not improved (mark the
+  passage as an area and have its words read); handwriting, sideways pages
+  and vertical text are not read; not offered on iOS and iPadOS before 16.4.
+  On a strongly tilted scan, Apple's PDF programs (Preview, Files) may give
+  the copy's words out of order; Obsidian does not.
 - A PDF placed on a Canvas is shown without its highlights; open it in a tab
   to see and make them.
 - Drawing is for PDFs; books have highlights, notes and picture notes, videos

@@ -5,17 +5,32 @@ What changed for someone using Annotator. How to use each thing is in
 
 ## Unreleased
 
-- **Scanned PDFs: recognise the text.** A PDF that is pictures of pages now
-  offers **Recognise text…**. It reads the words on your device and saves
-  them in a copy, `<name> (searchable).pdf`, beside the PDF, which is not
-  changed. In the copy the words can be selected, highlighted, quoted, found
-  and exported like any other PDF's, in Obsidian and in any PDF program. A
-  dialog asks first, in which language and on which pages; a strip says how
-  far it is, and Stop keeps the pages done. English so far.
+- **Scanned PDFs: recognise the text.** A PDF with scanned pages now offers
+  **Recognise text…**. It reads the words on your device and saves them in a
+  copy, `<name> (searchable).pdf`, beside the PDF, which is not changed. In
+  the copy the words can be selected, highlighted, quoted, found and exported
+  like any other PDF's, in Obsidian and in any PDF program. A dialog asks
+  first, in which language (English, French, German, Spanish or Swedish) and
+  on which pages; a strip says how far it is, and Stop keeps the pages done.
+  Pages with a library's stamp or a header over the scan are read around what
+  they have. If the app is closed in the middle, the pages read are kept for
+  the next run. A copy can be read again in another language.
+- **The words in a marked area.** An area's menu has **Recognise its
+  words…**: the words in the area are read off the picture and kept with it,
+  shown on its card, found by search, and can be copied. For figures, tables
+  and passages on a scan, and for PDFs whose own text comes out as gibberish.
 - The recogniser is not carried in the plugin. It is fetched the first time,
-  when you say so, from this project's releases on GitHub (4.8 MB with
-  English), kept in the plugin's folder and checked before every use. See
-  "Network use" under "Scanned PDFs" in the README.
+  when you say so, from this project's releases on GitHub (1.8 MB, and 0.7 to
+  3.0 MB for a language), kept in the plugin's folder and checked before every
+  use; the settings list what is there, with Remove. See "Network use" under
+  "Scanned PDFs" in the README.
+- The first highlight on a source that had no annotation note yet could be
+  refused right after Obsidian was started ("The annotation note target
+  changed. Your draft was retained."). It is saved now.
+- A PDF that was deleted and put back under its name (or replaced by a new
+  file of that name) can be annotated again without restarting.
+- A highlight keeps its place when the text around it changes and its own
+  words are still on its page exactly once.
 
 ## 0.3.1 (2026-11-13)
 

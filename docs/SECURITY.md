@@ -75,13 +75,20 @@ npm package `tesseract-wasm` 0.11.0), with a language's data (the npm
 packages `@tesseract.js-data/<language>` 1.0.0). Neither is carried in the
 plugin.
 
-- **What is fetched, and when.** Two files, only when the reader presses
-  **Download and recognise** in a dialog that names each with its size and
-  host: the engine (`tesseract-core-0.11.0.wasm`, 1,839,004 bytes) and a
-  language (`eng-1.0.0.traineddata.gz`, 2,952,873 bytes), from this
-  repository's release assets on `github.com`, which hands the download to
-  its file host (`githubusercontent.com`). Nothing is fetched at start, in
-  the background, or to look for a newer one.
+- **What is fetched, and when.** The engine and one language, only when the
+  reader presses **Download and recognise** in a dialog that names each with
+  its size and host, from this repository's release assets on `github.com`,
+  which hands the download to its file host (`githubusercontent.com`).
+  Nothing is fetched at start, in the background, or to look for a newer one.
+
+  | File | Bytes |
+  | --- | ---: |
+  | `tesseract-core-0.11.0.wasm` (the engine) | 1,839,004 |
+  | `eng-1.0.0.traineddata.gz` (English) | 2,952,873 |
+  | `fra-1.0.0.traineddata.gz` (French) | 707,406 |
+  | `deu-1.0.0.traineddata.gz` (German) | 1,333,102 |
+  | `spa-1.0.0.traineddata.gz` (Spanish) | 2,100,190 |
+  | `swe-1.0.0.traineddata.gz` (Swedish) | 2,503,095 |
 - **No script is fetched.** The JavaScript that drives the engine is part of
   `main.js` and is reviewed with it. What is fetched is the engine's
   WebAssembly and data.
@@ -110,11 +117,22 @@ plugin.
   It is as private as the PDF, and syncs with whatever syncs the vault.
 - **Files put there by hand** (where GitHub cannot be reached) are taken only
   if their checksums match; the plugin has no way to accept another file.
+- **What a run has read so far** is kept in the same folder
+  (`pending-<the PDF's fingerprint>-<language>.json`) until the copy is
+  written, so that an app closed in the middle loses little. It holds the
+  words of the pages read and where they are, and is as private as the PDF.
+  It is let go when the copy is written. Read back, it is checked piece by
+  piece and taken for nothing if it is not what the plugin writes.
+- **The words of a marked area** are read from the area's part of the page,
+  drawn on the device, and kept in the annotation note with the area; only
+  that one value of the annotation changes, and everything else is read back
+  as it was before anything is written.
+- **The settings** list each of the recogniser's files with its size and
+  whether it is on the device, with Remove.
 
 Known and not yet changed: the files are kept in the plugin's folder, so a
 tool that syncs that folder carries them to other devices, where they are
-checked again; there is no button yet to remove them (deleting the
-`recognition` folder does it).
+checked again.
 
 ## What is kept on the device outside the vault
 

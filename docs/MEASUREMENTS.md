@@ -88,7 +88,8 @@ What still runs on the interface's thread, and what it costs:
 
 Measured on 2026-11-14 with the recogniser this version uses (Tesseract as
 `tesseract-wasm` 0.11.0, English "best, integer" data), on a laptop with an
-Apple M5 Max. Not measured inside Obsidian, and not on Android.
+Apple M5 Max. Inside Obsidian only the fixture's two pages were timed; a
+long document was not, and nothing was measured on Android.
 
 | | |
 | --- | ---: |
@@ -102,6 +103,7 @@ Apple M5 Max. Not measured inside Obsidian, and not on Android.
 | Longest stretch the interface was held while a page was read | 15 ms |
 | The two scanned pages of the test fixture (80 and 45 words), in Node | 0.42 s, 0.22 s |
 | The same two pages through the whole path in iOS WebKit (Simulator) | 1.1 s for both |
+| The same two pages through the whole path in Obsidian 1.15.1 on the desktop | 1.3 s for both |
 
 Time goes with the number of words on a page, not with the size of its
 picture. The browser figures were taken in Chromium 156 with the window in
