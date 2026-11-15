@@ -1,4 +1,5 @@
 import type { Annotation } from './codec';
+import { styleOf } from './mark-style';
 // @ts-expect-error The proofs' JavaScript wrappers carry no type declarations.
 import { inkKey, inkShortcut } from '../proofs/reader.mjs';
 
@@ -50,9 +51,13 @@ export function inkLabel(ink: Ink, labels: InkLabels = {}): string {
     return labels[ink] || INK_NAMES[ink];
 }
 
-/** Shared decoration for every on-page mark, whichever reader painted it. */
-export function decorateMark(mark: HTMLElement, annotation: Annotation | undefined) {
+/**
+ * Shared decoration for every on-page mark, whichever reader painted it. A mark over a passage also says how the
+ * passage is marked (`data-annotator-style`: highlight, underline, strike-out, squiggly); an area or a picture has no such style.
+ */
+export function decorateMark(mark: HTMLElement, annotation: Annotation | undefined, passage = true) {
     mark.dataset.annotatorInk = inkOf(annotation);
+    if (passage) mark.dataset.annotatorStyle = styleOf(annotation);
     mark.classList.toggle('has-note', !!annotation?.text?.trim());
 }
 

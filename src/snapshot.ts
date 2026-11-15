@@ -1,4 +1,5 @@
 import { inkOf } from './ink';
+import { styleOf } from './mark-style';
 import { figureOf } from './area';
 import { MarkdownView, TFile } from 'obsidian';
 import { domRange, indexLayer } from './anchors';
@@ -235,16 +236,17 @@ export class SnapshotHost {
         this.paint();
         if (this.view.file) this.refreshEditors(this.view.file.path);
     }
-    editorRanges(raw: string): { id: string; from: number; to: number; ink?: string }[] {
+    editorRanges(raw: string): { id: string; from: number; to: number; ink?: string; style?: string }[] {
         if (raw !== this.raw) {
             this.sync(raw);
             this.resolve();
         }
-        return [...this.ranges].flatMap(([id, range]) =>
-            this.md
+        return [...this.ranges].flatMap(([id, range]) => {
+            const row = this.records.find(row => row.id === id);
+            return this.md
                 .sourceRanges(range.start, range.end)
-                .map(span => ({ id, ink: inkOf(this.records.find(row => row.id === id)), ...span }))
-        );
+                .map(span => ({ id, ink: inkOf(row), style: styleOf(row), ...span }));
+        });
     }
     status(id: string) {
         return this.statuses.get(id) || 'Loading source archive…';

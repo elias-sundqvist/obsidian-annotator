@@ -7,6 +7,7 @@ import { readPdfAnnotations, replacing, pdfDate, annotatePdf, PdfFile, PdfExport
 import { planImport, quadsRange, pageFraction, shownSize, nearestInk } from './.generated/readers/pdf-import.js';
 import { pagePoint, rangeQuads, planExport, HIGHLIGHT_RGB, LINE_RGB } from './.generated/readers/pdf-export.js';
 import { drawingOf } from './.generated/readers/drawing.js';
+import { MARK_STYLES, withStyle } from './.generated/readers/mark-style.js';
 
 // A two-page PDF annotated with Apple's PDFKit, which is what Preview writes with (see annotated-elsewhere.swift), and its pages' text as the PDF library reports it.
 const FIXTURE = new Uint8Array(readFileSync(new URL('./support/fixtures/annotated-elsewhere.pdf', import.meta.url)));
@@ -202,4 +203,15 @@ test('a line under or through words goes back out as the line it was, not as a h
     // Each has an appearance of its own, so readers that do not draw these themselves still show them.
     const written = new TextDecoder('latin1').decode(annotatePdf(pdf([]), plan.notes));
     assert.equal((written.match(/\/Subtype \/(Underline|StrikeOut|Squiggly) [^>]*\/AP << \/N \d+ 0 R >>/g) || []).length, 3);
+});
+
+test('a style chosen in the reader is the PDF mark the export writes: the tag the reader sets is the tag the export reads', () => {
+    const start = pageText(1).indexOf('repeated');
+    // Tags as the reader leaves them after a change of style: the user's own tags kept, one style tag at most.
+    const records = MARK_STYLES.map(style => ({ id: style, text: '', tags: withStyle(['idea', 'squiggly'], style), color: 'green', target: [{ selector: [{ type: 'TextQuoteSelector', exact: 'repeated' }] }] }));
+    const plan = planExport(records, new Map(records.map(each => [each.id, [{ page: 1, start, end: start + 8 }]])), number => GEOMETRY[number], { measure });
+    assert.deepEqual(plan.notes.map(note => note.style), [undefined, 'underline', 'strikeout', 'squiggly']);
+    // The style tag is said by the mark; the user's own tag stays in the comment.
+    assert.deepEqual(plan.notes.map(note => note.contents), ['#idea', '#idea', '#idea', '#idea']);
+    assert.deepEqual(readPdfAnnotations(annotatePdf(pdf([]), plan.notes)).found.map(each => each.kind), ['highlight', 'underline', 'strikeout', 'squiggly']);
 });

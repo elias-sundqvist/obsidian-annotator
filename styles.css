@@ -39,6 +39,19 @@ settings:
             - label: Off
               value: 0px
     -
+        id: annotator-line-thickness
+        title: Underlines, strike-outs and squiggly lines
+        description: How thick the line is at ordinary text sizes. Large text gets a thicker one.
+        type: variable-select
+        default: 2px
+        options:
+            - label: Fine
+              value: 1px
+            - label: Regular
+              value: 2px
+            - label: Bold
+              value: 3px
+    -
         id: annotator-heading-inks
         title: Ink colours
         description: By default every ink follows your theme's own colour palette. Set one here to override it.
@@ -174,6 +187,8 @@ body {
     --annotator-paper-text: #433422;
     /* Thickness of the line under highlights that carry a note; 0 to disable. */
     --annotator-note-underline: 2px;
+    /* The least thickness of an underline, a strike-out or a squiggly line; large text gets a thicker one. */
+    --annotator-line-thickness: 2px;
     /* Quoted passages in the sidebar. */
     --annotator-quote-font: var(--font-text);
     --annotator-quote-size: var(--font-ui-small);
@@ -249,6 +264,47 @@ body {
 .annotator-snapshot-highlight { background: rgba(var(--annotator-ink), var(--annotator-mark-opacity)); border-radius: 2px; transition: background-color .14s var(--annotator-ease); }
 .annotator-snapshot-highlight.is-hover { background: rgba(var(--annotator-ink), calc(var(--annotator-mark-opacity) + .22)); }
 
+/* ── Marks that are a line: underline, strike-out, squiggly ─────────────────
+   A passage tagged `underline`, `strike-out` or `squiggly` is marked with that line, not with a tint; the mark says
+   which in data-annotator-style. A line is thin: blended into the page as a highlight is, it would be too faint to
+   find. So these marks have a layer of their own, at full strength, in the ink deepened towards the page's text.
+   The button still lies over the words (they are what is pressed); ::after draws the line, at the heights the PDF
+   export draws it. A line whose passage has a note has a light wash of its ink behind the words.
+   (:where() keeps the rule for every line no more specific than the rules for one kind of line after it.) */
+.annotator-native-marks.annotator-line-marks { mix-blend-mode: normal !important; opacity: 1 !important; }
+.annotator-native-marks.annotator-line-marks .annotator-native-mark { border: 0; background: none; }
+.annotator-native-marks.annotator-line-marks .annotator-native-mark.has-note { border: 0; background: rgba(var(--annotator-ink), .13); }
+.annotator-native-marks.annotator-line-marks .annotator-native-mark:hover,
+.annotator-native-marks.annotator-line-marks .annotator-native-mark.is-hover,
+.annotator-native-marks.annotator-line-marks .annotator-native-mark.mobile-tap,
+.annotator-native-marks.annotator-line-marks .annotator-native-mark.is-active { background: rgba(var(--annotator-ink), .24); box-shadow: none; }
+.annotator-native-marks.annotator-line-marks .annotator-native-mark.is-flash { animation-name: annotator-line-flash; }
+@keyframes annotator-line-flash { 0%, 45% { background: rgba(var(--annotator-ink), .45); } 100% { background: rgba(var(--annotator-ink), .24); } }
+.annotator-line-marks .annotator-native-mark::after,
+.annotator-draft-marks:where([data-annotator-style]:not([data-annotator-style="highlight"])) .annotator-draft-mark::after,
+.annotator-selection-actions:where([data-annotator-style]:not([data-annotator-style="highlight"])) .annotator-ink-swatch::after {
+    content: ""; position: absolute; inset-inline: 0; bottom: 4.5%; height: max(var(--annotator-line-thickness), 7%); border-radius: 1px; pointer-events: none;
+    background: color-mix(in srgb, rgb(var(--annotator-ink)) 70%, var(--annotator-mark-shade, #000));
+}
+.annotator-line-marks .annotator-native-mark[data-annotator-style="strike-out"]::after,
+.annotator-draft-marks[data-annotator-style="strike-out"] .annotator-draft-mark::after,
+.annotator-selection-actions[data-annotator-style="strike-out"] .annotator-ink-swatch::after { bottom: 38.5%; }
+/* The squiggle is the line's colour seen through a wave: a mask, so that it takes any ink. */
+.annotator-line-marks .annotator-native-mark[data-annotator-style="squiggly"]::after,
+.annotator-draft-marks[data-annotator-style="squiggly"] .annotator-draft-mark::after,
+.annotator-selection-actions[data-annotator-style="squiggly"] .annotator-ink-swatch::after {
+    bottom: -2%; height: max(calc(var(--annotator-line-thickness) * 2.5), 17%); border-radius: 0;
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 5' width='10' height='5'%3E%3Cpath d='M0 2.5C1.25 .9 3.75 .9 5 2.5S8.75 4.1 10 2.5' fill='none' stroke='black' stroke-width='1.6'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 5' width='10' height='5'%3E%3Cpath d='M0 2.5C1.25 .9 3.75 .9 5 2.5S8.75 4.1 10 2.5' fill='none' stroke='black' stroke-width='1.6'/%3E%3C/svg%3E");
+    -webkit-mask-size: auto 100%; mask-size: auto 100%; -webkit-mask-repeat: repeat-x; mask-repeat: repeat-x; -webkit-mask-position: 0 50%; mask-position: 0 50%;
+}
+/* A reading copy open for editing marks the words themselves, so there the line is the text's own decoration. */
+.annotator-snapshot-highlight[data-annotator-style]:not([data-annotator-style="highlight"]) { background: none; text-decoration-color: rgb(var(--annotator-ink)); text-decoration-thickness: var(--annotator-line-thickness); text-underline-offset: .18em; }
+.annotator-snapshot-highlight[data-annotator-style]:not([data-annotator-style="highlight"]).is-hover { background: rgba(var(--annotator-ink), .24); }
+.annotator-snapshot-highlight[data-annotator-style="underline"] { text-decoration-line: underline; }
+.annotator-snapshot-highlight[data-annotator-style="strike-out"] { text-decoration-line: line-through; }
+.annotator-snapshot-highlight[data-annotator-style="squiggly"] { text-decoration-line: underline; text-decoration-style: wavy; }
+.annotator-native-hide-highlights .annotator-snapshot-highlight[data-annotator-style] { text-decoration-line: none; }
+
 /* ── Ink swatch (selection bar, composer, cards, legend) ────────────────── */
 .annotator-ink-swatch, button.annotator-ink-swatch {
     /* Sized through a variable and pinned, so themes that restyle every button cannot stretch a swatch. */
@@ -282,6 +338,27 @@ button.annotator-ink-swatch:focus-visible { outline: 2px solid var(--interactive
 }
 .annotator-selection-actions button.annotator-selection-note:hover { background: var(--annotator-hover); }
 .annotator-selection-note svg { width: var(--icon-s, 16px); height: var(--icon-s, 16px); fill: none; stroke: currentColor; stroke-width: var(--icon-stroke, 2px); stroke-linecap: round; stroke-linejoin: round; }
+/* The style of the mark: one button that shows the style in use and takes the next when pressed. */
+.annotator-selection-actions button.annotator-selection-style {
+    appearance: none; flex: none; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; min-height: 0; padding: 0; margin: 0; margin-inline-start: -4px;
+    border: 0; border-radius: var(--annotator-pill); box-shadow: none; background: transparent; color: var(--text-muted); cursor: pointer;
+}
+.annotator-selection-actions button.annotator-selection-style:hover { background: var(--annotator-hover); color: var(--text-normal); }
+.annotator-selection-style svg { width: var(--icon-s, 16px); height: var(--icon-s, 16px); }
+/* Heard, not seen: the style just chosen, for a screen reader. */
+.annotator-selection-said { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* With a line chosen, a swatch is that line in its ink, on a light wash of the ink where the words would be. */
+.annotator-selection-actions[data-annotator-style]:not([data-annotator-style="highlight"]) button.annotator-ink-swatch,
+.annotator-selection-actions[data-annotator-style]:not([data-annotator-style="highlight"]) button.annotator-ink-swatch:hover,
+.annotator-selection-actions[data-annotator-style]:not([data-annotator-style="highlight"]) button.annotator-ink-swatch.mobile-tap {
+    position: relative; border-radius: 3px !important; box-shadow: none; background: rgba(var(--annotator-ink), .2);
+}
+.annotator-selection-actions[data-annotator-style]:not([data-annotator-style="highlight"]) button.annotator-ink-swatch.is-current { box-shadow: 0 0 0 2px var(--annotator-swatch-ring, var(--annotator-raised)), 0 0 0 3.5px rgb(var(--annotator-ink)); }
+.annotator-selection-actions:where([data-annotator-style]:not([data-annotator-style="highlight"])) .annotator-ink-swatch::after { height: 19%; background: rgb(var(--annotator-ink)); }
+.annotator-selection-actions[data-annotator-style="underline"] .annotator-ink-swatch::after { bottom: 0; border-radius: 0 0 3px 3px; }
+.annotator-selection-actions[data-annotator-style="squiggly"] .annotator-ink-swatch::after { bottom: 0; height: 38%; }
+/* Too narrow for everything (a small phone): the word "Note" goes, its icon stays. */
+.annotator-selection-actions.is-tight button.annotator-selection-note > span { display: none; }
 
 /* ── Sidebar shell ──────────────────────────────────────────────────────── */
 .workspace-leaf-content[data-type="annotator-sidebar"] > .view-content { padding: 0; overflow: hidden; }
@@ -414,6 +491,12 @@ button.annotator-ink-swatch:focus-visible { outline: 2px solid var(--interactive
 .annotator-native-card.is-selected > .annotator-card-quote::before { width: 4px; }
 .annotator-ui .annotator-card-quote.is-static { cursor: default; color: var(--text-muted); }
 .annotator-ui .annotator-card-quote:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 3px; border-radius: 3px; }
+/* How the passage is marked shows on its quote: the words carry the line, in the annotation's ink. */
+.annotator-native-card[data-annotator-style]:not([data-annotator-style="highlight"]) > .annotator-card-quote,
+.annotator-editor-card[data-annotator-style]:not([data-annotator-style="highlight"]) > .annotator-card-quote { text-decoration-color: rgb(var(--annotator-ink)); text-decoration-thickness: max(1px, calc(var(--annotator-line-thickness) * .75)); text-underline-offset: .2em; }
+.annotator-native-card[data-annotator-style="underline"] > .annotator-card-quote, .annotator-editor-card[data-annotator-style="underline"] > .annotator-card-quote { text-decoration-line: underline; }
+.annotator-native-card[data-annotator-style="strike-out"] > .annotator-card-quote, .annotator-editor-card[data-annotator-style="strike-out"] > .annotator-card-quote { text-decoration-line: line-through; }
+.annotator-native-card[data-annotator-style="squiggly"] > .annotator-card-quote, .annotator-editor-card[data-annotator-style="squiggly"] > .annotator-card-quote { text-decoration-line: underline; text-decoration-style: wavy; }
 .annotator-card-quote.is-collapsed { display: -webkit-box; -webkit-line-clamp: var(--annotator-quote-lines); -webkit-box-orient: vertical; overflow: hidden; }
 .annotator-ui .annotator-quote-toggle { display: block; margin: 3px 0 0; margin-inline-start: 11px; }
 /* The reader's own quote of a passage is their Markdown, drawn as a note's is; the words stay the quote's. */
@@ -559,6 +642,7 @@ body:is(.annotator-compact, .annotator-compact-setting) { --annotator-quote-line
 /* Keyboard focus is always visible, including on controls whose host focus ring is reset above. */
 .annotator-ui :is(.annotator-text-button, button.annotator-head-name, button.annotator-tag, .annotator-native-actions > button):focus-visible,
 .annotator-selection-actions button.annotator-selection-note:focus-visible,
+.annotator-selection-actions button.annotator-selection-style:focus-visible,
 .annotator-video-panel .annotator-video-card > button:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
 
 /* ── Empty states ───────────────────────────────────────────────────────── */
@@ -591,7 +675,9 @@ body:is(.annotator-compact, .annotator-compact-setting) { --annotator-quote-line
 .is-mobile .annotator-ui .annotator-native-actions > button:not(.annotator-text-button),
 .is-mobile .annotator-ui .annotator-card-actions.is-confirming button { height: var(--input-height, 44px); }
 .is-mobile .annotator-selection-actions { top: auto !important; bottom: calc(80px + max(var(--safe-area-inset-bottom, 0px), env(safe-area-inset-bottom, 0px))); left: calc(var(--annotator-source-center, 50vw) - var(--annotator-source-width, 100vw) / 2 + 8px) !important; right: calc(100vw - var(--annotator-source-center, 50vw) - var(--annotator-source-width, 100vw) / 2 + 8px); margin-inline: auto; width: -webkit-fit-content; width: fit-content; max-width: calc(var(--annotator-source-width, 100vw) - 16px); padding: 8px 8px 8px 14px; --annotator-swatch-size: 26px; }
-.is-mobile .annotator-selection-inks { gap: 14px; padding-inline-end: 12px; }
+/* The swatches stand as far apart as the reader's width allows, so that the style control fits beside them on a narrow phone. */
+.is-mobile .annotator-selection-inks { gap: clamp(6px, calc((var(--annotator-source-width, 100vw) - 318px) / 5), 14px); padding-inline-end: 12px; }
+.is-mobile .annotator-selection-actions button.annotator-selection-style { width: 36px; height: 40px; margin-inline-start: -8px; }
 .is-mobile .annotator-selection-actions button.annotator-selection-note { height: 40px; padding: 0 14px 0 12px; }
 @media (prefers-reduced-motion: reduce) {
     .annotator-selection-actions, .annotator-editor-card, .annotator-native-marks .annotator-native-mark.is-flash { animation: none !important; }
@@ -877,6 +963,10 @@ body:is(.annotator-compact, .annotator-compact-setting) { --annotator-quote-line
 .annotator-draft-marks { position: fixed; inset: 0; z-index: calc(var(--layer-popover, 30) - 1); pointer-events: none; opacity: var(--annotator-mark-opacity); mix-blend-mode: multiply; }
 .theme-dark .annotator-draft-marks { mix-blend-mode: normal; }
 .annotator-draft-mark { position: fixed; border-radius: 2px; background: rgb(var(--annotator-ink)); }
+/* A passage that will be marked with a line shows that line while its note is written (the line itself is drawn with the page's line marks, above). */
+.annotator-draft-marks[data-annotator-style]:not([data-annotator-style="highlight"]) { opacity: 1; mix-blend-mode: normal; }
+.theme-dark .annotator-draft-marks[data-annotator-style]:not([data-annotator-style="highlight"]) { --annotator-mark-shade: #fff; }
+.annotator-draft-marks[data-annotator-style]:not([data-annotator-style="highlight"]) .annotator-draft-mark { background: none; }
 
 /* Phone: a sheet at the bottom of the screen, above the keyboard, with the passage quoted on top. */
 .annotator-floating-composer.is-sheet {
@@ -1205,6 +1295,7 @@ body:is(.annotator-compact, .annotator-compact-setting) { --annotator-quote-line
     .annotator-page-theme.is-current .annotator-page-swatch, .annotator-video-track .annotator-video-marker.is-selected { outline: 2px solid Highlight; outline-offset: 2px; }
     .annotator-video-playhead { background: CanvasText; }
     .annotator-native-areas .annotator-native-mark.annotator-area-mark { border-color: Highlight; }
+    .annotator-line-marks .annotator-native-mark::after { forced-color-adjust: none; background: Highlight; }
 }
 
 /* ── Video on a phone ───────────────────────────────────────────────────────
@@ -1578,6 +1669,8 @@ body.annotator-reading-fullscreen .workspace-leaf.mod-active > .workspace-leaf-c
     .annotator-native-marks .annotator-native-mark.is-active { background: rgb(var(--annotator-ink)); box-shadow: 0 0 0 1px rgb(var(--annotator-ink)); }
     @keyframes annotator-flash { 0%, 45% { background: rgba(var(--annotator-ink), .45); } 100% { background: rgb(var(--annotator-ink)); } }
     .annotator-ink-swatch { box-shadow: inset 0 0 0 1px var(--background-modifier-border-hover, rgba(128, 128, 128, .5)); }
+    .annotator-line-marks .annotator-native-mark::after,
+    .annotator-draft-marks:where([data-annotator-style]:not([data-annotator-style="highlight"])) .annotator-draft-mark::after { background: rgb(var(--annotator-ink)); }
     .annotator-page-swatch { border: 1px solid var(--background-modifier-border-hover, rgba(128, 128, 128, .5)); }
     .menu-item-icon[data-annotator-ink] svg { color: rgb(var(--annotator-ink)); }
     .annotator-native-marks .annotator-native-mark.annotator-figure-mark,

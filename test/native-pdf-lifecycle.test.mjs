@@ -126,6 +126,31 @@ test('a PDF highlight has one tooltip, the host\'s: the note when there is one, 
   assert.equal(mark.hasAttribute('title'),false);assert.equal(mark.getAttribute('aria-label'),'Open annotation: passage');assert.equal(mark.classList.contains('has-note'),false);
  }finally{h.close();}
 });
+test('a passage tagged underline, strike-out or squiggly is marked with that line: the mark says its style, and lines have a layer of their own over the tints',async()=>{
+ const h=host(document());try{h.page();
+  const alpha={id:'h',text:'',tags:['idea'],document:{documentFingerprint:'one'},target:[{selector:[{type:'TextQuoteSelector',exact:'Alpha',suffix:' passage'}]}]},line={...annotation,tags:['idea','underline']};
+  const region={id:'r',text:'',tags:['underline'],document:{documentFingerprint:'one'},target:[{source:'urn:x-pdf:one',selector:[{type:'FragmentSelector',conformsTo:'http://www.w3.org/TR/media-frags/',value:'page=1&xywh=percent:30,30,20,20'}]}]};
+  h.adapter.setAnnotations([alpha,line,region]);await h.flush();
+  const mark=id=>h.root.querySelector(`.annotator-native-mark[data-annotation-id="${id}"]`),layers=()=>h.root.querySelectorAll('.annotator-line-marks');
+  assert.equal(mark('h').dataset.annotatorStyle,'highlight');assert.equal(mark('a').dataset.annotatorStyle,'underline');
+  // The highlight is blended into the page; the line is in a layer of its own (a mark layer still, so hiding marks hides it), after the tints.
+  const tints=mark('h').parentElement,lines=mark('a').parentElement;assert.notEqual(tints,lines);assert.ok(lines.classList.contains('annotator-line-marks'));assert.ok(lines.classList.contains('annotator-native-marks'));assert.equal(tints.classList.contains('annotator-line-marks'),false);assert.equal(tints.nextElementSibling,lines);
+  // A line mark is the same button as a highlight: its ink, its note, its label.
+  assert.equal(mark('a').dataset.annotatorInk,'yellow');assert.equal(mark('a').classList.contains('has-note'),true);assert.equal(mark('a').getAttribute('aria-label'),'Saved comment');
+  // An area is a frame, not a passage: whatever its tags, it has no style.
+  assert.equal(mark('r').hasAttribute('data-annotator-style'),false);assert.ok(mark('r').closest('.annotator-native-areas'));
+  // Nothing changed: the page keeps its marks and its one line layer.
+  h.adapter.setAnnotations([alpha,line]);await h.flush();const kept=mark('a');h.adapter.schedule();await h.flush();assert.equal(mark('a'),kept);assert.equal(layers().length,1);
+  // The style is changed in the note: drawn the new way, in the line layer; letter case in the tag does not matter.
+  for(const [tags,style] of [[['idea','Strike-Out'],'strike-out'],[['squiggly'],'squiggly']]){h.adapter.setAnnotations([alpha,{...line,tags}]);await h.flush();assert.equal(mark('a').dataset.annotatorStyle,style);assert.ok(mark('a').parentElement.classList.contains('annotator-line-marks'));assert.equal(layers().length,1);}
+  // Back to a highlight: tinted with the others, and no line layer is left behind.
+  h.adapter.setAnnotations([alpha,{...line,tags:['idea']}]);await h.flush();assert.equal(mark('a').dataset.annotatorStyle,'highlight');assert.equal(mark('a').parentElement,mark('h').parentElement);assert.equal(layers().length,0);
+  // The page is drawn at another size: the line is made again, in one layer still.
+  h.adapter.setAnnotations([line]);await h.flush();const before=mark('a'),rectOf=h.dom.window.HTMLElement.prototype.getBoundingClientRect;h.dom.window.HTMLElement.prototype.getBoundingClientRect=()=>({left:0,top:0,width:200,height:200,right:200,bottom:200});
+  h.adapter.schedule();await h.flush();assert.notEqual(mark('a'),before);assert.equal(mark('a').dataset.annotatorStyle,'underline');assert.equal(layers().length,1);h.dom.window.HTMLElement.prototype.getBoundingClientRect=rectOf;
+  h.adapter.dispose();assert.equal(layers().length,0);
+ }finally{h.close();}
+});
 test('a marked area is drawn as a box in page percentages, counts as on its page, and is made by dragging in area mode',async()=>{
  const h=host(document());try{h.page();
   const region={id:'r',text:'![[Paper p1 area.png]]\n\nWhy this figure matters',document:{documentFingerprint:'one'},target:[{source:'urn:x-pdf:one',selector:[{type:'FragmentSelector',conformsTo:'http://www.w3.org/TR/media-frags/',value:'page=1&xywh=percent:30.6,2.41,39.85,20.59'}]}]};

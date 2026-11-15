@@ -6,6 +6,7 @@ export {AnnotationView} from '../../src/sidebar';
 export {VideoView} from '../../src/video-view';
 
 export {SnapshotHost} from '../../src/snapshot';
+export {LiveWebHost} from '../../src/live-web';
 export {ReadingCopyModal} from '../../src/reading-copy';
 export {QuoteModal} from '../../src/quote-dialog';
 

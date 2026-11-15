@@ -122,19 +122,27 @@ written until you have repaired it.
 
 ## Highlighting and notes
 
-Select text. A small bar appears with six inks and **Note**.
+Select text. A small bar appears with the mark style, six inks and **Note**.
 
-- A colour highlights the passage. `H` highlights in the last colour used,
+- A colour marks the passage. `H` marks it in the last colour used,
   `1`–`6` pick a colour, `A` opens a note on the passage.
 - To quote a passage in a note you are writing, hold `Shift`: `Shift+H`,
   `Shift+1`–`6` or a Shift-click on a colour highlights it and copies the
   highlight's link, ready to paste. The command **Highlight selection and
   copy its link** does the same and can be given a hotkey.
+- **Mark style.** The button at the start of the bar goes round Highlight,
+  Underline, Strike-out and Squiggly (`S` does the same); the inks then show
+  the line they will draw. The style is remembered, like the last colour.
+  It is kept as the annotation's tag (`underline`, `strike-out` or
+  `squiggly`), so it can be searched as `tag:underline`, and a device still
+  on an older version shows a highlight with that tag.
 - A note is written in Obsidian's own editor: links, tags, lists and
   formatting work as in any note. `Ctrl/Cmd+Enter` saves, `Escape` cancels.
 - A selection may run over a page break in a PDF; it is one highlight.
-- In the sidebar, a card's quote takes you to the passage; its actions edit,
+- In the sidebar, a card's quote takes you to the passage, drawn with its
+  line if it has one; its actions change the colour or the style, edit,
   reply, copy a link to the annotation, or delete. Deleting can be undone.
+  A highlight's menu on the page has the colours and the styles too.
 - A quote can be put right. **Edit quote…**, in the menu of a card or of a
   highlight, lets you correct what a scan misread, write a formula as
   `$…$`, or keep only the words that matter. Cards, copies, summaries and
@@ -365,7 +373,7 @@ PDF holds such annotations the sidebar says so and offers to **take them in**
 | In the PDF | Becomes |
 | --- | --- |
 | Highlight | A highlight of the words under it, in the nearest ink, with its comment as the note |
-| Underline, strike-out, squiggly | The same, tagged `underline`, `strike-out` or `squiggly` |
+| Underline, strike-out, squiggly | The same kind of mark: a passage tagged `underline`, `strike-out` or `squiggly` |
 | Rectangle, oval, text box | An area, with its text as the note |
 | Sticky note | A small area at its spot, with its text as the note |
 | Ink | A drawing |
@@ -376,8 +384,8 @@ link and export them. They keep the date they were made.
 
 - The PDF file is not changed, so its own copies stay visible on the page
   under yours. **Export PDF with annotations** writes a copy in which each is
-  there once, as it is in your notes now; a passage tagged `underline`,
-  `strike-out` or `squiggly` is written as that kind of mark.
+  there once, as it is in your notes now; an underline, a strike-out or a
+  squiggly line is written as that kind of mark.
 - Taking in again adds only what is new in the file.
 - Not taken: stamps, attached files, form fields, review states, and
   anything in an encrypted PDF. A mark over a scanned page (no text under
@@ -424,6 +432,9 @@ turns, **Find**, **Keep a picture** and **Reading controls**.
   with it, so it is found by search. A book's text has no fixed page, so it
   is the whole picture that is kept, not a rectangle; text in tables and
   captions is highlighted like any other text.
+- Passages of a book can be underlined, struck out or marked with a squiggly
+  line, as in a PDF; the line follows the text when it is made larger or
+  laid out again.
 
 The thin line at the bottom is how far you are through the book.
 
@@ -461,7 +472,8 @@ with its annotations on it.
 - **Highlights and notes.** Select text on the page; the bar offers the inks
   and **Note**. A highlight is painted in the page's own text and found again
   by its words when the page has changed around it. Click one to open its
-  note.
+  note. A live page has highlights only: an underline made elsewhere is
+  shown there as a highlight.
 - **Keep a picture with a note** (the picture button beside the address bar,
   or the *Mark an area* command): every picture on the page offers itself;
   click one, or Tab to it and press `Enter`; `Escape` leaves. What the Web
@@ -640,7 +652,7 @@ each with its own annotations.
 
 | Where | Keys |
 | --- | --- |
-| Text selected | `H` highlight, `1`–`6` ink, `A` note; with `Shift`, highlight and copy its link |
+| Text selected | `H` mark, `1`–`6` ink, `S` next mark style, `A` note; with `Shift`, mark and copy its link |
 | Writing a note | `Ctrl/Cmd+Enter` save, `Escape` cancel |
 | Marking an area | `Enter` place or keep, arrows move, `Shift`+arrows resize, `Escape` leave |
 | A saved area, focused | arrows move, `Shift`+arrows resize, `Alt` for fine steps |
@@ -730,8 +742,12 @@ and the PDF export is read back with two independent PDF readers. See
   reference is reading, not knowing: raised numbers need the PDF's links,
   and a reference list set in an unusual way is refused rather than guessed.
   It has been tried on desktop, not yet on a phone.
-- Drawing is for PDFs; books have highlights, notes and picture notes, videos
-  have notes and frame notes.
+- Drawing is for PDFs; books have highlights (and underlines, strike-outs and
+  squiggly lines), notes and picture notes, videos have notes and frame notes.
+- On a live web page in the Web viewer every passage is drawn as a highlight;
+  a reading copy of the page shows the lines. Annotator 0.3.1 and earlier
+  show an underline, a strike-out or a squiggly line as a highlight with that
+  tag.
 - A picture note in a book is not shown by Annotator 0.2 (it has no passage
   to anchor to there); the note itself is kept.
 - iOS and iPadOS: the reader's own code has been run in iOS WebKit in the

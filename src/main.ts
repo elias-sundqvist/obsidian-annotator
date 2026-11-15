@@ -70,6 +70,17 @@ import { pdfTextMemory } from './pdf-text-memory';
 import { htmlText, notAPage } from './web-fetch';
 import { DEFAULT_INK, INKS, INK_NAMES, inkLabel, inkLabels, inkOf, isInk, type Ink, type InkLabels } from './ink';
 import {
+    DEFAULT_STYLE,
+    MARK_STYLES,
+    STYLE_ICON_NAMES,
+    STYLE_NAMES,
+    isMarkStyle,
+    styleOf,
+    styleOfTag,
+    withStyle,
+    type MarkStyle
+} from './mark-style';
+import {
     AnnotationSearch,
     LibrarySwitcher,
     MigrationModal,
@@ -269,6 +280,8 @@ export default class AnnotatorPlugin extends Plugin {
     /** Ink of the open composer, the ink new highlights use, and the user's names for inks. */
     ink: Ink = DEFAULT_INK;
     lastInk: Ink = DEFAULT_INK;
+    /** How a new passage is marked: as a highlight, or with the line last chosen in the selection bar. */
+    lastStyle: MarkStyle = DEFAULT_STYLE;
     inkLabels: InkLabels = {};
     summary: SummaryOptions = { ...DEFAULT_SUMMARY };
     /** Sidebar display choices, applied as body classes so snippets and Style Settings can set them too. */
@@ -402,10 +415,11 @@ export default class AnnotatorPlugin extends Plugin {
         );
         this.selectionActions = new SelectionActions(
             this.app.workspace.containerEl.ownerDocument,
-            (capture, action, ink) => {
-                void this.beginCapture(capture, action, ink);
+            (capture, action, ink, style) => {
+                void this.beginCapture(capture, action, ink, style);
             },
-            () => ({ ink: this.lastInk, labels: this.inkLabels })
+            () => ({ ink: this.lastInk, labels: this.inkLabels, style: this.lastStyle }),
+            style => this.setMarkStyle(style)
         );
         this.register(() => this.selectionActions?.dispose());
         this.savedData = settingsObject(data);
@@ -436,6 +450,7 @@ export default class AnnotatorPlugin extends Plugin {
             this.savedData = { ...this.savedData, nativeLegacySnapshot: adopted.legacySnapshot };
         const inks = settingsObject(this.savedData.nativeInks);
         this.lastInk = isInk(inks.last) ? inks.last : DEFAULT_INK;
+        this.lastStyle = isMarkStyle(inks.style) ? inks.style : DEFAULT_STYLE;
         this.ink = this.lastInk;
         this.inkLabels = inkLabels(inks.labels);
         this.summary = summaryOptions(this.savedData.nativeSummary);
@@ -2235,7 +2250,12 @@ export default class AnnotatorPlugin extends Plugin {
         this.summary = summaryOptions(value);
         await this.persist();
     }
-    async beginCapture(capture: Capture, action: SelectionAction, ink?: Ink) {
+    /**
+     * Mark a selection: at once (`highlight`, and `highlight-link`, which then copies the new mark's link) or with
+     * the composer open for a note (`annotate`). The passage is marked in the given ink and style, else in those
+     * last chosen; both are remembered for the next one.
+     */
+    async beginCapture(capture: Capture, action: SelectionAction, ink?: Ink, style?: MarkStyle) {
         if (this.busy || this.stopped) return;
         this.selectionActions?.hide();
         this.preserveEdit();
@@ -2245,6 +2265,10 @@ export default class AnnotatorPlugin extends Plugin {
             this.lastInk = ink;
             this.queueDraftSave();
         }
+        // A live web page draws every mark as a highlight, so nothing made there is given another style.
+        const live = this.bindingFor(capture.file, capture)?.host instanceof LiveWebHost,
+            marked = live ? DEFAULT_STYLE : style || this.lastStyle;
+        if (!live) this.setMarkStyle(marked);
         try {
             const root = this.hostFor(capture.file, capture)?.view.contentEl,
                 picked = root?.ownerDocument.getSelection();
@@ -2264,8 +2288,9 @@ export default class AnnotatorPlugin extends Plugin {
         this.selection = capture;
         this.editing = null;
         this.comment = '';
-        this.tags = [];
-        this.tagInput = '';
+        // The style is the tag that says it: a line starts the new annotation's tags, where the composer shows it.
+        this.tags = withStyle([], marked);
+        this.tagInput = this.tags.join(', ');
         this.draft = null;
         this.editMode = true;
         if (action === 'highlight' || action === 'highlight-link') {
@@ -2310,7 +2335,7 @@ export default class AnnotatorPlugin extends Plugin {
         const changed = this.editing
             ? this.comment.trimEnd() !== (this.editing.annotation.text || '').trimEnd() ||
               JSON.stringify(this.tags) !== JSON.stringify(this.editing.annotation.tags)
-            : !!this.comment.trim() || this.tags.length > 0;
+            : !!this.comment.trim() || this.tags.some(tag => !styleOfTag(tag));
         if (!this.editMode || !changed) {
             this.cancelEdit();
             return;
@@ -2434,6 +2459,10 @@ export default class AnnotatorPlugin extends Plugin {
                     if (icon?.dataset) icon.dataset.annotatorInk = ink;
                 });
         }
+        if (quote) {
+            menu.addSeparator();
+            this.addStyleItems(menu, file, annotation);
+        }
         menu.addSeparator();
         // No confirmation here: the deletion notice offers Undo.
         menu.addItem(item =>
@@ -2464,6 +2493,57 @@ export default class AnnotatorPlugin extends Plugin {
         this.preserveEdit();
         this.queueDraftSave();
         this.refresh();
+    }
+    /** The style new passages are marked in; kept with the settings, as the last ink is. */
+    setMarkStyle(style: MarkStyle) {
+        if (style === this.lastStyle) return;
+        this.lastStyle = style;
+        this.queueDraftSave();
+    }
+    /** The four styles as menu items, the annotation's own checked. For a passage; an area or a picture has no style. */
+    addStyleItems(menu: Menu, file: string, annotation: Annotation) {
+        for (const style of MARK_STYLES)
+            menu.addItem(item =>
+                item
+                    .setTitle(STYLE_NAMES[style])
+                    .setIcon(STYLE_ICON_NAMES[style])
+                    .setChecked(styleOf(annotation) === style)
+                    .onClick(() => {
+                        void this.restyle(file, annotation, style);
+                    })
+            );
+    }
+    /**
+     * Mark a saved passage another way: as a highlight, or with an underline, a strike-out or a squiggly line. The
+     * style is one of its tags, so this is a change of tags, written the way an edit of them is; the note, the
+     * colour, the anchors and every other tag are untouched.
+     */
+    async restyle(file: string, annotation: Annotation, style: MarkStyle) {
+        if (this.busy || style === styleOf(annotation) || this.damaged(file)) return;
+        this.busy = true;
+        try {
+            const note = this.notes.get(file)?.note;
+            if (!note) throw new Error('Annotation note is unavailable.');
+            await this.rewrite(note, async source => {
+                if (this.stopped) throw new Error('Plugin was unloaded before the style was changed.');
+                const current = (await this.codec.readAll(source)).find(row => row.id === annotation.id);
+                if (JSON.stringify(current) !== JSON.stringify(annotation))
+                    throw new Error('Annotation changed externally; reopen it before changing its style.');
+                return await this.codec.update(source, { ...annotation, tags: withStyle(annotation.tags, style) });
+            });
+            await this.loadNote(file);
+            const stored = this.notes.get(file)?.records.find(row => row.id === annotation.id);
+            if (stored && this.editing?.annotation.id === annotation.id && !this.editMode) {
+                this.editing = { file, annotation: stored };
+                this.tags = [...stored.tags];
+                this.tagInput = stored.tags.join(', ');
+            }
+        } catch (error) {
+            this.fail(error);
+        } finally {
+            this.busy = false;
+            this.refresh();
+        }
     }
     /** Recolour a saved annotation directly; its comment, tags and anchors are untouched. */
     /**
@@ -3703,6 +3783,7 @@ export default class AnnotatorPlugin extends Plugin {
             paintsPassage: !editing,
             state: () => ({
                 ink: this.ink,
+                style: styleOf({ tags: this.tags }),
                 comment: this.comment,
                 tags: this.tagInput,
                 busy: this.busy,
@@ -3781,6 +3862,7 @@ export default class AnnotatorPlugin extends Plugin {
                 nativeInks: {
                     ...settingsObject(this.savedData.nativeInks),
                     last: this.lastInk,
+                    style: this.lastStyle,
                     labels: { ...this.inkLabels }
                 },
                 nativeSummary: { ...settingsObject(this.savedData.nativeSummary), ...this.summary },
