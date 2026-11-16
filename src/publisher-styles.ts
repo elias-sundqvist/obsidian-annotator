@@ -50,12 +50,18 @@ const backgroundGradients = new Set(
         ' '
     )
 );
-// History-dependent :visited stays unsupported; match static hyperlinks in the inert source.
+// History-dependent :visited stays unsupported (left out, not counted: see passingState); match static hyperlinks in the
+// inert source.
 const pseudo = new Set(
     'link any-link root first-child last-child only-child first-of-type last-of-type only-of-type empty nth-child nth-last-child nth-of-type nth-last-of-type lang dir'.split(
         ' '
     )
 );
+// See passingState().
+const passingStates = new Set('hover active focus focus-visible focus-within visited'.split(' '));
+// At-rules that change nothing in a book on screen, passed over without counting: @charset is how the sheet was read,
+// and @page sets the margins of a printed page (Calibre adds one to every book it makes), which no screen has.
+const unseen = new Set(['charset', 'page']);
 const inherited = new Set(
     'list-style list-style-type list-style-position list-style-image font font-language-override font-optical-sizing font-size-adjust font-variation-settings font-variant-emoji font-variant-ligatures font-variant-alternates font-variant-east-asian font-variant-position color font-family font-size font-style font-weight font-stretch font-variant font-feature-settings font-kerning line-height letter-spacing word-spacing writing-mode text-orientation text-combine-upright text-underline-position ruby-position ruby-align text-align text-align-last text-indent text-transform text-emphasis text-emphasis-style text-emphasis-color text-emphasis-position white-space overflow-wrap word-wrap word-break hyphens direction unicode-bidi'.split(
         ' '
@@ -314,7 +320,7 @@ export async function applyPublisherStyles(
                 } catch {
                     fail(conditions);
                 }
-            } else if (!(node.type === 'Atrule' && node.name.toLowerCase() === 'charset')) fail(conditions);
+            } else if (!(node.type === 'Atrule' && unseen.has(node.name.toLowerCase()))) fail(conditions);
         }
     };
     for (const node of sheetSet.active) {
@@ -789,7 +795,7 @@ export async function applyPublisherStyles(
                 for (const selector of rule.prelude.children) {
                     const specificity = selectorWeight(selector);
                     if (!specificity) {
-                        fail();
+                        if (!passingState(selector)) fail();
                         continue;
                     }
                     const selectorText = generate(selector);
@@ -979,6 +985,24 @@ function passiveValue(node: CssNode, pageTransform = false, urls?: ReadonlySet<s
             safe = false;
     });
     return safe;
+}
+/**
+ * Whether a selector the reader does not match asks only for a passing state: the pointer over an element, a press,
+ * focus, or a link visited before. The book is shown at rest and no history of visits is kept, so such a rule is left
+ * out; but the look it changes is only the look of that moment, and the look at rest is all there, so it is nothing
+ * the reader needs to be told about. A selector with anything else the reader cannot match is not one.
+ */
+function passingState(node: CssNode): boolean {
+    let passing = false,
+        other = false;
+    walk(node, n => {
+        if (n.type === 'PseudoClassSelector') {
+            const name = n.name.toLowerCase();
+            if (passingStates.has(name)) passing = true;
+            else if (!pseudo.has(name)) other = true;
+        } else if (['Raw', 'PseudoElementSelector', 'NestingSelector'].includes(n.type)) other = true;
+    });
+    return passing && !other;
 }
 function selectorWeight(node: CssNode): [number, number, number] | null {
     let safe = true;

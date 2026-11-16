@@ -10,6 +10,12 @@ What changed for someone using Annotator. How to use each thing is in
   and the notice stayed while the pointer rested over it. A save that
   finishes after you have begun another note is still said, in a notice
   that goes by itself.
+- A book Calibre made, a Kindle book (AZW3) or an EPUB, no longer says on
+  every page that styling was left out. The print page margins Calibre adds
+  and the colours a link takes while the pointer is over it or once visited
+  are not shown on screen, and are no longer counted. When something that
+  changes how a chapter looks is left out, the status line now says "Some of
+  the book's styling is not shown".
 
 ## 0.3.3 (2026-11-16)
 

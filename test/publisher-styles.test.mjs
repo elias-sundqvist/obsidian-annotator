@@ -332,9 +332,35 @@ test('source hyperlink pseudo-classes retain native matching and specificity wit
  const h=host('<head><style>:any-link{text-decoration:underline;color:teal}a:link{color:navy}a{color:gray}a.special{color:green}a:link span{font-weight:700}a:visited{color:red}</style></head><body><a href="next.xhtml"><span>Chapter link</span></a><a href="">Empty reference</a><a>Name only</a><a class="special" href="#note">Note link</a><span href="next.xhtml">Not an anchor</span></body>');try{
  const before=h.original.outerHTML,result=await applyPublisherStyles(book(),'chapter.xhtml',h.projection,()=>true),nodes=[...h.original.querySelectorAll('a')].map(n=>h.projection.elements.get(n));
  assert.equal(nodes[0].style.color,'navy');assert.equal(nodes[1].style.color,'navy');assert.equal(nodes[2].style.color,'gray');assert.equal(nodes[3].style.color,'green');assert.equal(nodes[0].style.textDecorationLine,'underline');assert.equal(nodes[0].querySelector('span').style.fontWeight,'700');
- assert.equal(h.projection.elements.get(h.original.querySelector('span[href]')).style.color,'');assert.equal(result.omitted,2,'visited history remains an explicit omission in both source passes');assert.equal(h.original.outerHTML,before);
+ assert.equal(h.projection.elements.get(h.original.querySelector('span[href]')).style.color,'');assert.ok(nodes.every(node=>node.style.color!=='red'),'visited history is not applied');assert.equal(result.omitted,0,'nor counted: links look as they do unvisited, which is all there');assert.equal(h.original.outerHTML,before);
  const range=h.original.ownerDocument.createRange();range.selectNodeContents(h.original.querySelector('a span'));assert.equal(h.projection.toOriginal(h.projection.toRendered(range)).toString(),'Chapter link');result.dispose();
  }finally{h.close();}
+});
+
+// Calibre writes these into every book it makes (EPUB and Kindle alike): its page margins, its own classes, and the
+// link states of the book it was given, renamed. The reader shows a book on screen, at rest, and keeps no history.
+const CALIBRE='@page{margin-bottom:5pt;margin-top:5pt}\n.calibre{display:block;font-size:1em;margin:0 5pt;padding:0}\n.calibre1{display:block;page-break-before:always;page-break-after:avoid;break-inside:avoid;text-align:center}\n.pcalibre:link{color:blue;text-decoration:none}\n.pcalibre1:visited{color:blue;text-decoration:none}\n.pcalibre2:hover{color:red}\na:hover{color:red}\na:active,a:focus,a:focus-visible,p:focus-within{color:orange}';
+test('what Calibre adds to a book is nothing to tell the reader about: page margins for print and the styles of passing link states are left out uncounted, its own classes applied',async()=>{
+ const h=host('<head><style>'+CALIBRE+'</style></head><body class="calibre"><h2 class="calibre1">Chapter I</h2><p class="calibre">Alice was beginning to get very tired, <a class="pcalibre pcalibre1 pcalibre2" href="next.xhtml">down the rabbit hole</a>.</p></body>');try{
+ const result=await applyPublisherStyles(book(),'part0001.xhtml',h.projection,()=>true),shown=selector=>h.projection.elements.get(h.original.querySelector(selector));
+ assert.equal(result.omitted,0);
+ assert.equal(shown('p').style.marginLeft,'5pt');assert.equal(shown('h2').style.textAlign,'center');assert.equal(shown('h2').style.getPropertyValue('page-break-before'),'always');assert.equal(shown('h2').style.getPropertyValue('break-inside'),'avoid');
+ assert.equal(shown('a').style.color,'blue','the link at rest is as the book has it');assert.equal(shown('a').style.textDecorationLine,'none');
+ result.dispose();
+ }finally{h.close();}
+ // The same, read from a stylesheet of its own, as Calibre links it.
+ const linked=host('<head><link rel="stylesheet" href="page_styles.css"><link rel="stylesheet" href="stylesheet.css"></head><body><p class="calibre">Words</p></body>');try{
+ const result=await applyPublisherStyles(book({'page_styles.css':'@page{margin-bottom:5pt;margin-top:5pt}','stylesheet.css':CALIBRE}),'part0001.xhtml',linked.projection,()=>true);
+ assert.equal(result.omitted,0);assert.equal(linked.projection.elements.get(linked.original.querySelector('p')).style.marginLeft,'5pt');result.dispose();
+ }finally{linked.close();}
+});
+
+test('a passing state is not counted only when it is all the reader cannot match, and other styling left out still is',async()=>{
+ for(const [css,why] of [['a:hover::after{color:red}','a pseudo-element as well'],['a:hover:not(.x){color:red}','another pseudo-class not matched'],['p{all:inherit;color:red}','the all property, which would change the look at rest'],['@font-feature-values Book{@styleset{fancy:1}}','an at-rule that is not about print']]){
+  const h=host(`<head><style>${css}</style></head><body><p><a href="next.xhtml">Link</a></p></body>`);try{
+  const result=await applyPublisherStyles(book(),'chapter.xhtml',h.projection,()=>true);assert.ok(result.omitted>0,why);result.dispose();
+  }finally{h.close();}
+ }
 });
 
 test('larger single fonts do not raise the cumulative mounted-chapter font budget',async()=>{

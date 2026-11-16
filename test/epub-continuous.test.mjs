@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {JSDOM} from 'jsdom';
 import JSZip from 'jszip';
-import {EpubView} from './.generated/epub-lifecycle.mjs';
+import {EpubView,STYLING_NOT_SHOWN} from './.generated/epub-lifecycle.mjs';
 import {create,readAll} from './.generated/codec.mjs';
 import * as published from './.generated/published-html-anchor.mjs';
 async function host(chapter=0,progression='ltr',{hiddenInitially=false,offset=0,fixed=false,flex=false,grid=false,publisher=false,readingMode='scroll'}={}){
@@ -163,6 +163,18 @@ test('chapter mounting applies publisher fonts and releases them when the readin
  const original=h.view.resolver.sections[0].root,style=original.ownerDocument.createElement('style');style.textContent='@font-face{font-family:Book;src:url(book.ttf)}p{font-family:Book;color:maroon}';original.ownerDocument.head.append(style);h.view.book.font=async()=>new Uint8Array([0,1,0,0]);
  await h.view.showChapter(0);assert.equal(faces.size,1);assert.equal(h.root(0).querySelector('p').style.color,'maroon');assert.match(h.root(0).querySelector('p').style.fontFamily,/annotator-publisher/);assert.equal(h.view.mounts.get(0).styles.omitted,0);
  await h.view.showChapter(4);assert.equal(faces.size,0);await h.view.showChapter(0);assert.equal(faces.size,1);h.view.dispose();assert.equal(faces.size,0);
+ }finally{h.dispose();}
+});
+test('the status line says some of the book\'s styling is not shown only for styling that changes how the chapter looks, not for what Calibre adds for print or for passing link states',async()=>{
+ const h=await host(0);
+ try{
+ const status=()=>h.view.statusEl.textContent,style=(index,css)=>{const doc=h.view.resolver.sections[index].root.ownerDocument,el=doc.createElement('style');el.textContent=css;doc.head.append(el);};
+ assert.equal(STYLING_NOT_SHOWN,"Some of the book's styling is not shown");
+ style(0,'@page{margin-bottom:5pt;margin-top:5pt}.pcalibre1:visited{color:blue}.pcalibre2:hover,a:hover{color:red}p{page-break-after:always;text-indent:1em}');
+ await h.view.showChapter(0);assert.equal(h.view.mounts.get(0).styles.omitted,0);assert.equal(h.root(0).querySelector('p').style.textIndent,'1em');
+ assert.equal(status(),'1 / 6 · c0.xhtml');assert.ok(!status().includes(STYLING_NOT_SHOWN),status());
+ style(3,'p{all:inherit;text-indent:1em}');
+ await h.view.showChapter(3);assert.ok(h.view.mounts.get(3).styles.omitted>0);assert.equal(status(),`4 / 6 · c3.xhtml · ${STYLING_NOT_SHOWN}`);
  }finally{h.dispose();}
 });
 

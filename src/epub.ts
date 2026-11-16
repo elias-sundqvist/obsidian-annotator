@@ -32,6 +32,11 @@ interface EpubCallbacks extends ReaderCallbacks {
 }
 export { openPublication, chapterUri, archivePath } from './epub-book';
 export const EPUB_VIEW = 'annotator-native-epub';
+/**
+ * What the status line adds while a chapter in view has styling of the book's own that the reader left out (see
+ * PublisherStyles.omitted): said plainly, as a fact about this book, not about its publisher or the reader.
+ */
+export const STYLING_NOT_SHOWN = "Some of the book's styling is not shown";
 interface EpubCapture extends SourceCapture {
     selectors: Selector[];
     source: string;
@@ -1082,7 +1087,7 @@ export class EpubView extends FileView {
         this.shownIndex = shown;
         this.select.value = String(shown);
         this.statusEl.setText(
-            `${shown + 1} / ${this.book.chapters.length} · ${this.book.chapters[shown].title}${omitted ? ' · Active/unsupported book content omitted' : ''}${stylesOmitted ? ' · Unsupported publisher styling omitted' : ''}`
+            `${shown + 1} / ${this.book.chapters.length} · ${this.book.chapters[shown].title}${omitted ? ' · Active/unsupported book content omitted' : ''}${stylesOmitted ? ` · ${STYLING_NOT_SHOWN}` : ''}`
         );
     }
     /** The chapter last named in the header and the status line. */

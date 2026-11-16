@@ -270,6 +270,46 @@ test('a font a KF8 book embeds is given to its stylesheet: unmasked and inflated
     try { assert.equal(await book.font('images/1'), null); assert.ok(await book.font('images/2')); } finally { globalThis.DecompressionStream = inflate; }
 });
 
+// The stylesheets Calibre puts in a KF8 book it makes from an EPUB, as in one made from a Project Gutenberg book: the
+// book's styles as classes of its own (with the link states renamed), a sheet with only its page margins, and its
+// defaults for lists and links. Every chapter links all three.
+const CALIBRE_SHEETS = [
+    '.calibre { display: block; font-size: 1em; margin: 0 5pt; padding: 0 }\n.calibre1 { display: block; font-size: 1.125em; font-weight: bold; text-align: center; margin: 2em 0 1em; page-break-before: always }\n.calibre2 { font-style: italic }\n.pcalibre:link { color: blue; text-decoration: none }\n.pcalibre1:visited { color: blue; text-decoration: none }\n.pcalibre2:hover { color: red }\n.secthead { all: inherit; display: block; font-weight: bold; margin: 1em 0 }',
+    '@page { margin-bottom: 5pt; margin-top: 5pt }',
+    'li { list-style-type: none }\na { text-decoration: none }\na:hover { color: red }'
+];
+const CALIBRE_HEAD = [1, 2, 3].map(flow => `<link href="kindle:flow:000${flow}?mime=text/css" rel="stylesheet" type="text/css"/>`).join('');
+test('a Kindle book Calibre made is not said to have styling left out for what Calibre adds; what is left out of the book\'s own still is', async () => {
+    const { book, sections } = await read(kf8({
+        files: [
+            XHTML('One', '\u0001<h2 class="calibre1" aid="3">Chapter I</h2>\u0001<p class="calibre" aid="4">Alice was beginning to get <span class="calibre2">very</span> tired, <a class="pcalibre pcalibre1 pcalibre2" href="kindle:pos:@two">on</a>.</p>', CALIBRE_HEAD),
+            XHTML('Two', '\u0001<h2 id="two" class="calibre1" aid="5">Chapter II</h2>\u0001<ul aid="6"><li>The pool of tears</li></ul>', CALIBRE_HEAD),
+            XHTML('End', '\u0001<div class="secthead" aid="7">The Full Project Gutenberg License</div>', CALIBRE_HEAD)
+        ],
+        flows: CALIBRE_SHEETS
+    }));
+    assert.equal(await book.text('flows/2.css'), CALIBRE_SHEETS[1]);
+    const win = new JSDOM('<body><main></main></body>').window, main = win.document.querySelector('main');
+    try {
+        const omitted = [];
+        for (const index of [0, 1, 2]) {
+            main.replaceChildren();
+            const projection = projectHtml(sections[index].root, main), shown = selector => projection.elements.get(sections[index].root.querySelector(selector));
+            const styles = await applyPublisherStyles(book, book.chapters[index].path, projection, () => true);
+            omitted.push(styles.omitted);
+            if (index === 0) {
+                assert.equal(shown('h2').style.textAlign, 'center'); assert.equal(shown('h2').style.getPropertyValue('page-break-before'), 'always');
+                assert.equal(shown('span').style.fontStyle, 'italic'); assert.equal(shown('a').style.color, 'blue', 'a link at rest, as the book has it');
+            }
+            if (index === 1) assert.equal(shown('li').style.listStyleType, 'none');
+            styles.dispose();
+        }
+        // The page margins are for print and the hover and visited colours for a passing moment: not counted. The
+        // licence's "all: inherit" would change how it looks at rest, so that chapter is still said to leave styling out.
+        assert.deepEqual(omitted.map(count => count > 0), [false, false, true]);
+    } finally { win.close(); }
+});
+
 // Shaped as Calibre writes a KF8 book: a cover page that shows the cover through an SVG drawing (a flow of its own,
 // put in the page by an <img>), and contents entries that give both a place in the text and a fragment.
 const CALIBRE_COVER = '<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="100%" height="100%" viewBox="0 0 800 1104" preserveAspectRatio="xMidYMid meet"><image width="800" height="1104" xlink:href="kindle:embed:0001?mime=image/jpeg"/></svg>';
