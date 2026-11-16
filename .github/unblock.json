@@ -1626,10 +1626,10 @@
     {
       "id": "release-034-approvals-keep-their",
       "title": "Release 0.3.4: approvals keep their meaning, and the fixes since 0.3.3",
-      "status": "todo",
+      "status": "done",
       "parent": "community",
       "dependsOn": [],
-      "notes": "next has, since 0.3.3: the saved notice, the Kindle footer, the footer counting only seen chapters, and approvedSources keeping 0.3.2's meaning (place: for read-in-place yeses, so 0.3.2 devices never take them as a yes to download into the vault). Publishing needs the owner's go."
+      "notes": "next has, since 0.3.3: the saved notice, the Kindle footer, the footer counting only seen chapters, and approvedSources keeping 0.3.2's meaning (place: for read-in-place yeses, so 0.3.2 devices never take them as a yes to download into the vault). Publishing needs the owner's go.\n\nDone 2026-11-16: Published 2026-11-16 (tag 0.3.4, release Latest, files identical to the tested build, master at the release commit); also has the Scroll layout fix"
     },
     {
       "id": "scroll-layout-reading-down-a-lon",
