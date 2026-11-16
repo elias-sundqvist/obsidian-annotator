@@ -1614,6 +1614,14 @@
       "parent": "community",
       "dependsOn": [],
       "notes": "GitHub issue 209 (2022): the bug form asks for the Annotator, Obsidian and installer versions, the device, the kind of source, steps, the note's properties and console errors; an idea form; and a link to the README. Templates are files in .github/ISSUE_TEMPLATE, not a setting.\n\nDone 2026-11-16: Built 2026-11-16: bug_report.yml, feature_request.yml, config.yml; take effect when on master"
+    },
+    {
+      "id": "answer-the-co-maintainer-offer-g",
+      "title": "Answer the co-maintainer offer (GitHub issue 415)",
+      "status": "todo",
+      "parent": "community",
+      "dependsOn": [],
+      "notes": "Owner, 2026-11-16: hold for now. He is working on the project again for a while and expects to lose steam after some weeks; then it would be good to have someone to hand it off to. His concern: supply-chain attacks. Recommended when the time comes: help through pull requests first, real work (device checks, triage), the Triage role later, write access only behind rulesets (PRs he approves, version tags and the release environment his alone, 2FA); keep the repository and its Obsidian listing under his account; keep it public, not private email."
     }
   ]
 }
