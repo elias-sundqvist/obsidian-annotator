@@ -1653,7 +1653,15 @@
       "status": "todo",
       "parent": "community",
       "dependsOn": [],
-      "notes": "The address route (recipes) always copies into the vault; only Obsidian's own Open with offers reading in place. Make it offer both on Obsidian 1.14.4+ on a computer, as the owner wants reading in place as the fundamental mode."
+      "notes": "The address route (recipes) always copies into the vault; only Obsidian's own Open with offers reading in place. Make it offer both on Obsidian 1.14.4+ on a computer, as the owner wants reading in place as the fundamental mode.\n\nAlso from the Android check, 2026-11-16: an address refuses FB2, FBZ, FB3, MOBI, PRC and AZW3 (KIND in src/open-with.ts; the desktop recipes register only PDF and EPUB) though the reader opens them; each address opens a new tab even for a file already open; Obsidian's button is 'Import into vault', not 'Import'; the settings say a book can be handed over from a share sheet, which Android can't; the address box in settings is too narrow."
+    },
+    {
+      "id": "phones-the-page-jumps-after-pick",
+      "title": "Phones: the page jumps after picking a highlight colour in a book",
+      "status": "todo",
+      "parent": "community",
+      "dependsOn": [],
+      "notes": "Android emulator, 0.3.4: EPUB about 195 px, FB2 401 px, AZW3 88 px; not in PDFs."
     }
   ]
 }
