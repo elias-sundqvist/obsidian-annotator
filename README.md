@@ -497,6 +497,39 @@ The original file is never changed: the copy is the original with the
 annotations added after it. Exporting again replaces the earlier copy.
 Encrypted PDFs cannot be exported this way; the reader says so.
 
+**With the annotations drawn in.** Some places that show a PDF do not show
+its annotations, or hide their notes in pop-ups nobody opens: a website's
+PDF viewer, a picture of a page, a print. **Export PDF with annotations drawn
+in (for websites and printing)** (command palette, or the sidebar's menu)
+saves `<name> (annotations drawn in).pdf`, in which they are part of the
+pages:
+
+- Highlights, underlines, strike-outs, squiggly lines, areas, drawings and
+  text boxes are drawn into the page, looking as they do in the export
+  above. The page's own text stays text: it can still be selected, found and
+  copied.
+- Each note is written beside its passage, in a column added at the right
+  edge of the page (the page is made wider; nothing on it moves). A small
+  number after the passage, or at the corner of an area, is the number of its
+  note in the column. Replies follow their note, marked `»`; notes about the
+  whole document go at the top of the column of the page they were written
+  on. A page whose notes do not all fit beside it is followed by a page of
+  notes, named "Notes to" that page, and every other page keeps its number.
+- Pages turned or cropped in the PDF are handled as they are shown.
+- Notes are written in Helvetica, which every PDF reader has. A line with
+  letters Helvetica lacks (Chinese, Arabic, Cyrillic, emoji, …) is drawn as
+  a picture in your system's font, with its words as invisible text over it,
+  so they are still found and copied.
+- The copy has none of the annotations this export draws, so nothing is
+  shown twice. Links, form fields and annotations another program wrote that
+  were not taken into your notes are kept.
+
+The copy was read back with pdf.js (what Firefox and Obsidian show PDFs with)
+and Apple's PDFKit (Preview's): the marks and notes are on the pages, no
+annotation is left, and the text is still read.
+
+![A page exported with its annotations drawn in, a column of notes beside it](docs/drawn-pdf-export.jpg)
+
 ### The works a page cites
 
 While you read a paper, the **Citations** view lists the works cited on the
@@ -984,21 +1017,32 @@ From the sidebar's menu:
   `{{tags}}`, `{{date}}`, `{{title}}`, `{{author}}`, `{{year}}`).
 - **Export as individual notes + Base**: one note per annotation with
   properties, and a Base that lists them.
-- **Export PDF with annotations** (PDFs).
+- **Export PDF with annotations** and **Export PDF with annotations drawn
+  in** (PDFs).
 - Hypothesis JSON, from the command palette, for other annotation tools.
 
 ### Publishing your annotations
 
 A site generator (Zola, Quartz, Hugo and the like) does not run Obsidian's
 plugins, so it shows an annotation note as it is stored: the data as a block
-of code, and a warning about an unknown language. Publish a summary instead:
-**Export annotations to a summary note** writes the passages and your notes
-as ordinary Markdown beside the annotation note. Under **Export style** in
-the settings choose **Plain block quotes** if your generator does not know
+of code, and a warning about an unknown language. Leave the annotation note
+itself out of what you publish, and publish one of these instead, or both.
+
+**The PDF, with your annotations drawn in.** For a PDF, run **Export PDF with
+annotations drawn in (for websites and printing)** and publish
+`<name> (annotations drawn in).pdf` in place of the PDF (or beside it, and
+link to it). A visitor sees your highlights and drawings on the pages and
+your notes beside them in whatever shows them the PDF: the browser's own
+viewer, the site's theme, a download. Export again after annotating more;
+the copy is replaced.
+
+**A summary note.** For any source (PDF, book, web page, video), **Export
+annotations to a summary note** writes the passages and your notes as
+ordinary Markdown beside the annotation note. Under **Export style** in the
+settings choose **Plain block quotes** if your generator does not know
 Obsidian's callouts, and turn **Link exports back to the passage** off, since
-those links lead into the annotation note. Then leave the annotation note
-itself out of what you publish. Each export writes a new summary note and
-overwrites nothing, so export again after annotating more.
+those links lead into the annotation note. Each export writes a new summary
+note and overwrites nothing, so export again after annotating more.
 
 ## On phones and tablets
 

@@ -682,7 +682,7 @@ export function winAnsi(text: string): number[] | null {
     return out;
 }
 /** WinAnsi codes as a PDF string literal: what is not plain ASCII as an octal escape, so the stream stays ASCII. */
-const ansiString = (codes: readonly number[]) =>
+export const ansiString = (codes: readonly number[]) =>
     `(${codes
         .map(code =>
             code === 40 || code === 41 || code === 92
@@ -750,10 +750,29 @@ function bounds(points: readonly number[], grow = 0): [number, number, number, n
 const form = (box: readonly number[], resources: string, content: string) =>
     `<< /Type /XObject /Subtype /Form /FormType 1 /BBox [${box.map(num).join(' ')}]${resources ? ` /Resources ${resources}` : ''} /Length ${content.length} >>\nstream\n${content}\nendstream`;
 
-/** The objects one annotation needs: its dictionary last, anything it refers to before it. `next()` hands out object numbers. */
-function noteObjects(note: PdfNote, page: PdfRef, next: () => number): { number: number; body: string }[] {
+/**
+ * How an annotation looks, as a form: the form's object, the box it is drawn in (its `/BBox`), the turn it is drawn
+ * with (its `/Matrix`), and the box on the page it fills (the annotation's `/Rect`). A sticky note has none: a PDF
+ * reader draws its icon.
+ */
+export interface NoteLook {
+    form: number;
+    bbox: readonly number[];
+    matrix: readonly number[];
+    rect: readonly number[];
+}
+/**
+ * The objects one annotation needs (its dictionary, numbered `own`, and anything it refers to), and how it looks.
+ * `next()` hands out object numbers.
+ */
+export function notePieces(
+    note: PdfNote,
+    page: PdfRef,
+    next: () => number
+): { objects: { number: number; body: string }[]; own: number; look?: NoteLook } {
     const out: { number: number; body: string }[] = [],
         own = next();
+    let drawn: NoteLook | undefined;
     const common = (subtype: string, rect: readonly number[], extra: string) => {
         const contents = (note.contents || '').replace(/\r\n?/g, '\n').trim();
         return (
@@ -767,6 +786,7 @@ function noteObjects(note: PdfNote, page: PdfRef, next: () => number): { number:
     const appearance = (box: readonly number[], resources: string, content: string) => {
         const number = next();
         out.push({ number, body: form(box, resources, content) });
+        drawn = { form: number, bbox: box, matrix: [1, 0, 0, 1, 0, 0], rect: box };
         return ` /AP << /N ${number} 0 R >>`;
     };
     if (note.kind === 'highlight') {
@@ -809,7 +829,7 @@ function noteObjects(note: PdfNote, page: PdfRef, next: () => number): { number:
                     ` /F 4 /QuadPoints [${quads.flat().map(num).join(' ')}]${look}`
                 )
             });
-            return out;
+            return { objects: out, own, look: drawn };
         }
         // Multiplied onto the page, so the words stay as dark as they were.
         const paint =
@@ -902,6 +922,7 @@ function noteObjects(note: PdfNote, page: PdfRef, next: () => number): { number:
             `${rgb(note.color)} RG 2 w 1 0 m 1 ${num(tall)} l S\n` +
             `0 0 ${num(wide)} ${num(tall)} re W n\n${words}\nQ`;
         const number = next();
+        drawn = { form: number, bbox: [0, 0, wide, tall], matrix: [...matrix, 0, 0], rect: [x0, y0, x1, y1] };
         out.push({
             number,
             body:
@@ -926,7 +947,7 @@ function noteObjects(note: PdfNote, page: PdfRef, next: () => number): { number:
         const [x, y] = note.at;
         out.push({ number: own, body: common('Text', [x, y - 20, x + 20, y], ' /F 28 /Name /Comment /Open false') });
     }
-    return out;
+    return { objects: out, own, look: drawn };
 }
 
 export const concat = (parts: Uint8Array[]) => {
@@ -938,6 +959,35 @@ export const concat = (parts: Uint8Array[]) => {
     }
     return out;
 };
+
+/**
+ * What a page lists among its annotations, each as written, minus what an earlier export put there and what
+ * `replaces` says is being written again.
+ */
+export function keptAnnotations(
+    file: PdfFile,
+    page: Dict,
+    index: number,
+    replaces?: (existing: Dict, file: PdfFile, page: number) => boolean
+): Uint8Array[] {
+    const kept: Uint8Array[] = [],
+        listed = file.resolve(page.get('Annots'));
+    if (listed instanceof List)
+        listed.items.forEach((item, i) => {
+            let ours = false;
+            try {
+                const existing = file.resolve(item),
+                    name = existing instanceof Dict ? existing.get('NM') : null;
+                ours =
+                    (name instanceof Uint8Array && readPdfText(name).startsWith(PDF_NOTE_PREFIX)) ||
+                    (existing instanceof Dict && !!replaces?.(existing, file, index));
+            } catch {
+                ours = false;
+            }
+            if (!ours) kept.push(listed.buf.subarray(listed.spans[i].start, listed.spans[i].end));
+        });
+    return kept;
+}
 
 /**
  * `source` with `notes` written into it. Annotations written by an earlier
@@ -971,29 +1021,14 @@ export function annotatePdf(
             page = loaded.value;
         if (!(page instanceof Dict) || loaded.stream)
             throw new PdfExportError('page', `Page ${index + 1} of the PDF is unreadable.`);
-        // What the page lists already, as written, minus what an earlier export put there.
-        const kept: Uint8Array[] = [],
-            listed = file.resolve(page.get('Annots'));
-        if (listed instanceof List)
-            listed.items.forEach((item, i) => {
-                let ours = false;
-                try {
-                    const existing = file.resolve(item),
-                        name = existing instanceof Dict ? existing.get('NM') : null;
-                    ours =
-                        (name instanceof Uint8Array && readPdfText(name).startsWith(PDF_NOTE_PREFIX)) ||
-                        (existing instanceof Dict && !!replaces?.(existing, file, index));
-                } catch {
-                    ours = false;
-                }
-                if (!ours) kept.push(listed.buf.subarray(listed.spans[i].start, listed.spans[i].end));
-            });
+        const kept = keptAnnotations(file, page, index, replaces);
         // Each annotation's own dictionary is the last of its objects; those are what the page lists.
         const mine: number[] = [];
         for (const note of list) {
-            const made = noteObjects(note, ref, next);
-            for (const object of made) objects.push({ number: object.number, gen: 0, body: ascii(object.body) });
-            mine.push(made[made.length - 1].number);
+            const made = notePieces(note, ref, next);
+            for (const object of made.objects)
+                objects.push({ number: object.number, gen: 0, body: ascii(object.body) });
+            mine.push(made.own);
         }
         // The page as written, without its old /Annots entry, with the new list before its end.
         const raw = page.buf.subarray(page.start, page.end),

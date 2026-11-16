@@ -29,6 +29,7 @@ import {
 import { installCollectionWorkspace, retainCollectionState } from './collection-workspace';
 import { VideoView, VIDEO_VIEW } from './video-view';
 import { annotatePdf, PdfExportError } from './pdf-write';
+import { canvasPictures, flattenPdf, type FlattenResult } from './pdf-flatten';
 import { searchablePdf, recognisedPages, withoutRecognisedText } from './pdf-searchable';
 import { Recogniser, recogniserAvailable } from './scan-engine';
 import { fetchFile, fetchSummary, heldFile, missingFiles, ScanFileError, type ScanFile } from './scan-files';
@@ -1179,6 +1180,13 @@ export default class AnnotatorPlugin extends Plugin {
             name: 'Export PDF with annotations',
             callback: () => {
                 void this.exportAnnotatedPdf().catch(error => this.fail(error));
+            }
+        });
+        this.addCommand({
+            id: 'export-drawn-pdf',
+            name: 'Export PDF with annotations drawn in (for websites and printing)',
+            callback: () => {
+                void this.exportAnnotatedPdf(this.currentFile, true).catch(error => this.fail(error));
             }
         });
         this.addCommand({
@@ -6585,8 +6593,12 @@ export default class AnnotatorPlugin extends Plugin {
      * annotations (highlights with their notes, boxes around areas, sticky
      * notes), for any PDF reader. The original file is not changed; the copy
      * is the original's bytes followed by an update, saved beside it.
+     *
+     * With `drawn`, the annotations are drawn into the pages instead and the
+     * notes written beside them (`pdf-flatten.ts`), for where annotations are
+     * not shown: a website, a browser's PDF viewer, a print.
      */
-    async exportAnnotatedPdf(key: string | null = this.currentFile) {
+    async exportAnnotatedPdf(key: string | null = this.currentFile, drawn = false) {
         const host: unknown = key ? this.bindingFor(key)?.host : undefined,
             source = host instanceof NativePdf ? host.view.file : null;
         if (!(host instanceof NativePdf) || !(source instanceof TFile) || source.extension.toLowerCase() !== 'pdf') {
@@ -6597,7 +6609,10 @@ export default class AnnotatorPlugin extends Plugin {
             new Notice('Still saving the last change; export again in a moment.');
             return;
         }
-        const working = new Notice('Writing annotations into a copy of the PDF…', 0);
+        const working = new Notice(
+            drawn ? 'Drawing annotations into a copy of the PDF…' : 'Writing annotations into a copy of the PDF…',
+            0
+        );
         try {
             const plan = await host.exportPlan(),
                 original = new Uint8Array(await this.app.vault.readBinary(source));
@@ -6610,7 +6625,8 @@ export default class AnnotatorPlugin extends Plugin {
                 );
                 return;
             }
-            let written: Uint8Array;
+            let written: Uint8Array,
+                flat: FlattenResult | null = null;
             // An annotation that was taken into the notes from this very file is written from the notes; the one the file had is left out, so it is there once.
             const taken = new Set<string>();
             for (const row of this.notes.get(key!)?.records || []) {
@@ -6618,7 +6634,14 @@ export default class AnnotatorPlugin extends Plugin {
                 if (typeof from === 'string' && from) taken.add(from);
             }
             try {
-                written = annotatePdf(original, plan.notes, plan.pages, replacing(taken));
+                if (drawn) {
+                    flat = flattenPdf(original, plan.notes, {
+                        pages: plan.pages,
+                        replaces: replacing(taken),
+                        pictures: canvasPictures(host.view.containerEl.ownerDocument)
+                    });
+                    written = flat.bytes;
+                } else written = annotatePdf(original, plan.notes, plan.pages, replacing(taken));
             } catch (error) {
                 if (error instanceof PdfExportError) {
                     new Notice(`${error.message} Nothing was exported.`, 10000);
@@ -6628,7 +6651,7 @@ export default class AnnotatorPlugin extends Plugin {
             }
             // The export of a PDF starts with that PDF's own bytes. A file of the export's name that does is an earlier export, and is replaced; anything else is left alone.
             const folder = source.parent?.path && source.parent.path !== '/' ? `${source.parent.path}/` : '',
-                base = `${folder}${this.sourceStem(source)} (annotated)`;
+                base = `${folder}${this.sourceStem(source)} (${drawn ? 'annotations drawn in' : 'annotated'})`;
             let path = `${base}.pdf`,
                 target: TFile | null = null;
             for (let copy = 2; ; copy++) {
@@ -6654,10 +6677,12 @@ export default class AnnotatorPlugin extends Plugin {
             const count = plan.notes.length,
                 left = plan.skipped.length,
                 boxed = plan.boxed || 0;
+            const notPlaced = left ? ` ${left} could not be placed and ${left === 1 ? 'was' : 'were'} left out.` : '';
+            const said = flat
+                ? `${count} ${count === 1 ? 'annotation' : 'annotations'} drawn into ${saved.path}${flat.notes ? `, with ${flat.notes === 1 ? 'its note' : `${flat.notes} notes`} beside ${flat.widened === 1 ? 'the page' : 'the pages'}` : ''}.${flat.added ? ` ${flat.added === 1 ? 'A page of notes was' : `${flat.added} pages of notes were`} added after a page whose notes did not fit beside it.` : ''}${notPlaced}${boxed ? ` ${boxed === 1 ? 'A text box has' : `${boxed} text boxes have`} letters the standard PDF font does not, so ${boxed === 1 ? 'it is' : 'they are'} drawn as a frame with the words beside the page.` : ''}${flat.leftOut ? ` ${flat.leftOut === 1 ? 'A note has' : `${flat.leftOut} notes have`} letters that could not be drawn; they are shown as […].` : ''}`
+                : `${count} ${count === 1 ? 'annotation' : 'annotations'} written into ${saved.path}.${notPlaced}${boxed ? ` ${boxed === 1 ? 'A text box has' : `${boxed} text boxes have`} letters the standard PDF font does not, so ${boxed === 1 ? 'it is' : 'they are'} written as a frame with the words as its comment.` : ''}`;
             const message = createFragment(fragment => {
-                fragment.createDiv({
-                    text: `${count} ${count === 1 ? 'annotation' : 'annotations'} written into ${saved.path}.${left ? ` ${left} could not be placed and ${left === 1 ? 'was' : 'were'} left out.` : ''}${boxed ? ` ${boxed === 1 ? 'A text box has' : `${boxed} text boxes have`} letters the standard PDF font does not, so ${boxed === 1 ? 'it is' : 'they are'} written as a frame with the words as its comment.` : ''}`
-                });
+                fragment.createDiv({ text: said });
                 const open = fragment.createEl('button', { text: 'Open the copy', attr: { type: 'button' } });
                 open.style.marginTop = '6px';
                 open.onclick = () => this.openMade(saved);

@@ -61,6 +61,11 @@ Some checks are made by hand and are not part of `npm test`:
 - `test/support/searchable-copy-check.mjs` writes the searchable copy of the
   scanned fixture and has pdf.js (as Obsidian ships it) and Apple's PDFKit
   read it back. The suite pins the copy they were given by its checksum.
+- `test/support/drawn-copy-check.mjs` draws annotations into a copy of a
+  fixture (a cropped page, a turned page) as **Export PDF with annotations
+  drawn in** does, and has pdf.js (as Obsidian ships it) and Apple's PDFKit
+  (`fixtures/render-pdf.swift`, which also draws each page to a PNG) read it
+  back.
 - `test/support/kindle-real-check.mjs` opens Kindle books you give it (from
   Calibre, a shop, Kindle tools) and says whether every contents entry, link
   and picture in them is there. The suite has four books Calibre made, in

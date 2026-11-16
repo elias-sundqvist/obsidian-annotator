@@ -129,7 +129,7 @@ export function glyphlessFont(): Uint8Array {
     return Uint8Array.from(font);
 }
 
-const stream = (dict: string, data: Uint8Array) => {
+export const stream = (dict: string, data: Uint8Array) => {
     const packed = deflate(data);
     return concat([
         ascii(`<< ${dict} /Filter /FlateDecode /Length ${packed.length} >>\nstream\n`),
@@ -138,7 +138,7 @@ const stream = (dict: string, data: Uint8Array) => {
     ]);
 };
 /** The objects of the font, in the numbers `next` hands out; the first is the font a page names. */
-function fontObjects(next: () => number): { font: number; objects: PdfObject[] } {
+export function fontObjects(next: () => number): { font: number; objects: PdfObject[] } {
     const font = next(),
         descendant = next(),
         descriptor = next(),
@@ -324,7 +324,7 @@ const entry = (dict: Dict, key: string) => {
     return span ? dict.buf.subarray(span.start, span.end) : null;
 };
 /** A dictionary as written, without `drop`, with `add` before its end. */
-function rewritten(dict: Dict, drop: readonly string[], add: Uint8Array[]): Uint8Array {
+export function rewritten(dict: Dict, drop: readonly string[], add: Uint8Array[]): Uint8Array {
     const spans = drop
         .map(key => dict.spans.get(key))
         .filter((span): span is { start: number; end: number } => !!span)
@@ -339,7 +339,7 @@ function rewritten(dict: Dict, drop: readonly string[], add: Uint8Array[]): Uint
     return concat([...parts, ...add, ascii(' >>')]);
 }
 /** What a page says of itself or, failing that, what the nodes above it in the page tree say for it. */
-function inherited(file: PdfFile, page: Dict, key: string): Value {
+export function inherited(file: PdfFile, page: Dict, key: string): Value {
     let node: Value = page;
     for (let depth = 0; node instanceof Dict && depth < 64; depth++) {
         const value = file.resolve(node.get(key));
