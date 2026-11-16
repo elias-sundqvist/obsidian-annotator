@@ -5,6 +5,14 @@ What changed for someone using Annotator. How to use each thing is in
 
 ## Unreleased
 
+- Reading a book in the Scroll layout, a long chapter after another long
+  one can be read to its end again. A screen or so in, the view jumped back
+  to the chapter's start, again and again (in "Alice's Adventures in
+  Wonderland", in Chapter II and in Chapter XII). Since 0.3.0 the reader
+  let go of the chapter far above and put the text back where it was, but
+  took the browser pulling the scroll back, as the content grew shorter,
+  for the reader scrolling. The text now stays exactly where it was, in
+  vertical writing too.
 - Saving a note no longer puts "Annotation saved to Markdown." in the
   corner: the highlight on the page and its opened card already show it,
   and the notice stayed while the pointer rested over it. A save that

@@ -34,6 +34,71 @@ test('prepending and releasing distant chapters preserve the viewport without ca
  h.view.updateCurrentChapter();await h.view.expandWindow(h.view.epoch);assert.equal(h.root(0),null);assert.equal(h.root(2).getBoundingClientRect().top,before-40);assert.equal(h.viewport.scrollTop,290);
  }finally{h.dispose();}
 });
+// Long chapters, each `pitch` pixels a character, in a viewport 100 pixels across that clamps its scroll position as a
+// browser does: never past the end of what is mounted. Taking out a chapter far above the view, with less than its
+// length left below, makes the browser pull the scroll position back. Vertical (vertical-rl) reads right to left, its
+// scrollLeft running from 0 down to minus the room. Returns where the leading edge of the view is in the book, as
+// chapter, distance into it, and distance from the start of the book.
+function longChapters(h,{vertical=false,pitch=130}={}){
+ const chapters=()=>[...h.view.body.children].filter(node=>node.hasAttribute('data-chapter')),length=h.root(h.view.chapter).textContent.length*pitch;
+ const room=()=>Math.max(0,chapters().length*length-100),clamp=value=>Math.max(0,Math.min(Number(value)||0,room()));
+ let scrolled=0;const position=()=>(scrolled=clamp(scrolled));
+ Object.defineProperties(h.viewport,{
+  scrollTop:{configurable:true,get:()=>vertical?0:position(),set:value=>{if(!vertical)scrolled=clamp(value);}},
+  scrollLeft:{configurable:true,get:()=>vertical&&position()?-scrolled:0,set:value=>{if(vertical)scrolled=clamp(-value);}},
+  scrollHeight:{configurable:true,get:()=>vertical?100:Math.max(100,chapters().length*length)},
+  scrollWidth:{configurable:true,get:()=>vertical?Math.max(100,chapters().length*length):100}
+ });
+ // `start` pixels from the leading edge of the view along the reading, `size` along it.
+ const box=(start,size)=>vertical?{left:100-start-size,right:100-start,top:0,bottom:100,width:size,height:100}:{left:0,right:100,top:start,bottom:start+size,width:100,height:size};
+ const proto=h.w.HTMLElement.prototype,base=proto.getBoundingClientRect;
+ proto.getBoundingClientRect=function(){return this.classList.contains('annotator-epub-chapter')?box(chapters().indexOf(this)*length-position(),length):base.call(this);};
+ h.w.Range.prototype.getClientRects=function(){const root=(this.startContainer.parentElement||this.startContainer).closest('[data-chapter]');if(!root)return [];const r=root.getBoundingClientRect();return [box((vertical?100-r.right:r.top)+this.startOffset*pitch,Math.max(1,this.endOffset-this.startOffset)*pitch)];};
+ h.w.Range.prototype.getBoundingClientRect=function(){return this.getClientRects()[0];};
+ const place=()=>{for(const root of chapters()){const r=root.getBoundingClientRect(),into=vertical?r.right-100:0-r.top;if(into<length-1){const chapter=Number(root.dataset.chapter);return{chapter,into,at:chapter*length+into};}}};
+ return{length,place,position:()=>scrolled};
+}
+const frame=h=>new Promise(resolve=>h.w.requestAnimationFrame(resolve));
+// Until the reading window has stopped changing: chapters put in or let go, one pass after another.
+async function settled(h){for(let i=0;i<100;i++){if(h.view.windowing){await h.view.windowing;continue;}if(!h.view.needsWindow())return;await frame(h);}throw Error('the reading window did not settle');}
+for(const vertical of [false,true])test(`reading on through long chapters in ${vertical?'vertical (vertical-rl)':'horizontal'} writing never jumps back: letting go a chapter far before the view, which shortens the content and makes the browser pull the scroll back, keeps the text in place, down and back up, and the place saved and the chapter named follow`,async()=>{
+ const h=await host(0,'ltr',{publisher:vertical});try{
+  const long=longChapters(h,{vertical});await h.view.showChapter(0);for(let i=0;i<3;i++)await frame(h);await settled(h);
+  assert.equal(h.view.renderedWritingMode,vertical?'vertical-rl':'horizontal-tb');assert.equal(h.view.readingAxis().horizontal,vertical);
+  assert.equal(long.length,31*130);assert.deepEqual(long.place(),{chapter:0,into:0,at:0});
+  const axis=h.view.readingAxis(),status=()=>h.view.statusEl.textContent;
+  // A wheel turn, a fast flick, a scroll bar dragged a long way: whatever the browser leaves of it is where the reader is.
+  const scroll=async delta=>{
+   const from=long.place().at,before=axis.position(h.viewport);h.viewport.dispatchEvent(new h.w.Event('wheel'));axis.set(h.viewport,before+delta);const moved=axis.position(h.viewport)-before;
+   for(let pass=0;pass<2;pass++){h.viewport.dispatchEvent(new h.w.Event('scroll'));await settled(h);}
+   const now=long.place();assert.equal(now.at,from+moved,`${vertical?'vertical':'horizontal'}: scrolled ${moved} from ${from}, chapter ${now.chapter} at ${now.into}, mounted ${[...h.view.mounts.keys()]}`);
+   // The place saved is the first character in view; the chapter named has begun by a third of the way down the view.
+   assert.deepEqual(h.view.layoutPosition,{chapter:now.chapter,offset:Math.min(30,Math.floor((now.into+1)/130))});
+   const named=Math.min(4,Math.max(now.chapter,Math.floor((now.at+100/3)/long.length)));assert.ok(status().startsWith(`${named+1} / 6 · c${named}.xhtml`),status());
+   return moved;
+  };
+  const steps=[37,150,420,96,1300,61];let travelled=0,released=0;
+  for(let n=0;long.place().at<3*long.length+500;n++){const before=h.view.mounts.size;travelled+=await scroll(steps[n%steps.length]);if(h.view.mounts.size<before)released++;}
+  assert.ok(released>=2,'chapters far above were let go on the way down');assert.ok(!h.view.mounts.has(0));assert.equal(long.place().chapter,3);
+  h.view.saveProgress();assert.deepEqual(h.saved.at(-1).position,h.view.layoutPosition);
+  for(let n=0;long.place().at>0;n++)travelled+=await scroll(-steps[n%steps.length]);
+  assert.equal(travelled,0);assert.deepEqual(long.place(),{chapter:0,into:0,at:0});assert.ok(h.view.mounts.has(0)&&!h.view.mounts.has(3),'chapters far below were let go on the way up');
+ }finally{h.dispose();}
+});
+test('a place the reader puts the text at while a chapter is being put in before it (a resize, a passage gone to) is kept, with the chapter in before it',async()=>{
+ const h=await host(2);try{
+  const long=longChapters(h);await h.view.showChapter(2);for(let i=0;i<3;i++)await frame(h);
+  assert.deepEqual([...h.view.mounts.keys()],[1,2]);
+  let mounted,release;const inserted=new Promise(resolve=>mounted=resolve),gate=new Promise(resolve=>release=resolve);
+  const pending=h.view.preserveScroll(h.view.epoch,async()=>{await h.view.mountChapter(0,h.view.epoch);mounted();await gate;});
+  await inserted;
+  // The resize's restoration, after the chapter went in: the twentieth character of chapter 2 at the top of the view.
+  h.view.restoreOffset(20);const restored=h.viewport.scrollTop;assert.deepEqual(long.place(),{chapter:2,into:2600,at:2*long.length+2600});
+  // Then the reader scrolls a little.
+  h.viewport.scrollTop+=45;release();await pending;
+  assert.equal(h.viewport.scrollTop,restored+45);assert.deepEqual(long.place(),{chapter:2,into:2645,at:2*long.length+2645});
+ }finally{h.dispose();}
+});
 test('continuous normal flow excludes non-spine footnotes while explicit navigation keeps them readable',async()=>{
  const h=await host(4);try{assert.deepEqual([...h.view.mounts.keys()],[3,4]);await h.view.expandWindow(h.view.epoch);assert.equal(h.root(5),null);await h.view.showChapter(5);assert.deepEqual([...h.view.mounts.keys()],[5]);assert.match(h.root(5).textContent,/Chapter 5/);
  h.preferences.readingMode='pagination';h.view.applyPreferences();await new Promise(resolve=>h.w.requestAnimationFrame(resolve));await new Promise(resolve=>h.w.requestAnimationFrame(resolve));assert.equal(h.view.renderedMode,'pagination');assert.equal(h.view.mounts.size,1);

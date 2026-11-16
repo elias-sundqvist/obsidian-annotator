@@ -61,6 +61,16 @@ interface ChapterMount {
     styles?: PublisherStyles;
     fixed?: { canvas: HTMLElement; content: HTMLElement; page: PageViewport };
 }
+/** The text in view, held while chapters are put in or taken out before it (see EpubView.hold). */
+interface PlaceHold {
+    axis: ReadingAxis;
+    /** The chapter the reading position is in. */
+    root: HTMLElement;
+    /** Where that chapter begins in the scrolled content (see EpubView.placeOf). */
+    at: number;
+    /** The scroll position when the place was taken. */
+    scroll: number;
+}
 export class EpubView extends FileView {
     readonly kind = 'epub';
     get view() {
@@ -849,6 +859,7 @@ export class EpubView extends FileView {
             /* The place is still brought into view. */
         }
         row.node.parentElement?.scrollIntoView({ block: 'center' });
+        this.placed();
         return true;
     }
     getState() {
@@ -1215,25 +1226,82 @@ export class EpubView extends FileView {
             ? [this.chapter]
             : this.book.chapters.flatMap((chapter, index) => (chapter.linear ? [index] : []));
     }
-    private async preserveScroll(epoch: number, change: () => Promise<void>) {
+    /**
+     * Where a chapter begins in the scrolled content: where it begins in the window, along the reading axis, plus the
+     * scroll position. Scrolling does not move it, nor does the browser pulling the scroll position back when the
+     * content becomes shorter than it; only content put in or taken out before the chapter does.
+     */
+    private placeOf(axis: ReadingAxis, root: HTMLElement) {
+        return axis.start(root.getBoundingClientRect()) + axis.position(this.viewport);
+    }
+    /** Places being held (see hold): only while chapters are put in or taken out. */
+    private holds = new Set<PlaceHold>();
+    /**
+     * Takes the place of the text in view, before chapters are put in or taken out before it. Browser scroll anchoring
+     * is off on this viewport, so the reader puts the text back itself (see release).
+     */
+    private hold(): PlaceHold | null {
+        const root = this.mounts.get(this.chapter)?.root;
+        if (!root) return null;
         const axis = this.readingAxis(),
-            root = this.mounts.get(this.chapter)?.root,
-            before = root ? axis.start(root.getBoundingClientRect()) : undefined,
-            scroll = axis.position(this.viewport);
-        await change();
-        if (this.stopped || epoch !== this.epoch || !root?.isConnected || before === undefined) return;
-        const currentAxis = this.readingAxis();
-        if (axis.horizontal !== currentAxis.horizontal || axis.reverse !== currentAxis.reverse) return;
-        // Browser anchoring is disabled on this viewport. Account for user scroll
-        // during image loading rather than cancelling it when a chapter is prepended.
-        axis.set(
-            this.viewport,
-            axis.position(this.viewport) +
-                axis.start(root.getBoundingClientRect()) -
-                before +
-                axis.position(this.viewport) -
-                scroll
-        );
+            held = { axis, root, at: this.placeOf(axis, root), scroll: axis.position(this.viewport) };
+        this.holds.add(held);
+        return held;
+    }
+    /**
+     * The reader has put the text somewhere itself while a place was held (a resize or a change of type restoring the
+     * passage, a passage or annotation gone to): what is held is from there, with what is put in before it afterwards.
+     */
+    private placed() {
+        for (const held of this.holds) {
+            held.at = this.placeOf(held.axis, held.root);
+            held.scroll = held.axis.position(this.viewport);
+        }
+    }
+    /**
+     * Puts the text back where it was held, moved on by `moved`: how far the reader has scrolled since. The position is
+     * worked out from where the chapter now begins in the content, not from the scroll position the browser has left,
+     * which it pulls back when content taken out leaves less than a screen below the view.
+     */
+    private release(held: PlaceHold, moved: number) {
+        this.holds.delete(held);
+        if (this.stopped || !held.root.isConnected) return;
+        const axis = this.readingAxis();
+        if (axis.horizontal !== held.axis.horizontal || axis.reverse !== held.axis.reverse) return;
+        axis.set(this.viewport, held.scroll + this.placeOf(axis, held.root) - held.at + moved);
+    }
+    /**
+     * Keeps the text in place while chapters are taken out before it (or after it). This is done at once, between two
+     * measurements in the same task, so the reader cannot have scrolled in between: any change in the scroll position is
+     * the browser's, and the text goes back exactly where it was.
+     */
+    private keepPlace(change: () => void) {
+        const held = this.hold();
+        try {
+            change();
+        } finally {
+            if (held) this.release(held, 0);
+        }
+    }
+    /**
+     * Keeps the text in place while a chapter is put in before it, which takes time (pictures, fonts). The reader may
+     * scroll meanwhile, and that is kept: putting in only adds content, so a change in the scroll position is theirs. (A
+     * resize or a change of type that reflows the text meanwhile puts the passage back itself; see placed.)
+     */
+    private async preserveScroll(epoch: number, change: () => Promise<void>) {
+        const held = this.hold();
+        try {
+            await change();
+        } catch (error) {
+            if (held) this.holds.delete(held);
+            throw error;
+        }
+        if (!held) return;
+        if (epoch !== this.epoch) {
+            this.holds.delete(held);
+            return;
+        }
+        this.release(held, held.axis.position(this.viewport) - held.scroll);
     }
     private async expandWindow(epoch: number) {
         if (!this.book || !this.viewport.clientHeight) return;
@@ -1267,7 +1335,10 @@ export class EpubView extends FileView {
             else break;
         }
         if (this.stopped || epoch !== this.epoch) return;
-        await this.preserveScroll(epoch, async () => {
+        // Chapters more than two screens away are let go. One far above may be longer than what is left below the view
+        // (the next chapter is not put in until the end of this one comes near), and the browser then pulls the scroll
+        // position back as the content shortens: keepPlace measures through that, so the reading goes on where it was.
+        this.keepPlace(() => {
             const selection = this.contentEl.ownerDocument.getSelection();
             const retained = [...this.mounts]
                 .filter(([index, mount]) => {
@@ -1400,6 +1471,7 @@ export class EpubView extends FileView {
         if (target) {
             revealDisclosures(target);
             target.scrollIntoView({ block: 'start', inline: 'start' });
+            this.placed();
         } else this.restoreOffset(this.pendingOffset ?? 0);
         this.restoring = false;
         this.pendingOffset = null;
@@ -1817,6 +1889,7 @@ export class EpubView extends FileView {
         }
         this.layoutPosition = { chapter: this.chapter, offset: at };
         this.restoredAnchor = { ...this.layoutPosition };
+        this.placed();
         this.painter?.schedule();
     }
     private async goBack() {
@@ -2065,6 +2138,7 @@ export class EpubView extends FileView {
                 this.restoredAnchor = null;
                 revealDisclosures(node);
                 (node.nodeType === 1 ? (node as Element) : node.parentElement)?.scrollIntoView({ block: 'center' });
+                this.placed();
             }
         };
         if (index !== undefined && !this.mounts.has(index)) void this.showChapter(index).then(open);
