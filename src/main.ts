@@ -5016,17 +5016,23 @@ export default class AnnotatorPlugin extends Plugin {
             await this.loadNote(file);
             const stored = this.notes.get(file)?.records.find(row => row.id === annotation.id);
             const unchanged = serial === this.draftSerial;
+            // Whether the saved annotation is what the reader now shows: its highlight on the page and its card open.
+            let opened = false;
             if (unchanged) {
                 if (savedDraftId) this.draftSessions.delete(savedDraftId);
                 this.editMode = false;
                 this.activeDraftId = null;
                 this.queueDraftSave();
-                if (stored) this.openAnnotation(file, stored);
+                if (stored) {
+                    this.openAnnotation(file, stored);
+                    opened = true;
+                }
             } else if (savedDraftId && this.activeDraftId === savedDraftId && stored) {
                 this.selection = null;
                 this.draft = null;
                 this.editing = { file, annotation: stored };
                 this.preserveEdit();
+                opened = true;
             } else if (savedDraftId) {
                 const retained = this.draftSessions.get(savedDraftId);
                 if (retained && retained.comment === comment && JSON.stringify(retained.tags) === JSON.stringify(tags))
@@ -5034,7 +5040,10 @@ export default class AnnotatorPlugin extends Plugin {
                 this.queueDraftSave();
             }
             if (unchanged) this.viewDocument(file)?.getSelection()?.removeAllRanges();
-            new Notice(editing ? 'Annotation updated.' : 'Annotation saved to Markdown.');
+            // A save the reader shows needs no notice: one in the corner said it again, and stayed there while the
+            // pointer rested on it, as Obsidian keeps a notice under the pointer. A save finished while something else is
+            // being written is said, in a notice of the usual length.
+            if (!opened) new Notice(editing ? 'Annotation updated.' : 'Annotation saved to Markdown.');
         } catch (error) {
             this.preserveEdit();
             this.fail(error);

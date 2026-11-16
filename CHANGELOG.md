@@ -3,6 +3,14 @@
 What changed for someone using Annotator. How to use each thing is in
 [README.md](README.md).
 
+## Unreleased
+
+- Saving a note no longer puts "Annotation saved to Markdown." in the
+  corner: the highlight on the page and its opened card already show it,
+  and the notice stayed while the pointer rested over it. A save that
+  finishes after you have begun another note is still said, in a notice
+  that goes by itself.
+
 ## 0.3.3 (2026-11-16)
 
 - **Sources outside the vault are read where they are**, as before 0.3: a

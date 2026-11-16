@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 const setup = new JSDOM('<body></body>', { pretendToBeVisual: true }); globalThis.window = setup.window; globalThis.document = setup.window.document;
-const { Native, TFile, AnnotationView, summaryMarkdown, annotationMarkdown, annotationNotes, annotationThreads, scanLibrary, displayTitle, INKS, inkOf, inkAt, inkLabel, noteGist, placeComposer, around, themeChooser, openPageAppearance, PAGE_THEMES } = await import('./.generated/plugin-boundary.mjs');
+const { Native, TFile, Notice, AnnotationView, summaryMarkdown, annotationMarkdown, annotationNotes, annotationThreads, scanLibrary, displayTitle, INKS, inkOf, inkAt, inkLabel, noteGist, placeComposer, around, themeChooser, openPageAppearance, PAGE_THEMES } = await import('./.generated/plugin-boundary.mjs');
 const { create: storeCreate, readAll: storeRead, recolor } = await import('./.generated/codec.mjs');
 setup.window.close();
 
@@ -78,6 +78,41 @@ test('editing an annotation can change its ink with its comment; unchanged ink w
         // A stale card cannot recolour an annotation that has since changed.
         const stale = { ...h.records()[0], text: 'Stale copy' }, source = h.contents.get(h.note.path);
         await h.plugin.recolor(h.file.path, stale, 'blue'); assert.equal(h.contents.get(h.note.path), source);
+    } finally { h.dispose(); }
+});
+
+test('a save the reader shows is not said again in a notice; one finished while another note is begun is, in a notice that goes by itself', async () => {
+    const h = await collection([quoted('a', 'Passage', { text: 'Original' })]);
+    try {
+        const host = { view: { contentEl: h.dom.window.document.body }, payload: async (capture, comment, id) => quoted(id, capture.exact, { text: comment }), isCurrent: () => true, identity: () => ({ uri: 'urn:x-pdf:draft' }), status: () => 'Page 1', activate: row => h.plugin.selectAnnotation(h.file.path, row) };
+        h.plugin.hostFor = () => host;
+        const said = since => Notice.shown.slice(since).filter(notice => /^Annotation (saved|updated)/.test(String(notice.message)));
+        const opened = () => h.plugin.editing?.annotation;
+        // A highlight with a note: written, and opened on its page, where it is seen.
+        let since = Notice.shown.length;
+        await h.plugin.beginCapture({ file: h.file.path, exact: 'New passage', revision: 'r' }, 'annotate');
+        h.plugin.updateComment('Why it matters'); await h.plugin.save();
+        const made = h.records().find(row => row.text === 'Why it matters');
+        assert.ok(made); assert.equal(opened()?.id, made.id, 'the saved annotation is the one open'); assert.equal(h.plugin.editMode, false);
+        assert.deepEqual(said(since), [], 'no notice repeats it');
+        // An edit and a note about the page: the same.
+        since = Notice.shown.length;
+        h.plugin.editAnnotation(h.file.path, h.records().find(row => row.id === 'a')); h.plugin.updateComment('Edited'); await h.plugin.save();
+        assert.equal(h.records().find(row => row.id === 'a').text, 'Edited'); assert.equal(opened()?.id, 'a');
+        h.plugin.newNote(h.file.path); h.plugin.updateComment('About the page'); await h.plugin.save();
+        assert.equal(opened()?.text, 'About the page');
+        assert.deepEqual(said(since), []);
+        // Another note begun while the first is still being written: the first is not opened, so its save is said, in a
+        // notice of Obsidian's usual length (no duration; 0 would keep it until it is clicked).
+        since = Notice.shown.length;
+        await h.plugin.beginCapture({ file: h.file.path, exact: 'Third passage', revision: 'r' }, 'annotate');
+        h.plugin.updateComment('Written in the background');
+        const saving = h.plugin.save(); h.plugin.newNote(h.file.path); await saving;
+        assert.ok(h.records().some(row => row.text === 'Written in the background'));
+        assert.ok(h.plugin.draft && h.plugin.editMode, 'the note begun meanwhile stays open');
+        const notices = said(since);
+        assert.deepEqual(notices.map(notice => String(notice.message)), ['Annotation saved to Markdown.']);
+        assert.equal(notices[0].duration, undefined, 'it goes by itself, as Obsidian\'s own notices do');
     } finally { h.dispose(); }
 });
 
