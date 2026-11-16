@@ -21,6 +21,14 @@ What changed for someone using Annotator. How to use each thing is in
   selects the card, as Obsidian does, instead of opening the highlight.
 - A passage selected in a PDF while its text is still being read (just
   opened) gets the selection bar once the text is read, instead of nothing.
+- Pressing `A` on a selection opens the note without the selection bar
+  coming back over it (it could cover **Cancel** and the save hint when the
+  key was let go before the note took the focus), as the **Note** button
+  already did.
+- A refusal is said as it is written, without "Error: " before it: an
+  archive.org book that is only lent, a source outside the vault that was
+  not allowed, and the reader's other explanations. Something unexpected
+  still says what kind of error it was.
 
 - **Sources outside the vault are read where they are**, as before 0.3: a
   Zotero, Calibre or DEVONthink link, a path on your computer and a web

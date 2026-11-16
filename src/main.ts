@@ -349,6 +349,16 @@ interface PdfEmbed {
     register?(done: () => void): void;
 }
 /**
+ * What a notice says about an error. The reader's own refusals and explanations are plain errors whose message is the
+ * whole sentence ("archive.org lends this book…", "Not opened: …"): they are shown as written, with no "Error: "
+ * before them. Anything else (a TypeError, an error of the host's with a name of its own) keeps its name, which
+ * says it was not expected.
+ */
+function noticeText(error: unknown): string {
+    if (error instanceof Error && error.name === 'Error' && error.message) return error.message;
+    return String(error);
+}
+/**
  * Whether what is inside this element is the reader's to answer now. Inside a Canvas card, only once the card is the
  * one selected (Obsidian's `is-focused`): until then a press selects the card and a drag moves it, as Obsidian does.
  * Anywhere else, always.
@@ -826,8 +836,9 @@ export default class AnnotatorPlugin extends Plugin {
     /** The PDF each of those shows: its source key. */
     private embeddedFiles = new WeakMap<View, string>();
     /**
-     * Embeds of a PDF that has no annotation note yet. They cost nothing until they are pressed on (to select text
-     * there, the first highlight making the note); then, or once the PDF has a note, they are bound as the others are.
+     * Embeds of a PDF that has no annotation note yet. They cost nothing until the pointer comes over their pages (to
+     * select text there, the first highlight making the note); then, or once the PDF has a note, they are bound as
+     * the others are.
      */
     private waitingEmbeds = new Map<
         HTMLElement,
@@ -2009,6 +2020,16 @@ export default class AnnotatorPlugin extends Plugin {
                     binding = this.bindings.get(view);
                 if (!key || !binding) return;
                 const selected = scopedCapture(capture, key, binding.owner);
+                // The passage a note is being written about, taken again: the key that opened the note (A) let go
+                // over the page before the note took the focus. The bar is not put back over the note, just as after
+                // a press of its Note button.
+                if (
+                    !action &&
+                    this.editMode &&
+                    this.selection &&
+                    JSON.stringify(this.selection) === JSON.stringify(selected)
+                )
+                    return;
                 this.lastSource = view;
                 this.focusSource(key);
                 if (action) void this.beginCapture(selected, action);
@@ -2639,7 +2660,7 @@ export default class AnnotatorPlugin extends Plugin {
      * wrapped, so that an embed gets the reader's painter too: the highlights are shown and a click on one opens it
      * in the sidebar. With "Annotate in embedded PDFs" the embed is annotated as the PDF's tab is (see
      * `annotatesHere`), and what is made goes into the PDF's own annotation note. An embed of a PDF with no
-     * annotation note is left exactly as Obsidian made it until it is pressed on to be annotated.
+     * annotation note is left exactly as Obsidian made it until the pointer comes over it to annotate it.
      */
     private watchEmbeddedPdfs() {
         const registry = (this.app as unknown as { embedRegistry?: { embedByExtension?: Record<string, unknown> } })
@@ -2703,25 +2724,28 @@ export default class AnnotatorPlugin extends Plugin {
         this.paintEmbed(embed, file);
     }
     /**
-     * An embed of a PDF with no annotation note: nothing is read or painted. A press on its pages, while embeds are
-     * annotated, binds it there and then, so that the passage being selected gets the selection bar (once the PDF's
-     * text has been read) and its first highlight makes the PDF's note, as in a tab.
+     * An embed of a PDF with no annotation note: nothing is read or painted until the pointer comes over its pages (or
+     * the focus goes into it) while embeds are annotated. It is bound then, before any press: binding sets the page
+     * appearance, which redraws the pages, and a selection being dragged would be lost with them. The passage then
+     * selected gets the selection bar (once the PDF's text has been read), and its first highlight makes the PDF's
+     * note, as in a tab.
      */
     private awaitAnnotating(embed: PdfEmbed, file: TFile) {
         const element = embed.containerEl!;
         if (this.waitingEmbeds.has(element)) return;
-        const pressed = (event: PointerEvent) => {
+        const wanted = (event: Event) => {
             if (this.stopped || !this.display.embeddedAnnotate || !this.display.embeddedHighlights) return;
             if (!(event.target as Element | null)?.closest?.('.page') || !cardInHand(element)) return;
             stop();
-            const stand = this.paintEmbed(embed, file);
-            if (stand) this.lastSource = stand;
+            this.paintEmbed(embed, file);
         };
         const stop = () => {
-            element.removeEventListener('pointerdown', pressed, true);
+            element.removeEventListener('pointerover', wanted, true);
+            element.removeEventListener('focusin', wanted, true);
             if (this.waitingEmbeds.get(element)?.stop === stop) this.waitingEmbeds.delete(element);
         };
-        element.addEventListener('pointerdown', pressed, true);
+        element.addEventListener('pointerover', wanted, true);
+        element.addEventListener('focusin', wanted, true);
         this.waitingEmbeds.set(element, {
             file,
             embed,
@@ -5544,7 +5568,7 @@ export default class AnnotatorPlugin extends Plugin {
     }
     private fail(error: unknown) {
         console.error('Annotator:', error);
-        new Notice(String(error), 8000);
+        new Notice(noticeText(error), 8000);
     }
     /** True while the open draft is being written on the page rather than in the sidebar. */
     get composerOnPage() {
@@ -9465,7 +9489,7 @@ class UrlDialog extends Modal {
                 this.close();
                 this.submit(url);
             } catch (error) {
-                new Notice(String(error));
+                new Notice(noticeText(error));
             }
         };
         open.onclick = run;
@@ -9492,7 +9516,7 @@ class NativeSettings extends PluginSettingTab {
         root.empty();
         root.addClass('annotator-settings');
         const save = (job: Promise<unknown>) => {
-            void job.catch(error => new Notice(String(error)));
+            void job.catch(error => new Notice(noticeText(error)));
         };
 
         new Setting(root)
@@ -9913,12 +9937,12 @@ class NativeSettings extends PluginSettingTab {
                         if (there)
                             row.addButton(control =>
                                 control.setButtonText('Remove').onClick(() => {
-                                    void plugin.removeScanFile(file).then(list, error => new Notice(String(error)));
+                                    void plugin.removeScanFile(file).then(list, error => new Notice(noticeText(error)));
                                 })
                             );
                     }
                 },
-                error => new Notice(String(error))
+                error => new Notice(noticeText(error))
             );
         };
         list();
@@ -9966,7 +9990,7 @@ class NativeSettings extends PluginSettingTab {
                     .setPlaceholder(DEFAULT_SELECTION_KEYS[name])
                     .setValue(plugin.selectionKeys[name])
                     .onChange(value => {
-                        void plugin.setSelectionKey(name, value).then(show, error => new Notice(String(error)));
+                        void plugin.setSelectionKey(name, value).then(show, error => new Notice(noticeText(error)));
                     });
                 // Left with a key that was not taken, the field shows again the key in use.
                 input.addEventListener('blur', () => {
@@ -9982,7 +10006,7 @@ class NativeSettings extends PluginSettingTab {
                 control.setButtonText('Reset').onClick(() => {
                     void plugin.resetSelectionKeys().then(
                         () => this.display(),
-                        error => new Notice(String(error))
+                        error => new Notice(noticeText(error))
                     );
                 })
             );
@@ -10147,7 +10171,7 @@ class RemoteRevisionModal extends Modal {
             void this.selectRevision()
                 .then(() => this.close())
                 .catch(error => {
-                    new Notice(String(error), 10000);
+                    new Notice(noticeText(error), 10000);
                     use.disabled = false;
                     keep.disabled = false;
                 });
@@ -10182,7 +10206,7 @@ class RemoteHistoryModal extends Modal {
                 void this.choose(entry)
                     .then(() => this.close())
                     .catch(error => {
-                        new Notice(String(error), 10000);
+                        new Notice(noticeText(error), 10000);
                         button.disabled = false;
                     });
             };
@@ -10228,7 +10252,7 @@ class DraftRecoveryModal extends Modal {
                 void this.restore(session.id)
                     .then(() => this.close())
                     .catch(error => {
-                        new Notice(String(error));
+                        new Notice(noticeText(error));
                         resume.disabled = false;
                     });
             };
@@ -10237,7 +10261,7 @@ class DraftRecoveryModal extends Modal {
                 void navigator.clipboard
                     .writeText(session.comment)
                     .then(() => new Notice('Draft comment copied.'))
-                    .catch(error => new Notice(String(error)));
+                    .catch(error => new Notice(noticeText(error)));
             };
             const remove = item.createEl('button', { text: 'Discard draft' });
             remove.onclick = () => {
@@ -10284,7 +10308,7 @@ class DraftComparisonModal extends Modal {
                 void this.useCurrent()
                     .then(() => this.close())
                     .catch(error => {
-                        new Notice(String(error));
+                        new Notice(noticeText(error));
                         use.disabled = false;
                     });
             };

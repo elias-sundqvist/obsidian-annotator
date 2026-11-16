@@ -762,7 +762,8 @@ test('a note cannot make the reader fetch or read outside the vault without bein
  try{await h.plugin.onload();
   // Declined: nothing is requested, nothing is written, and the note is unchanged.
   h.plugin.sourceApproval=async(address,kind)=>{asked.push([address,kind]);return 'no';};
-  await assert.rejects(h.plugin.openNoteTarget(note),/was not allowed/);assert.equal(requests,0);assert.deepEqual(asked,[[url,'pdf']]);assert.equal(h.opened.length,0);assert.equal(h.contents.get(note.path),'Original annotation note');
+  await assert.rejects(h.plugin.openNoteTarget(note),/was not allowed/);assert.equal(requests,0);assert.deepEqual(asked,[[url,'pdf']]);
+  {const since=Notice.messages.length,before=asked.length;await h.plugin.openNoteTarget(note).catch(error=>h.plugin.fail(error));assert.match(lastNotice(Notice,since),/^Not opened: /,'said without "Error: "');asked.length=before;}assert.equal(h.opened.length,0);assert.equal(h.contents.get(note.path),'Original annotation note');
   assert.equal([...h.files.keys()].some(path=>path.startsWith('Annotator sources/')),false);
   // Allowed once: fetched, and not asked about again.
   h.plugin.sourceApproval=async address=>{asked.push([address]);return 'yes';};
@@ -1083,7 +1084,7 @@ test('an embedded PDF is annotated where it is: a selection gets the tab\'s bar,
   assert.match(css,/\.canvas-node:not\(\.is-focused\) \.annotator-native-marks \*::before[^{]*\{ pointer-events: none !important; \}/);
  }finally{h.dispose();}
 });
-test('an embed of a PDF with no annotation note reads nothing until it is pressed on; a passage selected while its text is still being read gets the bar once it is read, and its first highlight makes the note a tab would; other embeds of it then show it',async()=>{
+test('an embed of a PDF with no annotation note reads nothing until the pointer comes over it; a passage selected while its text is still being read gets the bar once it is read, and its first highlight makes the note a tab would; other embeds of it then show it',async()=>{
  const h=host();try{
   const words='Neural machine translation is studied here.',key='Papers/Paper.pdf';
   const {pdf,leaf}=matchPdf(h,[[words]]);const w=h.dom.window,doc=w.document;w.Range.prototype.getBoundingClientRect=()=>({left:10,top:200,bottom:210,right:40,width:30,height:10});w.Range.prototype.getClientRects=()=>[];
@@ -1094,9 +1095,10 @@ test('an embed of a PDF with no annotation note reads nothing until it is presse
   const one=h.app.embedRegistry.embedByExtension.pdf({},pdf,''),two=h.app.embedRegistry.embedByExtension.pdf({},pdf,'#page=1');
   one.containerEl.innerHTML=pageOf(words);two.containerEl.innerHTML=pageOf(words);await settleMatches();
   assert.equal(h.plugin.embedded.size,0);assert.equal(h.plugin.waitingEmbeds.size,2);assert.equal(reads,0,'nothing read');h.plugin.bindSources();assert.equal(h.plugin.embedded.size,0);
-  // A press outside its pages (its toolbar) is not a start; one on a page is.
-  pressOn(h,one.containerEl);assert.equal(h.plugin.embedded.size,0);
-  pressOn(h,one.containerEl.querySelector('.page'));assert.equal(h.plugin.embedded.size,1);assert.equal(h.plugin.waitingEmbeds.size,1);const [stand]=h.plugin.embedded.keys();assert.equal(h.plugin.lastSource,stand);
+  // The pointer over its toolbar is not a start; over a page it is, before any press (binding redraws the pages, which would lose a selection being dragged).
+  pressOn(h,one.containerEl,'pointerover');assert.equal(h.plugin.embedded.size,0);
+  pressOn(h,one.containerEl.querySelector('.page'),'pointerover');assert.equal(h.plugin.embedded.size,1);assert.equal(h.plugin.waitingEmbeds.size,1);const [stand]=h.plugin.embedded.keys();assert.equal(reads,0,'read from the next turn on, not in the hover');
+  pressOn(h,one.containerEl.querySelector('.page'));assert.equal(h.plugin.lastSource,stand,'the press makes it the PDF in hand');
   // Selected at once, before the text is read: the bar comes when it is.
   const bar=()=>doc.querySelector('.annotator-selection-actions');selectIn(h,one.containerEl);assert.equal(bar(),null);await settleMatches();assert.ok(bar(),'offered once the text is read');
   assert.equal([...h.files.keys()].some(path=>path.endsWith('.md')),false,'no note yet');
@@ -1109,7 +1111,29 @@ test('an embed of a PDF with no annotation note reads nothing until it is presse
   one.unload();two.unload();assert.equal(h.plugin.embedded.size,0);assert.equal(h.plugin.bindings.size,0);assert.equal(h.plugin.lastSource,null);
   // Turned off, an embed of a PDF with no note is pressed on in vain.
   const three=h.app.embedRegistry.embedByExtension.pdf({},h.add('Papers/Other.pdf'),'');three.containerEl.innerHTML=pageOf(words);h.plugin.display={...h.plugin.display,embeddedAnnotate:false};
-  pressOn(h,three.containerEl.querySelector('.page'));assert.equal(h.plugin.embedded.size,0);assert.equal(h.plugin.waitingEmbeds.size,1);
+  pressOn(h,three.containerEl.querySelector('.page'),'pointerover');three.containerEl.querySelector('.page').dispatchEvent(new w.FocusEvent('focusin',{bubbles:true}));assert.equal(h.plugin.embedded.size,0);assert.equal(h.plugin.waitingEmbeds.size,1);
+  // On again, the focus going into it is a start too (a keyboard has no pointer).
+  h.plugin.display={...h.plugin.display,embeddedAnnotate:true};three.containerEl.querySelector('.page').dispatchEvent(new w.FocusEvent('focusin',{bubbles:true}));assert.equal(h.plugin.embedded.size,1);assert.equal(h.plugin.waitingEmbeds.size,0);
+ }finally{h.dispose();}
+});
+test('the note key opens the note with the bar gone, as the Note button does: the key let go over the page does not put the bar back over the note, in a tab or an embed',async()=>{
+ const h=host();try{
+  const words='Neural machine translation is studied here.',key='Papers/Paper.pdf';
+  const {pdf,leaf}=matchPdf(h,[[words]]);const w=h.dom.window,doc=w.document;w.Range.prototype.getBoundingClientRect=()=>({left:10,top:200,bottom:210,right:40,width:30,height:10});w.Range.prototype.getClientRects=()=>[];
+  h.add('Notes/Paper notes.md','',{'annotation-target':key});embedMaker(h,leaf);await h.plugin.onload();h.plugin.bindSources();
+  const embed=h.app.embedRegistry.embedByExtension.pdf({},pdf,'');await settleMatches();const [stand]=h.plugin.embedded.keys();
+  await h.plugin.bindings.get(stand).host.loading;await h.plugin.bindings.get(leaf.view).host.loading;
+  embed.containerEl.innerHTML=pageOf(words);leaf.contentEl.innerHTML=pageOf(words);await settleMatches();
+  const bar=()=>doc.querySelector('.annotator-selection-actions'),keyOn=(type,target,k='a')=>target.dispatchEvent(new w.KeyboardEvent(type,{key:k,bubbles:true,cancelable:true}));
+  for(const root of [leaf.contentEl,embed.containerEl]){
+   pressOn(h,root.querySelector('.page'));selectIn(h,root);assert.ok(bar(),'the bar is offered');const span=root.querySelector('.textLayer span');
+   // A: the note opens, the bar goes; the key let go over the page (the note not yet focused) leaves it gone.
+   keyOn('keydown',span);assert.equal(bar(),null);assert.equal(h.plugin.editMode,true);assert.equal(h.plugin.selection.exact,'machine translation');
+   keyOn('keyup',span);await settleMatches();assert.equal(bar(),null,'not put back over the note');
+   // Another passage selected while the note is open is offered the bar, as before.
+   const text=span.firstChild,range=doc.createRange();range.setStart(text,0);range.setEnd(text,6);w.getSelection().removeAllRanges();w.getSelection().addRange(range);keyOn('keyup',span,'Shift');assert.ok(bar(),'a new passage gets its bar');
+   pressOn(h,doc.body);h.plugin.cancelEdit();
+  }
  }finally{h.dispose();}
 });
 test('where Obsidian has no embed maker to wrap, nothing is wrapped and nothing breaks',async()=>{
@@ -2037,6 +2061,10 @@ test('an archive.org item link as a target is looked up once after one question 
   await assert.rejects(h.plugin.openNoteTarget(lentNote),/archive\.org lends this book \(Borrow\) rather than letting anyone download it, so it can't be downloaded/);
   assert.deepEqual(requests.slice(2),['https://archive.org/metadata/alicesadventure00carr']);assert.equal(h.plugin.targetKey(lentNote),'archive:https://archive.org/details/alicesadventure00carr');
   await h.plugin.persistQueue;assert.deepEqual(Object.keys(h.plugin.data.archiveFiles),[key]);assert.equal([...h.files.keys()].filter(path=>path.startsWith('Annotator sources/')).length,1);
+  // Said as it is written: a refusal is an explanation, not an error, so the notice has no "Error: " before it. Something unexpected keeps its name.
+  let since=Notice.messages.length;await h.plugin.openNoteTarget(lentNote).catch(error=>h.plugin.fail(error));
+  assert.equal(lastNotice(Notice,since),"archive.org lends this book (Borrow) rather than letting anyone download it, so it can't be downloaded. Only books that archive.org lets anyone download can be opened from an archive.org link.");
+  since=Notice.messages.length;h.plugin.fail(new TypeError('x is undefined'));assert.equal(lastNotice(Notice,since),'TypeError: x is undefined');
  }finally{h.dispose();}
  // After a restart the file found is still known, and what was kept is checked: an entry that is not an item's own file is dropped.
  const later=host();try{later.plugin.data={archiveFiles:{'https://archive.org/details/AlicesAdventuresInWonderland':'https://archive.org/download/AlicesAdventuresInWonderland/alice-in-wonderland.pdf','https://archive.org/details/other':'https://example.org/other.pdf'}};
