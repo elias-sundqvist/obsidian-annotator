@@ -5,22 +5,30 @@ Annotator's reader. The README has the short version, under "Open a file
 from outside Obsidian"; this page says what each way does, line by line, and
 how to take it away again.
 
-Whichever way the file comes, the same happens: it is copied into
-`Annotator sources` in your vault, a note named after it is made where your
-new notes go, and the copy opens in the reader. The file itself is never
-changed. The same file opened again shows the copy and its note.
+Whichever way the file comes, a note named after it is made where your new
+notes go, and the file opens in the reader. The recipes and addresses below
+copy it into `Annotator sources` in your vault first. Obsidian's own "Open
+with" lets you choose: annotate the file where it is, or a copy. The file
+itself is never changed. The same file opened again shows its note, and its
+copy if it has one.
 
 ## Obsidian's own "Open with"
 
 On a computer, Obsidian 1.14.4 and later can open a file that is not in the
-vault. For a PDF or a book, Annotator then shows **Copy into the vault and
-annotate**; the command *Copy this file into the vault and annotate it* does
-the same. Nothing needs setting up, but:
+vault. For a PDF or a book, Annotator then shows two buttons:
+
+- **Annotate where it is** makes a note that names the file, and the file is
+  read where it lies, like any source outside the vault.
+- **Annotate a copy in the vault** copies it in, and the copy takes its place
+  in the same tab. The command *Annotate a copy of this file in the vault*
+  does the same.
+
+Nothing needs setting up, but:
 
 - Obsidian appears under "Open with" only when it was installed from a
   current installer, not merely updated inside the app.
 - Obsidian opens the file in the vault you used last.
-- Obsidian shows the file first, and the copy needs one press.
+- Obsidian shows the file first, and annotating it needs one press.
 
 The recipes below go straight to the reader, in the vault the recipe was
 made in.
