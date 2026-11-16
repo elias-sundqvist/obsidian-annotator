@@ -62,7 +62,20 @@ assets…" (`readers.test.mjs`), "network CSS, dynamic selectors…"
   the plugin's settings, so it does not sync), for that file, or, with
   **Always from this library**, for every file under a Zotero `storage`
   folder or a Calibre library the settings name. A note that names any other
-  file is asked about again. What a later file at an allowed path could do
+  file is asked about again. What is allowed is compared only with paths
+  that name exactly the file Obsidian will open: a path that still has `.`
+  or `..` in it, or (on macOS and Linux, where it is a letter of a name, but
+  Obsidian takes it for a separator) a backslash, is never read where it is
+  (`externalKey`, `safeExternalKey` in `in-place.ts`); it can only be copied
+  in, after its own question. A path that leads elsewhere through a link
+  (inside a library, to a file outside it) is asked about as the file it
+  leads to, unless that file is allowed itself; a library allowed is allowed
+  as the folder it really is as well. Only paths this computer allowed are
+  ever resolved on disk in the background (a note can name any path,
+  including a network share whose lookup would reach out). A yes to read a
+  web address where it is is kept apart from a yes to copy it into the vault
+  (`copy:…` in the settings): a phone the settings sync to asks before it
+  downloads a copy. What a later file at an allowed path could do
   is limited to what any PDF or book can do in the reader (below), and if it
   is another version its annotations are marked as made on another version.
   For a file copied in, the answer is for the one copy then made, and is

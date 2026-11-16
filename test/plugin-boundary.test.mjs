@@ -301,7 +301,7 @@ test('initial source association failure retains verified bytes for retry withou
  const save=h.plugin.saveData.bind(h.plugin);let attempts=0;h.plugin.saveData=async value=>{if(++attempts===1)throw new Error('Storage failed');return save(value);};await assert.rejects(()=>h.plugin.openNoteTarget(note),/association/);assert.equal(h.plugin.remoteSources[url],undefined);assert.equal(h.plugin.data.remoteSources[url],undefined);
  const cached=[...h.binaries.keys()][0],bytes=h.binaries.get(cached).slice(0);await h.plugin.openNoteTarget(note);assert.equal(h.plugin.targetKey(note),cached);assert.deepEqual(h.binaries.get(cached),bytes);assert.equal(h.contents.get(note.path),'Unchanged');
  // Settings that lost the copy (not synced here): the copy is found by its name, which follows from the note's target, and is read as it is.
- delete h.plugin.remoteSources[url];delete h.plugin.targetCopies[url];await h.plugin.openNoteTarget(note);assert.equal(h.opened.at(-1).file.path,cached);assert.equal(h.plugin.targetCopies[url],cached);
+ delete h.plugin.remoteSources[url];delete h.plugin.targetCopies[url];await h.plugin.openNoteTarget(note);assert.equal(h.opened.at(-1).file.path,cached);assert.equal(h.plugin.targetKey(note),cached);
  // A different file where a new copy would go is never overwritten.
  delete h.plugin.remoteSources[url];delete h.plugin.targetCopies[url];h.plugin.copyByName=async()=>null;h.binaries.set(cached,new TextEncoder().encode('Different retained file').buffer);await assert.rejects(()=>h.plugin.openNoteTarget(note),/different bytes/);assert.equal(new TextDecoder().decode(h.binaries.get(cached)),'Different retained file');
  }finally{h.dispose();}
@@ -766,10 +766,11 @@ test('a note cannot make the reader fetch or read outside the vault without bein
   assert.equal([...h.files.keys()].some(path=>path.startsWith('Annotator sources/')),false);
   // Allowed once: fetched, and not asked about again.
   h.plugin.sourceApproval=async address=>{asked.push([address]);return 'yes';};
-  await h.plugin.openNoteTarget(note);assert.equal(requests,1);assert.equal(asked.length,2);await h.plugin.persistQueue;assert.ok(h.plugin.data.approvedSources.includes(url));
+  await h.plugin.openNoteTarget(note);assert.equal(requests,1);assert.equal(asked.length,2);await h.plugin.persistQueue;// A yes to copy is kept apart from a yes to read where it is (copy:…): a copy needs its own answer.
+  assert.ok(h.plugin.data.approvedSources.includes(`copy:${url}`));
   // Another address on the same site is a new question; "always from this site" answers it for the whole site.
   h.plugin.sourceApproval=async address=>{asked.push([address]);return 'always';};
-  await h.plugin.openNoteTarget(second);assert.equal(asked.length,3);assert.ok(h.plugin.data.approvedSources.includes('origin:https://example.org'));
+  await h.plugin.openNoteTarget(second);assert.equal(asked.length,3);assert.ok(h.plugin.data.approvedSources.includes('copy:origin:https://example.org'));
   // A different site is still asked about.
   h.plugin.sourceApproval=async address=>{asked.push([address]);return 'no';};
   await assert.rejects(h.plugin.openNoteTarget(third),/was not allowed/);assert.equal(asked.at(-1)[0],elsewhere);assert.equal(requests,2);
@@ -1989,7 +1990,7 @@ test('read where it is, a file is bound to its note only once allowed here, as i
   await h.plugin.openNoteTarget(note);assert.equal(h.opened.at(-1).file.path,key);assert.equal(h.plugin.targetKey(note),key);
   assert.equal(h.plugin.sourceKey(shown.view),key);
   // Restored at the next start, the tab shows the file's own path before any note was opened: the link the note writes is resolved then.
-  h.plugin.resolvedPaths.clear();h.plugin.inPlace.clear();h.plugin.inPlaceStale=true;assert.equal(h.plugin.sourceKey(shown.view),key);assert.equal(h.plugin.targetKey(note),key);
+  h.plugin.resolvedPaths.clear();h.plugin.inPlace.clear();h.plugin.inPlaceStale=true;h.plugin.sourceKey(shown.view);await h.plugin.placeResolving;assert.equal(h.plugin.sourceKey(shown.view),key);assert.equal(h.plugin.targetKey(note),key);
   // On a Mac's disk a name in other letters' case is the same file.
   Platform.isMacOS=true;const upper=leaf(new ExternalFileStandIn('file:'+paper.replace('Paper.pdf','PAPER.pdf')));assert.equal(h.plugin.sourceKey(upper.view),key);
   Platform.isMacOS=false;assert.equal(h.plugin.sourceKey(upper.view),null);
@@ -2084,5 +2085,65 @@ test('a file Obsidian opened from outside the vault can be annotated where it is
   // A note names the file; the file is shown where it was, read where it is: no question (the press was the yes), no copy.
   assert.deepEqual(h.made,['Opened.md']);assert.equal(shownIn[0].path,'file:'+real);assert.deepEqual(h.copies(),[]);assert.equal(h.asked.length,0);
   assert.equal(h.plugin.baseSourceKey(item.view),'file:'+real);
+ }finally{h.done();}
+});
+
+test('a note cannot reach outside an allowed library: a backslash path, or a link inside the library, is asked about as itself',async()=>{
+ const h=await placeHost();try{
+  const zotero=h.path.join(h.root,'Zotero'),paper=h.put('Zotero/storage/IKUUN4F6/Paper.pdf'),secret=h.put('Private/secret.pdf','%PDF-1.7 secret');
+  h.fs.mkdirSync(h.path.join(zotero,'storage/LINK1234'));h.fs.symlinkSync(secret,h.path.join(zotero,'storage/LINK1234/Linked.pdf'));
+  await h.plugin.onload();h.plugin.display={...h.plugin.display,zoteroFolder:zotero};
+  h.answer='always';await h.plugin.openNoteTarget(h.add('Z.md','',{'annotation-target':'zotero://open-pdf/library/items/IKUUN4F6'}));assert.equal(h.opened.at(-1).file.path,'file:'+paper);assert.equal(h.asked.length,1);
+  // Written with backslashes, a path on this Mac names a file of the library; Obsidian would read it as the file two folders up.
+  h.answer='no';const sneaky=h.add('S.md','',{'annotation-target':h.path.join(zotero,'storage')+'/..\\..\\Private\\secret.pdf'});
+  assert.ok(!/^file:/.test(h.plugin.targetKey(sneaky)),h.plugin.targetKey(sneaky));
+  await assert.rejects(h.plugin.openNoteTarget(sneaky),/not allowed/);assert.equal(h.asked.length,2);assert.ok(!h.opened.some(each=>/secret/.test(each.file.path)));
+  // A link inside the library to a file outside it: asked about as the file it leads to, and nothing about it is kept on a no.
+  const linked=h.add('L.md','',{'annotation-target':'zotero://open-pdf/library/items/LINK1234'});
+  await assert.rejects(h.plugin.openNoteTarget(linked),/not allowed/);assert.deepEqual(h.asked.at(-1),{url:'file:'+secret,kind:'pdf',how:'place',library:false});
+  assert.ok(!h.store.get('annotator-in-place').allowed.some(item=>item.includes('Private')));assert.ok(!h.opened.some(each=>/secret/.test(each.file.path)));
+  h.answer='yes';await h.plugin.openNoteTarget(linked);assert.equal(h.opened.at(-1).file.path,'file:'+secret);assert.ok(h.store.get('annotator-in-place').allowed.includes('file:'+secret));
+ }finally{h.done();}
+});
+test('a copy in the vault named by the note\'s target is read on a computer that reads in place, though the settings never said so',async()=>{
+ const h=await placeHost();try{
+  const {copyName}=await import('./.generated/readers/in-place.js'),paper=h.put('Paper.pdf'),note=h.add('P.md','',{'annotation-target':paper}),copy=await copyName(paper,'pdf');
+  h.add(copy);h.binaries.set(copy,new TextEncoder().encode('%PDF-1.7 copy').buffer);await h.plugin.onload();
+  assert.equal(h.plugin.targetKey(note),copy);await h.plugin.openNoteTarget(note);assert.equal(h.opened.at(-1).file.path,copy);assert.equal(h.asked.length,0);
+  // A web address with a download on this computer as well.
+  const url='https://example.org/w.pdf',web=h.add('W.md','',{'annotation-target':url}),webCopy=await copyName(url,'pdf');h.plugin.keepPlaceDevice({...h.plugin.placeDevice(),downloads:{[url]:paper}});
+  assert.match(h.plugin.targetKey(web),/^file:/);h.add(webCopy);h.binaries.set(webCopy,new TextEncoder().encode('%PDF-1.7 web').buffer);assert.equal(h.plugin.targetKey(web),webCopy);
+ }finally{h.done();}
+});
+test('a yes to read a web source where it is is not a yes to copy it: a phone asks before it downloads into the vault',async()=>{
+ const h=await placeHost();try{
+  const cache=h.path.join(h.root,'Cache');h.plugin.cacheFolder=()=>cache;globalThis.__annotatorTestRequest=async()=>({status:200,arrayBuffer:new TextEncoder().encode('%PDF-1.7 web').buffer});
+  const url='https://example.org/read.pdf',note=h.add('R.md','',{'annotation-target':url});await h.plugin.onload();
+  await h.plugin.openNoteTarget(note);assert.equal(h.asked.length,1);await h.plugin.persist();const synced=structuredClone(h.plugin.data.approvedSources);
+  // The settings sync to a phone, which has no download of its own.
+  h.plugin.approvedSources=new Set(synced);Platform.isMobile=true;Platform.isDesktopApp=false;h.answer='no';
+  await assert.rejects(h.plugin.openNoteTarget(note),/not allowed/);assert.deepEqual(h.asked.at(-1),{url,kind:'pdf',how:'phone',library:false});assert.deepEqual(h.copies(),[]);
+  h.answer='yes';await h.plugin.openNoteTarget(note);assert.equal(h.copies().length,1);
+ }finally{delete globalThis.__annotatorTestRequest;h.done();}
+});
+test('paths no one allowed here are not asked of the disk, not even to match a tab',async()=>{
+ const h=await placeHost();try{
+  const asked=[],files=h.fs;h.plugin.desktopFiles=()=>({...files,realpathSync:path=>{asked.push(path);return files.realpathSync(path);}});
+  const promises=h.plugin.desktopFileSystem();h.plugin.desktopFileSystem=()=>({...promises,realpath:async path=>{asked.push(path);return promises.realpath(path);}});
+  h.add('Far.md','',{'annotation-target':'/net/far-away-host/share/paper.pdf'});
+  const {ExternalFileStandIn}=await import('./.generated/plugin-boundary.mjs'),item=new WorkspaceLeaf();item.view=new FileView(item);item.view.leaf=item;item.view.file=new ExternalFileStandIn('file:'+h.put('Shown.pdf'));item.view.getViewType=()=>'pdf';
+  await h.plugin.onload();h.events.get('metadata:resolved')();assert.equal(h.plugin.sourceKey(item.view),null);await h.plugin.placeResolving;
+  assert.deepEqual(asked.filter(path=>/far-away-host/.test(path)),[]);
+ }finally{h.done();}
+});
+test('a book read where it is finds its reading position when its tab is restored, before any note is read',async()=>{
+ const h=await placeHost();try{
+  const book=h.put('Calibre/Jane Doe/A Book (7)/A Book.epub','PK\u0003\u0004'),key='file:'+book,note=h.add('B.md','',{'annotation-target':book});
+  await h.plugin.onload();await h.plugin.openNoteTarget(note);h.plugin.positions[h.plugin.keptKey(key)]={chapter:3,offset:25};await h.plugin.persist();
+  // The next start: a plugin that has read no note yet is asked by the restored tab where it was.
+  const saved=structuredClone(h.plugin.data),store=h.store,second=await placeHost();try{
+   for(const [name,value] of store)second.store.set(name,value);second.plugin.data=saved;await second.plugin.onload();
+   assert.equal(second.plugin.inPlace.size,0);assert.equal(second.plugin.keptKey(key),`target:${book}`);assert.deepEqual(second.plugin.positions[second.plugin.keptKey(key)],{chapter:3,offset:25});
+  }finally{second.done();}
  }finally{h.done();}
 });

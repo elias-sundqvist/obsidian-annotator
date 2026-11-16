@@ -388,3 +388,31 @@ Obsidian's. What it found, and what was done:
   (including Open with's button), **Read where it is**.
 - Kept against the advice to split: web addresses stay in stage 1, as the
   owner asked for them now.
+
+## Second review, of the built branch
+
+An independent review of the branch found four defects; each was fixed with
+a test that failed before:
+
+1. **Approval bypass.** `externalKey` turned `\` into `/` after `..` had been
+   taken away, so on macOS or Linux a file name with backslashes
+   (`storage/..\..\secret.pdf`) became a key that passed the library's
+   allowance and that Obsidian resolves to a file outside it. Now a path
+   with a backslash (outside Windows) or with `.`/`..` left is never a key
+   (`safeExternalKey`): it can only be copied in, after its own question.
+   Allowances and libraries are compared only with such keys; a library is
+   allowed as its real folder too; the file a link leads to is allowed only
+   if it is allowed itself, or after a question that shows it.
+2. **A copy not found by its name** on a computer that reads in place: the
+   name is now worked out at once (`copyNameNow`, SHA-256 in the module) in
+   `targetKey` itself, so opening, restored tabs and note matching agree.
+3. **A phone copying without asking**, on a desktop's yes to read in place:
+   a yes to copy is now kept apart (`copy:…`).
+4. **Paths never allowed resolved on disk** (a synced note naming a network
+   share): only paths allowed on this computer are resolved, in the
+   background.
+
+Also confirmed and fixed: a book read where it is, its tab restored before
+any note was read, opened at its start; this computer now remembers which
+note target each file it read answers to (`names`), so its position is
+found at once.

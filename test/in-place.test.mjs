@@ -73,8 +73,8 @@ test('downloads of web sources go to the system cache, one folder per address an
 
 test('what a device allows is kept per file or per library, and only in a form it can be', () => {
     const kept = placeDevice({ allowed: ['file:/Users/me/a.pdf', 'folder:file:/Users/me/Zotero/storage/', 'file:///old.pdf', '/plain.pdf', 7], downloads: { 'https://x.org/a.pdf': '/c/a.pdf', 'javascript:x': '/c/b.pdf', 'https://x.org/b.pdf': 'relative.pdf' } });
-    assert.deepEqual(kept, { allowed: ['file:/Users/me/a.pdf', 'folder:file:/Users/me/Zotero/storage/'], downloads: { 'https://x.org/a.pdf': '/c/a.pdf' } });
-    assert.deepEqual(placeDevice(null), { allowed: [], downloads: {} });
+    assert.deepEqual(kept, { allowed: ['file:/Users/me/a.pdf', 'folder:file:/Users/me/Zotero/storage/'], downloads: { 'https://x.org/a.pdf': '/c/a.pdf' }, names: {} });
+    assert.deepEqual(placeDevice(null), { allowed: [], downloads: {}, names: {} });
     assert.equal(allowedHere(kept, 'file:/Users/me/a.pdf', false), true);
     assert.equal(allowedHere(kept, 'file:/Users/me/A.pdf', false), false);
     assert.equal(allowedHere(kept, 'file:/Users/me/A.pdf', true), true);
@@ -97,4 +97,43 @@ test('a copy in the vault is named by the note\'s target as written, so any devi
     assert.equal(await copyName(copyOrigin('https://example.org/a.pdf'), 'pdf'), await remoteFilename('https://example.org/a.pdf', 'pdf'));
     assert.deepEqual(COPY_ENDINGS, ['pdf', 'epub', 'mobi', 'azw3', 'prc']);
     await assert.rejects(copyName('x', 'exe'));
+});
+
+test('a path Obsidian would read as another file is never a key: a backslash outside Windows, or a step out', async () => {
+    const { safeExternalKey } = await import('./.generated/readers/in-place.js');
+    const { localTarget } = await import('./.generated/readers/local-source.js');
+    // On macOS and Linux a backslash is a letter of a name, but Obsidian takes it for a separator and then resolves the
+    // steps out: `storage/..\..\..\me\Documents\secret.pdf` would open /Users/me/Documents/secret.pdf.
+    for (const raw of ['/Users/me/Zotero/storage/..\\..\\..\\me\\Documents\\secret.pdf', '/Users/me/Zotero/storage/IKUUN4F6\\..\\..\\..\\secret.pdf', '/Users/me/Zotero/storage/a\\b.pdf', 'file:///Users/me/Zotero/storage/%2E%2E%5C%2E%2E%5Csecret.pdf', 'file:///Users/me/Zotero/storage/..%5Csecret.pdf']) {
+        const local = localTarget(raw);
+        assert.ok(local, raw);
+        assert.throws(() => externalKey(local.path), /cannot be read where it is/, raw);
+    }
+    // Steps out written with slashes are taken away before (by localTarget), and Windows' backslashes are separators.
+    assert.equal(externalKey(localTarget('/Users/me/Zotero/storage/../../a.pdf').path), 'file:/Users/me/a.pdf');
+    assert.equal(externalKey(localTarget('C:\\Users\\me\\Zotero\\storage\\..\\..\\a.pdf').path), 'file:C:/Users/me/a.pdf');
+    for (const key of ['file:/Users/me/a.pdf', 'file:C:/Users/me/a.pdf']) assert.equal(safeExternalKey(key), true, key);
+    for (const key of ['file:/Users/me/../me/a.pdf', 'file:/Users/me/./a.pdf', 'file:/Users/me//a.pdf', 'file:/Users/me/a\\b.pdf', 'file:/Users/me/a\0.pdf', 'file:///Users/me/a.pdf', 'file:C:/x/../y.pdf']) assert.equal(safeExternalKey(key), false, key);
+    // Such a key is never allowed, whatever was allowed before, in any case of its letters.
+    const device = placeDevice({ allowed: ['folder:file:/Users/me/Zotero/storage/', 'folder:file:/Users/me/Zotero/storage/../../', 'file:/Users/me/../me/a.pdf'] });
+    assert.deepEqual(device.allowed, ['folder:file:/Users/me/Zotero/storage/']);
+    for (const fold of [false, true])
+        for (const key of ['file:/Users/me/Zotero/storage/../../../me/Documents/secret.pdf', 'file:/users/me/zotero/storage/../../secret.pdf', 'file:/Users/me/Zotero/storage/./x/../../secret.pdf', 'file:/Users/me/Zotero/storage/a\\..\\..\\secret.pdf'])
+            assert.equal(allowedHere(device, key, fold), false, key);
+    assert.equal(libraryOf('file:/Users/me/Zotero/storage/../../me/secret.pdf', ['/Users/me/Zotero/storage'], false), null);
+    // A library named in the settings with steps in it is the folder they lead to.
+    assert.equal(libraryOf('file:/Users/me/Zotero/storage/X/P.pdf', ['/Users/me/Zotero/other/../storage/'], false), 'file:/Users/me/Zotero/storage/');
+});
+
+test('the name a copy is found by is worked out at once as well, the same as the copy is made under', async () => {
+    const { copyNameNow } = await import('./.generated/readers/in-place.js');
+    for (const origin of ['zotero://open-pdf/library/items/IKUUN4F6', '/Users/me/Papers/Ångström — 2017.pdf', 'https://example.org/a.pdf', '', 'x'.repeat(200)])
+        for (const ending of ['pdf', 'epub', 'azw3']) assert.equal(copyNameNow(origin, ending), await copyName(origin, ending), origin);
+    assert.throws(() => copyNameNow('x', 'exe'));
+});
+
+test('which origin a file read where it is answers to is kept on this device, so a restored book finds its place before the notes are read', () => {
+    const kept = placeDevice({ names: { 'file:/Users/me/a.epub': 'calibre://show-book/Books/7', 'file:/Users/me/../x.epub': 'x', 'notakey': 'y', 'file:/Users/me/b.epub': 7 } });
+    assert.deepEqual(kept.names, { 'file:/Users/me/a.epub': 'calibre://show-book/Books/7' });
+    assert.deepEqual(placeDevice(null).names, {});
 });

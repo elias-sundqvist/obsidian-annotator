@@ -96,6 +96,7 @@ import {
     copyName,
     copyOrigin,
     externalKey,
+    copyNameNow,
     externalPath,
     inCache,
     isExternalKey,
@@ -504,14 +505,21 @@ export default class AnnotatorPlugin extends Plugin {
         } catch {
             origin = null;
         }
-        if (this.approvedSources.has(url) || (origin && this.approvedSources.has(origin))) return 'yes';
+        // A yes to read an address where it is (downloaded to this computer's cache) is not a yes to copy it into the
+        // vault: a copy is asked for with its own question, also on a phone the settings sync to. Kept as `copy:…`.
+        const scope = how === 'place' ? '' : 'copy:';
+        if (this.approvedSources.has(scope + url) || (origin && this.approvedSources.has(scope + origin))) return 'yes';
         const choice = await this.sourceApproval(url, kind, how);
         if (choice === 'no') throw new Error('Not opened: this source is outside the vault and was not allowed.');
         // A yes for an internet address is kept: the address means the same file everywhere. A yes for a file on this
         // computer is for the one copy now made, and is not kept: the same path may hold another file later, or on
         // another computer the settings sync to.
-        this.approvedSources.add(choice === 'always' && origin ? origin : url);
-        return choice === 'copy' ? 'copy' : 'yes';
+        if (choice === 'copy') {
+            this.approvedSources.add(`copy:${url}`);
+            return 'copy';
+        }
+        this.approvedSources.add(scope + (choice === 'always' && origin ? origin : url));
+        return 'yes';
     }
     /**
      * Asks, unless this device allowed it before, before a file outside the vault is read where it is. A yes is kept on
@@ -526,9 +534,15 @@ export default class AnnotatorPlugin extends Plugin {
             choice = await this.sourceApproval(key, kind, 'place', !!library);
         if (choice === 'no') throw new Error('Not opened: this file is outside the vault and was not allowed.');
         if (choice === 'copy') return 'copy';
-        const allowed = choice === 'always' && library ? `folder:${library}` : key,
-            kept = this.placeDevice();
-        this.keepPlaceDevice({ ...kept, allowed: [...kept.allowed, allowed].slice(-2000) });
+        const allowed = [choice === 'always' && library ? `folder:${library}` : key];
+        // A library allowed is allowed as the folder it really is too (a link above it, as /tmp on a Mac), so that its
+        // files, resolved, are found in it. Asked of the disk only now, after the yes for that library.
+        if (choice === 'always' && library) {
+            const real = await this.realKey(library.replace(/\/+$/, ''));
+            if (real !== library.replace(/\/+$/, '')) allowed.push(`folder:${real}/`);
+        }
+        const kept = this.placeDevice();
+        this.keepPlaceDevice({ ...kept, allowed: [...kept.allowed, ...allowed].slice(-2000) });
         return 'yes';
     }
     /** The folders of the libraries the settings name: Zotero's attachments and each Calibre library. */
@@ -932,7 +946,7 @@ export default class AnnotatorPlugin extends Plugin {
                 if (typeof path === 'string') this.remoteSources[url] = path;
         if (Array.isArray(this.savedData.approvedSources))
             for (const item of this.savedData.approvedSources)
-                if (typeof item === 'string' && item.length < 4000 && !/^file:/i.test(item))
+                if (typeof item === 'string' && item.length < 4000 && !/^(?:copy:)?file:/i.test(item))
                     this.approvedSources.add(item);
         this.addSettingTab(new NativeSettings(this.app, this));
         if (Platform.isDesktopApp && Platform.isMacOS) void this.readVaultCase();
@@ -2071,33 +2085,70 @@ export default class AnnotatorPlugin extends Plugin {
             for (const key of this.inPlace.keys()) if (sameExternal(key, path, true)) return key;
         return null;
     }
-    /** What is kept in the settings for a source: for one read where it is, its note's target as written. */
+    /**
+     * What is kept in the settings for a source: for one read where it is, its note's target as written. A tab
+     * Obsidian restores asks before any note has been read: this device remembers which target each file it has read
+     * where it is answers to.
+     */
     private keptKey(path: string): string {
         const key = this.inPlaceKey(path),
             source = key ? this.inPlace.get(key) : undefined;
-        return source ? `target:${source.origin}` : path;
+        if (source) return `target:${source.origin}`;
+        if (!isExternalKey(path)) return path;
+        const names = this.placeDevice().names,
+            known =
+                names[path] ??
+                (this.foldOutsideCase()
+                    ? Object.entries(names).find(([each]) => sameExternal(each, path, true))?.[1]
+                    : undefined);
+        return known === undefined ? path : `target:${known}`;
+    }
+    /** Remembers on this device which target a file read where it is answers to (see `keptKey`). */
+    private nameHere(key: string, origin: string) {
+        const kept = this.placeDevice();
+        if (kept.names[key] === origin) return;
+        const names = Object.fromEntries(
+            [...Object.entries(kept.names).filter(([each]) => each !== key), [key, origin]].slice(-2000)
+        );
+        this.keepPlaceDevice({ ...kept, names });
     }
     /**
      * Resolves the paths notes write for files on this computer to the files' own (links followed), each once a
      * session, and says whether any key changed. Asks the disk: used only for a view no note's key matches.
      */
-    private resolveInPlace(): boolean {
-        let changed = false;
-        for (const [key, entry] of [...this.inPlace]) {
-            if (!entry.uri.startsWith('file:') || this.resolvedPaths.has(key)) continue;
-            let real = key;
-            try {
-                real = externalKey(this.desktopFiles().realpathSync(externalPath(key)));
-            } catch {
-                real = key;
+    /** The resolution under way (`resolveInPlace`), if any. */
+    placeResolving: Promise<void> | null = null;
+    /**
+     * Resolves the paths notes write for files on this computer to the files' own (links followed), once a session,
+     * in the background, then looks at the tabs again. Only paths this device allowed are asked of the disk: a note
+     * may name any path (a network share whose very lookup would reach out), and a path not allowed is never read.
+     */
+    private resolveInPlace() {
+        if (this.placeResolving) return;
+        const fold = this.foldOutsideCase(),
+            kept = this.placeDevice(),
+            waiting = [...this.inPlace].filter(
+                ([key, entry]) =>
+                    entry.uri.startsWith('file:') && !this.resolvedPaths.has(key) && allowedHere(kept, key, fold)
+            );
+        if (!waiting.length) return;
+        this.placeResolving = (async () => {
+            let changed = false;
+            for (const [key, entry] of waiting) {
+                const real = await this.realKey(key);
+                if (this.stopped) return;
+                // The file it leads to is bound only if it is allowed here as itself.
+                const settled = real === key || allowedHere(this.placeDevice(), real, fold) ? real : key;
+                this.resolvedPaths.set(key, settled);
+                if (settled !== key) {
+                    this.placeKey(settled, entry);
+                    changed = true;
+                }
             }
-            this.resolvedPaths.set(key, real);
-            if (real !== key) {
-                this.placeKey(real, entry);
-                changed = true;
-            }
-        }
-        return changed;
+            if (changed) this.bindSources();
+        })().finally(() => {
+            this.placeResolving = null;
+        });
     }
     /** Looks at every note's target again (no disk is touched), so the outside files they name are known. */
     private learnInPlace() {
@@ -2123,8 +2174,8 @@ export default class AnnotatorPlugin extends Plugin {
             key = this.inPlaceKey(path);
         }
         // A tab Obsidian restored shows the file's own path, which a note may write another way (through a link, as
-        // /tmp is on a Mac). The paths notes write are resolved once a session, and only when a view needs it.
-        if (!key && this.resolveInPlace()) key = this.inPlaceKey(path);
+        // /tmp is on a Mac). The paths notes write (those allowed here) are resolved once a session, in the background.
+        if (!key) this.resolveInPlace();
         return key && allowedHere(this.placeDevice(), key, this.foldOutsideCase()) ? key : null;
     }
     private baseSourceKey(view: View): string | null {
@@ -2653,7 +2704,7 @@ export default class AnnotatorPlugin extends Plugin {
             let value = candidate;
             // A copy in the vault made for this target wins, on every device: annotations are then read on one set of bytes.
             if (index === 0) {
-                const copied = this.targetCopies[origin];
+                const copied = this.targetCopies[origin] || this.copyByName(raw, origin);
                 if (copied && this.app.vault.getAbstractFileByPath(copied) instanceof TFile) return copied;
             }
             // A Zotero or Calibre link is the file it was found to mean; one not yet followed is followed on opening.
@@ -2689,7 +2740,13 @@ export default class AnnotatorPlugin extends Plugin {
                         return this.remoteSources[url];
                     // Read where it is: the download this computer has of it, or one to be made on opening.
                     const here = this.readsInPlace() ? this.placeDevice().downloads[url] : undefined;
-                    return here ? this.placeKey(externalKey(here), { origin, uri: url, kind }) : `remote:${url}`;
+                    let key: string | null = null;
+                    try {
+                        key = here ? externalKey(here) : null;
+                    } catch {
+                        key = null;
+                    }
+                    return key ? this.placeKey(key, { origin, uri: url, kind }) : `remote:${url}`;
                 } catch {
                     continue;
                 }
@@ -2711,14 +2768,21 @@ export default class AnnotatorPlugin extends Plugin {
                     const cached = this.remoteSources[local.uri];
                     if (cached && this.app.vault.getAbstractFileByPath(cached)) return cached;
                     // Read where it is, on a computer of the kind the path is written for. Nothing is looked at here.
-                    if (this.readsInPlace() && local.windows === !!Platform.isWin) {
-                        const written = externalKey(local.path);
+                    // A path Obsidian would read as another file (a backslash in a name on macOS or Linux) is not read
+                    // where it is: it can only be copied in, after the question, by its own name.
+                    let written: string | null = null;
+                    try {
+                        written =
+                            this.readsInPlace() && local.windows === !!Platform.isWin ? externalKey(local.path) : null;
+                    } catch {
+                        written = null;
+                    }
+                    if (written)
                         return this.placeKey(this.resolvedPaths.get(written) || written, {
                             origin,
                             uri: local.uri,
                             kind
                         });
-                    }
                     return `remote:${local.uri}`;
                 } catch {
                     continue;
@@ -5486,7 +5550,7 @@ export default class AnnotatorPlugin extends Plugin {
                 appLinkPaths: { ...this.appLinkPaths },
                 archiveFiles: { ...this.archiveFiles },
                 remoteSources: { ...this.remoteSources },
-                approvedSources: [...this.approvedSources].filter(item => !/^file:/i.test(item)),
+                approvedSources: [...this.approvedSources].filter(item => !/^(?:copy:)?file:/i.test(item)),
                 remoteHistory: clone(this.remoteHistory),
                 nativeDrafts: [...this.draftSessions.values()].map(session => clone(session)),
                 annotationMarkdownSettings: {
@@ -7561,12 +7625,6 @@ export default class AnnotatorPlugin extends Plugin {
             activate && (!destination || this.app.workspace.getMostRecentLeaf() === destination);
         requireCurrent();
         let key = this.targetKey(note);
-        // A copy in the vault named by this note's target (made on another device whose settings have not synced
-        // here) is the source, as any copy is: found by its name.
-        if (key && /^(?:applink|archive|remote):/.test(key) && (await this.copyByName(note))) {
-            requireCurrent();
-            key = this.targetKey(note);
-        }
         if (key?.startsWith('applink:')) {
             await this.followAppLink(key.slice(8));
             requireCurrent();
@@ -8019,9 +8077,10 @@ export default class AnnotatorPlugin extends Plugin {
             named = this.noteNaming(local.uri, had?.path || null, externalKey(local.path)),
             note = named || (await this.makeSourceNote(local.path));
         // The reader's yes was given where this was called from: for this one copy, or to read the file where it is.
-        this.approvedSources.add(local.uri);
-        if (copy) this.wantCopy.add(local.uri);
-        else if (this.readsInPlace()) {
+        if (copy) {
+            this.approvedSources.add(`copy:${local.uri}`);
+            this.wantCopy.add(local.uri);
+        } else if (this.readsInPlace()) {
             const kept = this.placeDevice(),
                 key = externalKey(local.path);
             if (!allowedHere(kept, key, this.foldOutsideCase()))
@@ -8041,7 +8100,7 @@ export default class AnnotatorPlugin extends Plugin {
                 }
             throw error;
         } finally {
-            this.approvedSources.delete(local.uri);
+            this.approvedSources.delete(`copy:${local.uri}`);
             this.wantCopy.delete(local.uri);
         }
         if (had) void this.sayIfChanged(local.path, had);
@@ -8208,7 +8267,7 @@ export default class AnnotatorPlugin extends Plugin {
                 );
             }
             // The yes for a file on this computer was for this copy, and is used up.
-            if (url.startsWith('file:')) this.approvedSources.delete(url);
+            if (url.startsWith('file:')) this.approvedSources.delete(`copy:${url}`);
             return file;
         })();
         this.downloads.set(url, job);
@@ -8267,18 +8326,23 @@ export default class AnnotatorPlugin extends Plugin {
             this.keepPlaceDevice({ ...kept, downloads });
             return this.downloadToCache(entry.uri, entry.kind, entry.origin);
         }
-        // The file's own path: a link at its end, or letters written in another case, become the file's.
+        // The file's own path: a link at its end, or letters written in another case, become the file's. What was
+        // allowed is the path the note wrote; the file it leads to must be allowed as itself (a link inside a library
+        // may lead out of it), so it is asked about, showing where it leads, unless this device allowed it already.
         if (!web) {
             const real = await this.realKey(key);
             if (real !== key) {
+                if (!allowedHere(this.placeDevice(), real, this.foldOutsideCase())) {
+                    this.placeKey(real, entry);
+                    if ((await this.approvePlace(real, entry.kind)) === 'copy')
+                        return (await this.copyEntry(entry, real)).path;
+                }
                 this.resolvedPaths.set(key, real);
                 this.placeKey(real, entry);
-                const kept = this.placeDevice();
-                if (!allowedHere(kept, real, this.foldOutsideCase()))
-                    this.keepPlaceDevice({ ...kept, allowed: [...kept.allowed, real].slice(-2000) });
                 key = real;
             }
         }
+        this.nameHere(key, entry.origin);
         if (!(this.app.vault.getAbstractFileByPath(key) instanceof TFile))
             throw new Error(
                 `There is no file at ${externalPath(key)} on this computer (or it is not a file). If it was moved or renamed, point the note's annotation-target at it again.`
@@ -8369,34 +8433,33 @@ export default class AnnotatorPlugin extends Plugin {
         const key = externalKey(path),
             kept = this.placeDevice();
         this.keepPlaceDevice({
+            ...kept,
             allowed: allowedHere(kept, key, this.foldOutsideCase())
                 ? kept.allowed
                 : [...kept.allowed, key].slice(-2000),
             downloads: { ...kept.downloads, [url]: path }
         });
         this.placeKey(key, { origin, uri: url, kind });
+        this.nameHere(key, origin);
         return key;
     }
-    /** A copy in the vault named by the note's target (`copyName`), made on any device: found and remembered, or null. */
-    private async copyByName(note: TFile): Promise<string | null> {
-        const written = annotationTarget(this.targetProperty(note, 'annotation-target'));
-        if (!written) return null;
-        const origin = copyOrigin(written);
+    /**
+     * A copy in the vault named by a note's target (`copyName`), made on any device, even one whose settings never
+     * synced here: its path, or undefined. Only targets outside the vault are looked for, and no disk is touched.
+     */
+    private copyByName(raw: string, origin: string): string | undefined {
+        if (!/^(?:https?:|file:|[a-z]:[\\/]|\/|\.\.?[\\/]|zotero:|calibre:|x-devonthink-item:)/i.test(raw.trim()))
+            return undefined;
         for (const ending of COPY_ENDINGS) {
-            const path = await copyName(origin, ending);
-            if (!(this.app.vault.getAbstractFileByPath(path) instanceof TFile)) continue;
-            if (this.targetCopies[origin] !== path) {
-                this.targetCopies[origin] = path;
-                await this.persist().catch(() => undefined);
-            }
-            return path;
+            const path = copyNameNow(origin, ending);
+            if (this.app.vault.getAbstractFileByPath(path) instanceof TFile) return path;
         }
-        return null;
+        return undefined;
     }
     /** A copy in the vault of a source read where it is, made from the very file being read. */
     private async copyEntry(entry: InPlaceSource, key: string): Promise<TFile> {
         // The reader's press (or answer) is the yes for this one copy.
-        this.approvedSources.add(entry.uri);
+        this.approvedSources.add(`copy:${entry.uri}`);
         try {
             return await this.downloadSource(
                 entry.uri,
@@ -8406,7 +8469,7 @@ export default class AnnotatorPlugin extends Plugin {
                 this.app.vault.getAbstractFileByPath(key) ? key : undefined
             );
         } finally {
-            if (entry.uri.startsWith('file:')) this.approvedSources.delete(entry.uri);
+            if (entry.uri.startsWith('file:')) this.approvedSources.delete(`copy:${entry.uri}`);
         }
     }
     /**
@@ -8699,7 +8762,10 @@ export default class AnnotatorPlugin extends Plugin {
                 const response = await requestUrl({ url, throw: false });
                 return { status: response.status, arrayBuffer: response.arrayBuffer };
             });
-            this.approvedSources.add(file.url);
+            // The yes for the item is the yes for its file, in the way it was given: to read it where it is, or to copy it.
+            if (Platform.isMobile || !this.readsInPlace() || choice === 'copy')
+                this.approvedSources.add(`copy:${file.url}`);
+            else this.approvedSources.add(file.url);
             if (choice === 'copy') this.wantCopy.add(file.url);
             this.archiveFiles[item.key] = file.url;
             await this.persist();
@@ -8716,11 +8782,6 @@ export default class AnnotatorPlugin extends Plugin {
                 "Name Zotero's data folder in Annotator's settings: this computer's home folder is not known."
             );
         return home.replace(/[\\/]+$/, '');
-    }
-    /** The same, for the one question asked of the disk without waiting (resolving a path a tab shows). */
-    private desktopFiles(): typeof import('node:fs') {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        return require('fs');
     }
     private desktopFileSystem(): typeof import('node:fs/promises') {
         // Desktop only, and only when a file outside the vault is read: an import at the top would be loaded on phones too.

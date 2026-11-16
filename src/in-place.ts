@@ -4,7 +4,7 @@
  * its parts. Such a source is known by exactly that path here, so that a view Obsidian opened and the note that
  * names the file agree. What is decided here touches no disk: the caller reads and writes.
  */
-import { cachedSourceUrl } from './local-source';
+import { cachedSourceUrl, localTarget } from './local-source';
 import { digest } from './source';
 import { originalName, type RemoteKind } from './remote-source';
 
@@ -12,11 +12,41 @@ import { originalName, type RemoteKind } from './remote-source';
  * The key of a file outside the vault, as Obsidian writes a `TExternalFile`'s path: `file:` and the absolute path,
  * with `/` for every separator, not percent-encoded (`file:/Users/me/a b.pdf`, `file:C:/Users/me/a.pdf`). The path
  * is a whole one already (as `localTarget` gives it).
+ *
+ * Obsidian takes both `/` and `\` for separators and then resolves `..`; on macOS and Linux `\` is a letter of a
+ * name. So a path there with a backslash in it (`storage/..\..\secret.pdf`, one file's name) would be opened as
+ * another file (two folders up): such a path cannot be read where it is, and nor can one that still has `.` or `..`
+ * in it. Refused, never changed into something else.
  */
 export function externalKey(path: string): string {
-    const plain = path.replace(/\\/g, '/').replace(/\/{2,}/g, '/'),
-        drive = /^([a-z]):\//i.exec(plain);
-    return `file:${drive ? `${drive[1].toUpperCase()}${plain.slice(1)}` : plain}`;
+    const drive = /^([a-z]):[\\/]/i.exec(path);
+    if (!drive && path.includes('\\'))
+        throw new Error('A path with a backslash in a name cannot be read where it is on this computer.');
+    const plain = (drive ? path.replace(/\\/g, '/') : path).replace(/\/{2,}/g, '/'),
+        key = `file:${drive ? `${drive[1].toUpperCase()}${plain.slice(1)}` : plain}`;
+    if (!safeExternalKey(key))
+        throw new Error('This path cannot be read where it is: it is not a whole path to a file.');
+    return key;
+}
+/**
+ * Whether a key names exactly the file Obsidian will open for it: an outside key with no backslash, no NUL, no empty
+ * part and no `.` or `..` part. Only such keys are ever opened, allowed or compared with what was allowed.
+ */
+export function safeExternalKey(key: string): boolean {
+    if (!isExternalKey(key) || key.includes('\\') || key.includes('\0')) return false;
+    const parts = externalPath(key).split('/').slice(1);
+    return parts.length > 0 && parts.every(part => part !== '' && part !== '.' && part !== '..');
+}
+/** A folder's key ending in `/`, by the same rules, or null. */
+function folderKey(folder: string): string | null {
+    try {
+        const local = localTarget(folder.trim());
+        if (!local) return null;
+        const key = externalKey(local.path.replace(/\/+$/, '') || '/');
+        return `${key.replace(/\/+$/, '')}/`;
+    } catch {
+        return null;
+    }
 }
 /** Whether a key is such a key: `file:/…` or `file:C:/…`, never the `file:///` address 0.3 keys its copies by. */
 export function isExternalKey(key: string): boolean {
@@ -123,20 +153,27 @@ export function inCache(root: string, path: string): boolean {
 export interface PlaceDevice {
     allowed: string[];
     downloads: Record<string, string>;
+    /**
+     * Which target as written each file read here answers to: what its reading position is kept under. Known on
+     * this device as soon as Obsidian restores a tab, before any note has been read.
+     */
+    names: Record<string, string>;
+}
+/** Whether an entry of `allowed` is in a form that can be: a safe file key, or `folder:` and a safe folder key. */
+function allowance(item: unknown): item is string {
+    if (typeof item !== 'string' || item.length >= 4000) return false;
+    if (!item.startsWith('folder:')) return safeExternalKey(item);
+    const folder = item.slice(7);
+    return folder.endsWith('/') && safeExternalKey(folder.slice(0, -1));
 }
 export function placeDevice(value: unknown): PlaceDevice {
-    const out: PlaceDevice = { allowed: [], downloads: {} };
+    const out: PlaceDevice = { allowed: [], downloads: {}, names: {} };
     if (!value || typeof value !== 'object' || Array.isArray(value)) return out;
-    const given = value as { allowed?: unknown; downloads?: unknown };
-    if (Array.isArray(given.allowed))
-        out.allowed = given.allowed
-            .filter(
-                (item): item is string =>
-                    typeof item === 'string' &&
-                    item.length < 4000 &&
-                    isExternalKey(item.startsWith('folder:') ? item.slice(7) : item)
-            )
-            .slice(-2000);
+    const given = value as { allowed?: unknown; downloads?: unknown; names?: unknown };
+    if (Array.isArray(given.allowed)) out.allowed = given.allowed.filter(allowance).slice(-2000);
+    if (given.names && typeof given.names === 'object' && !Array.isArray(given.names))
+        for (const [key, origin] of Object.entries(given.names).slice(-2000))
+            if (safeExternalKey(key) && typeof origin === 'string' && origin.length < 4000) out.names[key] = origin;
     if (given.downloads && typeof given.downloads === 'object' && !Array.isArray(given.downloads))
         for (const [url, path] of Object.entries(given.downloads))
             if (
@@ -150,19 +187,23 @@ export function placeDevice(value: unknown): PlaceDevice {
 }
 /** Whether this device allowed a file to be read where it is: the file itself, or a library folder holding it. */
 export function allowedHere(device: PlaceDevice, key: string, foldCase: boolean): boolean {
+    if (!safeExternalKey(key)) return false;
     const fold = (value: string) => (foldCase ? value.toLowerCase() : value),
         wanted = fold(key);
-    return device.allowed.some(item =>
-        item.startsWith('folder:') ? wanted.startsWith(fold(item.slice(7))) : fold(item) === wanted
+    return device.allowed.some(
+        item =>
+            allowance(item) &&
+            (item.startsWith('folder:') ? wanted.startsWith(fold(item.slice(7))) : fold(item) === wanted)
     );
 }
 /** The library folder (Zotero's `storage`, a Calibre library) a file is in, as a key ending in `/`, or null. */
 export function libraryOf(key: string, libraries: string[], foldCase: boolean): string | null {
+    if (!safeExternalKey(key)) return null;
     const fold = (value: string) => (foldCase ? value.toLowerCase() : value);
     for (const library of libraries) {
         if (!library.trim() || !/^(?:\/|[a-z]:[\\/])/i.test(library.trim())) continue;
-        const folder = `${externalKey(library.trim()).replace(/\/+$/, '')}/`;
-        if (fold(key).startsWith(fold(folder)) && key.length > folder.length) return folder;
+        const folder = folderKey(library);
+        if (folder && fold(key).startsWith(fold(folder)) && key.length > folder.length) return folder;
     }
     return null;
 }
@@ -187,4 +228,70 @@ export const COPY_ENDINGS = ['pdf', 'epub', 'mobi', 'azw3', 'prc'];
 export async function copyName(origin: string, ending: string): Promise<string> {
     if (!COPY_ENDINGS.includes(ending)) throw new Error('Not a kind of source the reader keeps.');
     return `Annotator sources/${await digest(origin)}.${ending}`;
+}
+const named = new Map<string, string>();
+/**
+ * The same name, worked out at once (the reader asks for it while matching notes, which cannot wait): SHA-256 of
+ * the target's UTF-8 bytes, as `digest` gives it. Remembered for each target.
+ */
+export function copyNameNow(origin: string, ending: string): string {
+    if (!COPY_ENDINGS.includes(ending)) throw new Error('Not a kind of source the reader keeps.');
+    let hash = named.get(origin);
+    if (hash === undefined) {
+        hash = sha256Hex(new TextEncoder().encode(origin));
+        if (named.size > 5000) named.clear();
+        named.set(origin, hash);
+    }
+    return `Annotator sources/${hash}.${ending}`;
+}
+const ROUND = Uint32Array.from([
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98,
+    0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786,
+    0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8,
+    0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+    0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819,
+    0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a,
+    0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7,
+    0xc67178f2
+]);
+/** SHA-256 (FIPS 180-4) of some bytes, as lowercase hexadecimal. */
+function sha256Hex(bytes: Uint8Array): string {
+    const length = bytes.length,
+        blocks = Math.ceil((length + 9) / 64),
+        padded = new Uint8Array(blocks * 64);
+    padded.set(bytes);
+    padded[length] = 0x80;
+    const view = new DataView(padded.buffer);
+    view.setUint32(padded.length - 8, Math.floor(length / 0x20000000));
+    view.setUint32(padded.length - 4, (length * 8) >>> 0);
+    const hash = Uint32Array.from([
+            0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
+        ]),
+        w = new Uint32Array(64),
+        rotate = (x: number, n: number) => (x >>> n) | (x << (32 - n));
+    for (let block = 0; block < blocks; block++) {
+        for (let i = 0; i < 16; i++) w[i] = view.getUint32(block * 64 + i * 4);
+        for (let i = 16; i < 64; i++) {
+            const s0 = rotate(w[i - 15], 7) ^ rotate(w[i - 15], 18) ^ (w[i - 15] >>> 3),
+                s1 = rotate(w[i - 2], 17) ^ rotate(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+            w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0;
+        }
+        let [a, b, c, d, e, f, g, h] = hash;
+        for (let i = 0; i < 64; i++) {
+            const t1 =
+                    (h + (rotate(e, 6) ^ rotate(e, 11) ^ rotate(e, 25)) + ((e & f) ^ (~e & g)) + ROUND[i] + w[i]) >>> 0,
+                t2 = ((rotate(a, 2) ^ rotate(a, 13) ^ rotate(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) >>> 0;
+            h = g;
+            g = f;
+            f = e;
+            e = (d + t1) >>> 0;
+            d = c;
+            c = b;
+            b = a;
+            a = (t1 + t2) >>> 0;
+        }
+        const add = [a, b, c, d, e, f, g, h];
+        for (let i = 0; i < 8; i++) hash[i] = (hash[i] + add[i]) >>> 0;
+    }
+    return [...hash].map(word => word.toString(16).padStart(8, '0')).join('');
 }
