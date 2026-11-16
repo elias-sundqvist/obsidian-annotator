@@ -1816,3 +1816,45 @@ test('any area can show its note on the page and stop again; a text box\'s size 
   assert.equal(h.plugin.annotationMenu(key,passage).items.some(each=>each.title==='Show note on the page'),false);
  }finally{h.dispose();}
 });
+test('an archive.org item link as a target is looked up once after one question naming archive.org, its book downloaded and remembered; a lent book is refused with the reason',async()=>{
+ // archive.org's answers as its metadata API gave them on 2026-11-16, trimmed to the fields read.
+ const items={
+  AlicesAdventuresInWonderland:{metadata:{identifier:'AlicesAdventuresInWonderland'},files:[{name:'alice-in-wonderland.pdf',format:'Text PDF',size:'2270965',source:'original'},{name:'alice-in-wonderland.epub',format:'EPUB',size:'2385293',source:'derivative'}]},
+  alicesadventure00carr:{metadata:{identifier:'alicesadventure00carr','access-restricted-item':'true'},files:[{name:'alicesadventure00carr.pdf',format:'Text PDF',source:'derivative',private:'true'},{name:'alicesadventure00carr_encrypted.pdf',format:'ACS Encrypted PDF',source:'derivative'}]}
+ };
+ const requests=[];globalThis.__annotatorTestRequest=async options=>{requests.push(options.url);const metadata=/^https:\/\/archive\.org\/metadata\/(.+)$/.exec(options.url);
+  if(metadata)return {status:200,headers:{},arrayBuffer:new TextEncoder().encode(JSON.stringify(items[metadata[1]]||{})).buffer};
+  if(options.url==='https://archive.org/download/AlicesAdventuresInWonderland/alice-in-wonderland.pdf')return {status:200,headers:{},arrayBuffer:new TextEncoder().encode('%PDF-1.7 Alice\n').buffer};
+  return {status:401,headers:{},arrayBuffer:new ArrayBuffer(0)};};
+ const h=host();try{const asked=[];let reply='no';h.plugin.sourceApproval=async(url,kind)=>{asked.push([url,kind]);return reply;};
+  const link='https://archive.org/details/AlicesAdventuresInWonderland/page/n5/mode/2up?q=rabbit',key='https://archive.org/details/AlicesAdventuresInWonderland';
+  const note=h.add('Alice.md','The note as written',{'annotation-target':link}),again=h.add('Alice again.md','',{'annotation-target':'https://www.archive.org/details/AlicesAdventuresInWonderland'}),lentNote=h.add('Lent.md','',{'annotation-target':'https://archive.org/details/alicesadventure00carr'});
+  await h.plugin.onload();
+  // Not looked up yet: the note is an annotation note, and its key says an item is waiting.
+  assert.equal(h.plugin.targetKey(note),`archive:${key}`);assert.equal(h.plugin.targetKey(again),`archive:${key}`);
+  // Declined: archive.org is not asked, nothing is downloaded or kept.
+  await assert.rejects(h.plugin.openNoteTarget(note),/was not allowed/);assert.deepEqual(asked,[[key,'archive.org']]);assert.deepEqual(requests,[]);assert.equal(h.opened.length,0);
+  // Allowed: archive.org is asked once which files the item has, and the chosen file is downloaded without a second question.
+  reply='yes';await h.plugin.openNoteTarget(note);
+  assert.equal(asked.length,2);assert.deepEqual(requests,['https://archive.org/metadata/AlicesAdventuresInWonderland','https://archive.org/download/AlicesAdventuresInWonderland/alice-in-wonderland.pdf']);
+  const file=h.opened[0].file;assert.ok(/^Annotator sources\/[0-9a-f]+\.pdf$/.test(file.path),file.path);assert.equal(new TextDecoder().decode(h.binaries.get(file.path)),'%PDF-1.7 Alice\n');
+  // The note keeps the item link as written; the reader remembers the file it was found to mean.
+  assert.equal(h.contents.get(note.path),'The note as written');await h.plugin.persistQueue;
+  assert.deepEqual(h.plugin.data.archiveFiles,{[key]:'https://archive.org/download/AlicesAdventuresInWonderland/alice-in-wonderland.pdf'});
+  assert.equal(h.plugin.data.remoteSources['https://archive.org/download/AlicesAdventuresInWonderland/alice-in-wonderland.pdf'],file.path);
+  assert.equal(h.plugin.targetKey(note),file.path);assert.equal(h.plugin.targetKey(again),file.path,'the same item written another way is the same source');
+  assert.equal(h.plugin.sourceTitle(file.path),'alice-in-wonderland');
+  // Opened again, from either note: nothing is asked and nothing is fetched.
+  await h.plugin.openNoteTarget(again);assert.equal(asked.length,2);assert.equal(requests.length,2);assert.equal(h.opened[h.opened.length-1].file,file);
+  // A book archive.org lends: refused with the reason after one metadata request; its download is never tried.
+  await assert.rejects(h.plugin.openNoteTarget(lentNote),/archive\.org lends this book \(Borrow\) rather than letting anyone download it, so it can't be downloaded/);
+  assert.deepEqual(requests.slice(2),['https://archive.org/metadata/alicesadventure00carr']);assert.equal(h.plugin.targetKey(lentNote),'archive:https://archive.org/details/alicesadventure00carr');
+  await h.plugin.persistQueue;assert.deepEqual(Object.keys(h.plugin.data.archiveFiles),[key]);assert.equal([...h.files.keys()].filter(path=>path.startsWith('Annotator sources/')).length,1);
+ }finally{h.dispose();}
+ // After a restart the file found is still known, and what was kept is checked: an entry that is not an item's own file is dropped.
+ const later=host();try{later.plugin.data={archiveFiles:{'https://archive.org/details/AlicesAdventuresInWonderland':'https://archive.org/download/AlicesAdventuresInWonderland/alice-in-wonderland.pdf','https://archive.org/details/other':'https://example.org/other.pdf'}};
+  const note=later.add('Alice.md','',{'annotation-target':'https://archive.org/details/AlicesAdventuresInWonderland'});await later.plugin.onload();
+  assert.equal(later.plugin.targetKey(note),'remote:https://archive.org/download/AlicesAdventuresInWonderland/alice-in-wonderland.pdf');
+  assert.deepEqual(Object.keys(later.plugin.archiveFiles),['https://archive.org/details/AlicesAdventuresInWonderland']);
+ }finally{later.dispose();}
+});

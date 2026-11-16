@@ -792,6 +792,43 @@ value. A note whose property is a near miss (`annotation-target:`,
 `annotator-target`) is told so when it opens, with a button that renames the
 property.
 
+### Books from archive.org
+
+A book on the Internet Archive can be a note's source by its page's address,
+as your browser shows it:
+`annotation-target: https://archive.org/details/AlicesAdventuresInWonderland`.
+A link to a page of the book (`…/page/n5/mode/2up`, with a search or
+without) is the same book. An item holds several files, so the reader
+chooses one:
+
+- **A file the link names** (`https://archive.org/details/ID/FILE.epub`, or
+  the item's own download link `https://archive.org/download/ID/FILE.epub`)
+  is the one read.
+- Otherwise **the uploader's own file** comes first, an EPUB before a PDF.
+- Otherwise **the PDF archive.org made**, before the EPUB it made. For a
+  scanned book archive.org's EPUB is its text recogniser's reading of the
+  pages, with its mistakes and without the pages' layout; its PDF is the
+  pages themselves, with the same text over them to select and search.
+
+A file larger than the reader takes (PDFs up to 128 MB, EPUBs up to 64 MB)
+is passed over. The file chosen is downloaded once into `Annotator sources`
+like any other, and remembered for the item; the note keeps the link you
+wrote.
+
+Only books that archive.org lets anyone download can be read this way. A
+book it lends (**Borrow** on its page) is refused with that reason: its
+files are locked for archive.org's own reader, and its downloads are
+refused.
+
+**Network use.** The first time such a note is opened, the reader asks, in
+the same dialog a download has, naming archive.org (**Always from
+archive.org** answers it for every item). It then asks archive.org's public
+metadata service once which files the item has
+(`https://archive.org/metadata/ID`), and downloads the one chosen from
+`https://archive.org/download/…`, which archive.org hands to one of its file
+servers. Nothing else is sent: no account, no sign-in. From then on the copy
+in the vault is read, offline.
+
 ### Open a file from outside Obsidian
 
 A PDF or a book in your Downloads, on the desktop or in a mail can be handed

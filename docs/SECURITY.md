@@ -62,7 +62,18 @@ assets…" (`readers.test.mjs`), "network CSS, dynamic selectors…"
   and if it is read again it is asked about again. A Zotero or Calibre link
   is first followed to a path inside the folder the settings name, and a
   DEVONthink link to the path DEVONthink gives (see below); that path is then
-  asked about in the same way.
+  asked about in the same way. An archive.org item link
+  (`https://archive.org/details/ID`) is asked about before anything is
+  fetched, in the same dialog, naming archive.org; with the yes, the item's
+  metadata (`https://archive.org/metadata/ID`, one request, through
+  Obsidian's `requestUrl`) is read to choose a PDF or EPUB of the item, and
+  that file's download address on archive.org is then downloaded without a
+  second question and remembered for the link in the plugin's settings. The
+  identifier must be archive.org's form (letters, digits, `.`, `-`, `_`),
+  the host is fixed, and the address downloaded is built by the plugin from
+  the identifier and a file name archive.org listed, not taken from the
+  answer. Files marked private and the copies archive.org locks for lending
+  are never chosen, and an item it lends is refused.
 - **An address cannot make the reader read outside the vault without this
   computer's key.** `obsidian://annotator-open` can be opened by any web
   page or program. With `file=` it opens a PDF or EPUB that is already in

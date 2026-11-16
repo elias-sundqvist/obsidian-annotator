@@ -20,6 +20,15 @@ What changed for someone using Annotator. How to use each thing is in
   A book with DRM is refused with that reason. A Calibre link to a book that
   is only a Kindle book now opens it; a book with an EPUB or PDF still opens
   that.
+- A book on archive.org can be a note's source by its page's address
+  (`https://archive.org/details/…`, also a link to one of its pages). After
+  the usual question, which names archive.org, the reader asks archive.org
+  once which files the item has, downloads its book once and remembers it;
+  the note keeps the link as written. The uploader's own EPUB or PDF is
+  chosen first, then the PDF archive.org made from the scans (its EPUB is
+  the OCR text), or the file the link names. A book archive.org lends
+  (**Borrow**) is refused with that reason. Until now such a link was opened
+  as a web page.
 
 ## 0.3.2 (2026-11-15)
 

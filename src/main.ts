@@ -145,6 +145,7 @@ import { makeSnapshot, SnapshotHost } from './snapshot';
 import { refreshSnapshotEditors, snapshotEditorExtension } from './snapshot-editor';
 import { noteFolding, refold } from './note-folding';
 import { appLink, calibreFile, devonthinkFile, followedLinks, zoteroFile, type ScriptRunner } from './app-links';
+import { archiveItem, foundArchiveFiles, lookUpArchiveItem } from './archive-org';
 import { rectLink, selectionLink, type RectLink, type SelectionLink } from './selection-links';
 import { MATCH_LIMIT, matchWords, type MatchOptions, type MatchSource } from './every-match';
 import {
@@ -325,12 +326,28 @@ export default class AnnotatorPlugin extends Plugin {
     private localVaultTargets: Record<string, string> = {};
     /** Zotero, Calibre and DEVONthink links already followed: the link as written, and the file it was found to mean. */
     private appLinkPaths: Record<string, string> = {};
+    /** archive.org item links already looked up: the link written one way, and the download address of its file. */
+    private archiveFiles: Record<string, string> = {};
+    private archiveLookups = new Map<string, Promise<void>>();
     private remoteSources: Record<string, string> = {};
     /** Targets outside the vault the user has allowed: exact addresses, and `origin:https://host` for a whole site. */
     private approvedSources = new Set<string>();
     /** Asks before a note's target is fetched from the network or read from this computer. Replaceable (tests). */
-    sourceApproval: (url: string, kind: string) => Promise<'yes' | 'always' | 'no'> = (url, _kind) =>
+    sourceApproval: (url: string, kind: string) => Promise<'yes' | 'always' | 'no'> = (url, kind) =>
         new Promise(resolve => {
+            if (kind === 'archive.org')
+                return new ConfirmModal(
+                    this.app,
+                    'Download this book from archive.org?',
+                    [
+                        'This note points to an item on archive.org. To read and annotate it, the reader asks archive.org which files the item has, and downloads its PDF or EPUB once into “Annotator sources” in your vault.',
+                        url,
+                        'Only allow this for notes you trust: a note from someone else can point anywhere.'
+                    ],
+                    'Download',
+                    resolve,
+                    'Always from archive.org'
+                ).open();
             const web = /^https?:/i.test(url);
             let host = '';
             try {
@@ -710,6 +727,7 @@ export default class AnnotatorPlugin extends Plugin {
         this.remoteHistory = remoteRevisions(this.savedData.remoteHistory);
         this.localVaultTargets = localVaultAliases(this.savedData.localVaultTargets);
         this.appLinkPaths = followedLinks(this.savedData.appLinkPaths);
+        this.archiveFiles = foundArchiveFiles(this.savedData.archiveFiles);
         for (const [path, value] of Object.entries(settingsObject(this.savedData.nativeProgress)))
             if (typeof value === 'string' && value.length < 40) this.progressSeen[path] = value;
         const positions = this.savedData.positions;
@@ -2214,6 +2232,12 @@ export default class AnnotatorPlugin extends Plugin {
                 const followed = this.appLinkPaths[value.trim()];
                 if (!followed) return `applink:${value.trim()}`;
                 value = followed;
+            }
+            // An archive.org item is the book file it was found to hold; one not yet looked up is looked up on opening.
+            const item = index === 0 ? archiveItem(value) : null;
+            if (item) {
+                if (!this.archiveFiles[item.key]) return `archive:${item.key}`;
+                value = this.archiveFiles[item.key];
             }
             // A path that starts with "../" or "./" is taken from the vault's own folder on this computer, so one
             // setting ("../papers/") names the same place beside the vault on every computer it syncs to. Written as
@@ -4992,6 +5016,7 @@ export default class AnnotatorPlugin extends Plugin {
                 nativeProgress: { ...this.progressSeen },
                 localVaultTargets: { ...this.localVaultTargets },
                 appLinkPaths: { ...this.appLinkPaths },
+                archiveFiles: { ...this.archiveFiles },
                 remoteSources: { ...this.remoteSources },
                 approvedSources: [...this.approvedSources].filter(item => !/^file:/i.test(item)),
                 remoteHistory: clone(this.remoteHistory),
@@ -7038,6 +7063,10 @@ export default class AnnotatorPlugin extends Plugin {
             await this.followAppLink(key.slice(8));
             requireCurrent();
             key = this.targetKey(note);
+        } else if (key?.startsWith('archive:')) {
+            await this.followArchiveLink(key.slice(8));
+            requireCurrent();
+            key = this.targetKey(note);
         } else if (key?.startsWith('remote:file:') && (await this.followedFileGone(note))) {
             requireCurrent();
             key = this.targetKey(note);
@@ -7703,6 +7732,30 @@ export default class AnnotatorPlugin extends Plugin {
         }
         delete this.appLinkPaths[raw];
         return true;
+    }
+    /**
+     * An archive.org item link names a book, not a file. After the same question a download has (naming archive.org),
+     * archive.org is asked once which files the item has; the file chosen is remembered for the link, and is then an
+     * ordinary file on the internet, downloaded once. The yes for the item is the yes for that file.
+     */
+    private followArchiveLink(link: string): Promise<void> {
+        const item = archiveItem(link);
+        if (!item) return Promise.reject(new Error('This is not an archive.org item link.'));
+        const pending = this.archiveLookups.get(item.key);
+        if (pending) return pending;
+        const job = (async () => {
+            await this.approveSource(item.key, 'archive.org');
+            if (this.stopped) throw new Error('Plugin unloaded before archive.org was asked.');
+            const file = await lookUpArchiveItem(item, async url => {
+                const response = await requestUrl({ url, throw: false });
+                return { status: response.status, arrayBuffer: response.arrayBuffer };
+            });
+            this.approvedSources.add(file.url);
+            this.archiveFiles[item.key] = file.url;
+            await this.persist();
+        })();
+        this.archiveLookups.set(item.key, job);
+        return job.finally(() => this.archiveLookups.delete(item.key));
     }
     private homeFolder(): string {
         // The desktop app's own process says where the home folder is; a phone has none to name.
