@@ -1642,18 +1642,18 @@
     {
       "id": "open-with-an-install-button-inst",
       "title": "Open with: an Install button instead of a Terminal recipe",
-      "status": "todo",
+      "status": "done",
       "parent": "community",
       "dependsOn": [],
-      "notes": "Owner, 2026-11-16: 'I don't really like having to copy paste something in the terminal'. Chose an Install button in Annotator's settings (macOS, Windows, Linux) with Uninstall, over an unsigned download from annotator.esh.sh. The recipe stays as a fallback."
+      "notes": "Owner, 2026-11-16: 'I don't really like having to copy paste something in the terminal'. Chose an Install button in Annotator's settings (macOS, Windows, Linux) with Uninstall, over an unsigned download from annotator.esh.sh. The recipe stays as a fallback.\n\nDone 2026-11-16: On next (663960a): Install/Uninstall in settings for macOS, Windows (reg.exe) and Linux; reviewed; live on Mac and Surface"
     },
     {
       "id": "open-with-the-double-click-route",
       "title": "Open with: a double-click starts annotating the file where it is",
-      "status": "todo",
+      "status": "done",
       "parent": "community",
       "dependsOn": [],
-      "notes": "The address route (recipes) always copies into the vault; only Obsidian's own Open with offers reading in place. Make it offer both on Obsidian 1.14.4+ on a computer, as the owner wants reading in place as the fundamental mode.\n\nAlso from the Android check, 2026-11-16: an address refuses FB2, FBZ, FB3, MOBI, PRC and AZW3 (KIND in src/open-with.ts; the desktop recipes register only PDF and EPUB) though the reader opens them; each address opens a new tab even for a file already open; Obsidian's button is 'Import into vault', not 'Import'; the settings say a book can be handed over from a share sheet, which Android can't; the address box in settings is too narrow.\n\nOwner, 2026-11-16, after trying it: 'it asks me to copy the file into my vault, but I think the default expectation is that I should just be able to start annotating and treating the file as an external non-copied source.' So, on Obsidian 1.14.4+ on a computer: a file handed over with this device's key opens in the reader at once, read where it is, with no question (the user's own double-click is the consent); Annotate a copy in the vault stays in the view's header. Copying stays the route where reading in place can't work (older Obsidian, phones)."
+      "notes": "The address route (recipes) always copies into the vault; only Obsidian's own Open with offers reading in place. Make it offer both on Obsidian 1.14.4+ on a computer, as the owner wants reading in place as the fundamental mode.\n\nAlso from the Android check, 2026-11-16: an address refuses FB2, FBZ, FB3, MOBI, PRC and AZW3 (KIND in src/open-with.ts; the desktop recipes register only PDF and EPUB) though the reader opens them; each address opens a new tab even for a file already open; Obsidian's button is 'Import into vault', not 'Import'; the settings say a book can be handed over from a share sheet, which Android can't; the address box in settings is too narrow.\n\nOwner, 2026-11-16, after trying it: 'it asks me to copy the file into my vault, but I think the default expectation is that I should just be able to start annotating and treating the file as an external non-copied source.' So, on Obsidian 1.14.4+ on a computer: a file handed over with this device's key opens in the reader at once, read where it is, with no question (the user's own double-click is the consent); Annotate a copy in the vault stays in the view's header. Copying stays the route where reading in place can't work (older Obsidian, phones).\n\nDone 2026-11-16: On next: a keyed address opens the file in place at once on Obsidian 1.14.4+ desktop; FB2/FB3/Kindle types; tab reuse; wording"
     },
     {
       "id": "phones-the-page-jumps-after-pick",
