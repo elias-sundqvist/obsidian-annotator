@@ -1638,6 +1638,22 @@
       "parent": "community",
       "dependsOn": [],
       "notes": "Found 2026-11-16 by the live check of 0.3.4; present since 0.3.0. Fixed on next (keepPlace/placeOf in src/epub.ts), checked live with real wheel, flicks, scrollbar drags, vertical-rl and resize.\n\nDone 2026-11-16: Fixed on next, goes out with 0.3.4"
+    },
+    {
+      "id": "open-with-an-install-button-inst",
+      "title": "Open with: an Install button instead of a Terminal recipe",
+      "status": "todo",
+      "parent": "community",
+      "dependsOn": [],
+      "notes": "Owner, 2026-11-16: 'I don't really like having to copy paste something in the terminal'. Chose an Install button in Annotator's settings (macOS, Windows, Linux) with Uninstall, over an unsigned download from annotator.esh.sh. The recipe stays as a fallback."
+    },
+    {
+      "id": "open-with-the-double-click-route",
+      "title": "Open with: the double-click route offers Annotate where it is",
+      "status": "todo",
+      "parent": "community",
+      "dependsOn": [],
+      "notes": "The address route (recipes) always copies into the vault; only Obsidian's own Open with offers reading in place. Make it offer both on Obsidian 1.14.4+ on a computer, as the owner wants reading in place as the fundamental mode."
     }
   ]
 }
