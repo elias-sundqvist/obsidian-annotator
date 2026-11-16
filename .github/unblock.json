@@ -1594,18 +1594,18 @@
     {
       "id": "saved-notice-stays-on-screen-unt",
       "title": "Saved notice stays on screen until something removes it",
-      "status": "todo",
+      "status": "done",
       "parent": "community",
       "dependsOn": [],
-      "notes": "Seen while recording 0.3.3: after a save, 'Annotation saved to Markdown.' stays in the top-right corner. Check whether a real user sees it linger; make it go by itself."
+      "notes": "Seen while recording 0.3.3: after a save, 'Annotation saved to Markdown.' stays in the top-right corner. Check whether a real user sees it linger; make it go by itself.\n\nDone 2026-11-16: On next: no notice when the saved annotation is opened; a background save keeps Obsidian's default duration. Not tried live."
     },
     {
       "id": "kindle-books-check-the-unsupport",
       "title": "Kindle books: check the 'Unsupported publisher styling omitted' footer",
-      "status": "todo",
+      "status": "done",
       "parent": "community",
       "dependsOn": [],
-      "notes": "Seen while recording 0.3.3: a Calibre-made AZW3 shows 'Unsupported publisher styling omitted' in its footer throughout. Find what is omitted; show it less, or support it."
+      "notes": "Seen while recording 0.3.3: a Calibre-made AZW3 shows 'Unsupported publisher styling omitted' in its footer throughout. Find what is omitted; show it less, or support it.\n\nDone 2026-11-16: On next: @page and passing-state rules (:hover, :visited…) no longer counted; footer wording 'Some of the book's styling is not shown'. Not tried live."
     },
     {
       "id": "issue-templates-a-bug-form-and-a",
