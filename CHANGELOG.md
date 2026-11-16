@@ -34,6 +34,17 @@ What changed for someone using Annotator. How to use each thing is in
   Obsidian does, and say that on a phone or tablet a file cannot be handed
   over where it is: it is copied into the vault first. The address shown in
   the settings is shown whole, across the row.
+- Highlighting a passage in a book on a phone no longer moves the text.
+  Right after a colour in the selection bar was pressed, the text in an
+  EPUB, FB2 or Kindle book scrolled up by about a paragraph. While the
+  highlight was being saved, the note composer opened for a moment as if
+  a note were being written: its field took the focus, the keyboard began
+  to come up, the reader shrank under it, and the passage was brought to
+  the top. A highlight now opens nothing while it is saved, and the text
+  stays exactly where it was. On a computer the composer no longer flashes
+  beside the passage either, and with the composer in the sidebar its
+  field no longer takes the focus for a moment. A highlight that cannot be
+  saved still opens its composer, to try again from.
 - The Windows recipe for "Open with Annotator" no longer leaves a window
   open. On Windows 11, where Windows Terminal is the default terminal, a
   Terminal window stayed open for up to a minute each time a file was

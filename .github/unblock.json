@@ -1658,10 +1658,10 @@
     {
       "id": "phones-the-page-jumps-after-pick",
       "title": "Phones: the page jumps after picking a highlight colour in a book",
-      "status": "todo",
+      "status": "done",
       "parent": "community",
       "dependsOn": [],
-      "notes": "Android emulator, 0.3.4: EPUB about 195 px, FB2 401 px, AZW3 88 px; not in PDFs."
+      "notes": "Android emulator, 0.3.4: EPUB about 195 px, FB2 401 px, AZW3 88 px; not in PDFs.\n\nDone 2026-11-16: On next (cd4e5e2): no composer opens while a highlight is saved; checked on the Android emulator with EPUB, FB2 and AZW3"
     }
   ]
 }

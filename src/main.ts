@@ -678,6 +678,16 @@ export default class AnnotatorPlugin extends Plugin {
     private draftSerial = 0;
     private draftTimer: ReturnType<typeof setTimeout> | null = null;
     editMode = false;
+    /**
+     * While set, a passage marked at once (a swatch, `h`) is being saved. Its save runs as a draft's does, but nothing
+     * is being written, so no composer is opened for it meanwhile: on a phone one would raise the keyboard, the page
+     * would shrink under it and the text would move.
+     */
+    private marking = 0;
+    /** Whether a note is being written, in the composer beside its passage or in the sidebar. */
+    get composing() {
+        return this.editMode && !this.marking;
+    }
     /** Ink of the open composer, the ink new highlights use, and the user's names for inks. */
     ink: Ink = DEFAULT_INK;
     lastInk: Ink = DEFAULT_INK;
@@ -3846,11 +3856,15 @@ export default class AnnotatorPlugin extends Plugin {
         if (action === 'highlight' || action === 'highlight-link') {
             const known = new Set((this.notes.get(capture.file)?.records || []).map(row => row.id));
             this.quietSelect++;
+            this.marking++;
             try {
                 await this.save();
             } finally {
                 this.quietSelect--;
+                this.marking--;
             }
+            // A highlight that could not be saved is kept as a draft; its composer opens now, to try again from.
+            if (this.editMode) this.refresh();
             // The link is copied only for the highlight this made: a save that was refused leaves nothing to link to.
             // `save` has set what is selected since: read it afresh, not as it stood above.
             const made = this.editing as AnnotatorPlugin['editing'];
@@ -5612,7 +5626,7 @@ export default class AnnotatorPlugin extends Plugin {
         // A text box being typed is written beside it, as a note on a passage is.
         const box = !editing && !this.selection && this.draft?.file === file ? this.draft.box || null : null;
         const wants =
-            this.editMode &&
+            this.composing &&
             !!file &&
             !!key &&
             this.display.composer === 'page' &&
