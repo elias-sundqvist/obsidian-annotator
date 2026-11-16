@@ -433,6 +433,21 @@ test('"New annotation note for pages…" is refused beside a note without pages,
     } finally { PageRangeModal.prototype.open = open; h.dispose(); }
 });
 
+test('a note for pages names the PDF in the property new notes are written with, and is one of its notes by it', async () => {
+    const h = host({ notes: { 'Books/Chapter 1.md': { pages: '1-2', rows: [row('one', 1)] } } });
+    try {
+        await h.start();
+        await h.plugin.setDisplay({ targetAlias: 'source', writeTargetAlias: true });
+        const made = await h.plugin.makeRangeNote(h.pdf.path, h.pdf, { first: 3, last: 5 }, 'The rest');
+        assert.match(h.contents.get(made.path), /^---\nsource: "Books\/Book\.pdf"\nannotation-pages: "3-5"\n---\n/);
+        assert.doesNotMatch(h.contents.get(made.path), /annotation-target/);
+        // Indexed, it speaks for itself by that property: the PDF's notes are the two, each with its pages.
+        h.metadata.set(made.path, { frontmatter: { source: 'Books/Book.pdf', 'annotation-pages': '3-5' } });
+        await h.plugin.loadNote(h.pdf.path);
+        assert.deepEqual(h.plugin.notes.get(h.pdf.path).parts.map(part => part.note.path), ['Books/Chapter 1.md', made.path]);
+    } finally { h.dispose(); }
+});
+
 test('a note for pages starts from the template as any note does, with its pages beside its target', () => {
     const template = '---\ntags: [reading]\nannotation-target: "old.pdf"\nannotation-pages: "1-2"\n---\n# {{title}}\n';
     assert.equal(newNoteText({ target: 'Book.pdf', title: 'Chapter 3', date: '2026-11-15', template, pages: '30-' }), '---\nannotation-target: "Book.pdf"\nannotation-pages: "30-"\ntags: [reading]\n---\n\n# Chapter 3\n');

@@ -5,6 +5,34 @@ What changed for someone using Annotator. How to use each thing is in
 
 ## Unreleased
 
+- **Write new notes with this property instead** (under **Also read the
+  source from this property**): new annotation notes, from the heading or
+  your template, and notes for some pages of a PDF can name their source in
+  your own property instead of `annotation-target`. Off by default, and
+  recommended off: a note written this way is read only by Annotator 0.3.2
+  and later with the same property set, not by Annotator 0.2 or tools that
+  read `annotation-target`. Everything else that writes a source follows:
+  the notice about a property that is nearly `annotation-target` renames it
+  to your property (and one that is nearly your property, `Source` for
+  `source`, to it), **Annotate the copy from now on** changes the property
+  the note uses, and **Make a Base of everything annotated** lists notes
+  that have either property.
+- With a second property for the source, the notes written by **Export each
+  annotation as its own note** (which name their annotation's source in
+  `source`) are no longer taken for notes about that source.
+- **A PDF with your annotations drawn in, for websites and printing.**
+  **Export PDF with annotations drawn in (for websites and printing)**
+  (command palette, or the sidebar's menu) saves
+  `<name> (annotations drawn in).pdf` beside the PDF, for places that do not
+  show PDF annotations (a website's or browser's PDF viewer, a print, a
+  picture of a page). Highlights, lines, areas, drawings and text boxes are
+  part of the pages, whose text can still be selected; each note is written
+  beside its passage in a column added at the page's right edge, joined to it
+  by a number, and notes that do not fit go on a page of notes after it. Words
+  the standard PDF font lacks are drawn in the system's font and can still be
+  found. The original file is not changed. Publishing a PDF this way is the
+  second route in the README's "Publishing your annotations", beside the
+  summary note.
 - FictionBook 3 books (`.fb3`) open in the book reader, with everything an
   FB2 has: contents, find, highlights, notes, picture notes, the reading
   position and the reading controls, and annotations in the same notes. Lists,

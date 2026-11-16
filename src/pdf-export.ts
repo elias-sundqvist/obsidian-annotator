@@ -195,8 +195,11 @@ export function helveticaWidth(codes: readonly number[], size: number): number {
  * Every word is kept, in order. Null where a character cannot be written in the standard font.
  */
 export function fillLines(words: string, room: number, size: number): string[] | null {
-    const width = (text: string) => helveticaWidth(winAnsi(text) || [], size);
     if (winAnsi(words.replace(/\n/g, ' ')) === null) return null;
+    return breakLines(words, room, text => helveticaWidth(winAnsi(text) || [], size));
+}
+/** The words broken into lines as `fillLines` breaks them, with `width` saying how wide a line is in points. */
+export function breakLines(words: string, room: number, width: (text: string) => number): string[] {
     const lines: string[] = [];
     for (const paragraph of words.split('\n')) {
         let line = '';

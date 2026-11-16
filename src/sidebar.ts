@@ -588,6 +588,16 @@ export class AnnotationView extends ItemView {
                             void plugin.exportAnnotatedPdf(file).catch(error => new Notice(String(error)));
                         })
                 );
+            if (file && plugin.canExportPdf(file))
+                menu.addItem(item =>
+                    item
+                        .setTitle('Export PDF with annotations drawn in…')
+                        .setIcon('globe')
+                        .setDisabled(!records.length)
+                        .onClick(() => {
+                            void plugin.exportAnnotatedPdf(file, true).catch(error => new Notice(String(error)));
+                        })
+                );
             menu.addItem(item =>
                 item
                     .setTitle('Export as individual notes + Base…')

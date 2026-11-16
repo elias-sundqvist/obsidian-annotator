@@ -216,6 +216,31 @@ test('the Base of everything annotated asks for notes with a target and shows wh
  for(const [,name] of base.matchAll(/^  ((?:note|file)\.[\w-]+):$/gm))assert.ok(views.some(view=>view.includes(`      - ${name}\n`)),name);
 });
 
+test('with a second property for the source, the Base of everything annotated lists notes that have either, and not the notes written for single annotations',async()=>{
+ const {sourcesBase}=await import('./.generated/readers/preferences.js');
+ assert.equal(sourcesBase(''),sourcesBase());assert.equal(sourcesBase('annotation-target'),sourcesBase(),'the reader\'s own property is no second property');
+ const base=sourcesBase('source'),lines=base.split('\n');
+ assert.ok(base.endsWith('\n'));for(const line of lines)assert.ok(!line.includes('\t')&&line===line.trimEnd(),JSON.stringify(line));
+ assert.deepEqual(lines.slice(0,7),['filters:','  and:','    - or:','        - \'!note["annotation-target"].isEmpty()\'','        - \'!note["source"].isEmpty()\'','    - \'note["annotation-id"].isEmpty()\'','properties:']);
+ const views=base.split('\n  - type: table\n').slice(1);assert.equal(views.length,2);
+ for(const view of views)assert.ok(view.includes('      - note.annotation-target\n      - note.source\n'),view);
+ // A name with a space is a column as it is; one YAML would misread is quoted, in the filter (where a quote is doubled) and the columns.
+ assert.ok(sourcesBase('Zotero PDF').includes('        - \'!note["Zotero PDF"].isEmpty()\'\n'));assert.ok(sourcesBase('Zotero PDF').includes('      - note.Zotero PDF\n'));
+ const odd=sourcesBase("it's #pdf");assert.ok(odd.includes('        - \'!note["it\'\'s #pdf"].isEmpty()\'\n'),odd);assert.ok(odd.includes('      - "note.it\'s #pdf"\n'),odd);
+});
+
+test('with a second property for the source, a note that has it is missing nothing, and a property that reads the same as it is a near miss',async()=>{
+ const {targetKeyNearMiss,sameName}=await import('./.generated/readers/preferences.js');
+ assert.equal(targetKeyNearMiss({source:'a.pdf','annotator-target':'b.pdf'},'source'),null);
+ assert.equal(targetKeyNearMiss({source:'','annotator-target':'b.pdf'},'source'),'annotator-target','an empty second property hides nothing');
+ for(const key of ['Source','source:','SOURCE',' source '])assert.equal(targetKeyNearMiss({[key]:'a.pdf'},'source'),key,key);
+ assert.equal(targetKeyNearMiss({'zotero_pdf':'a.pdf'},'Zotero PDF'),'zotero_pdf');
+ // Within two letters of a short name is not near enough: many properties are.
+ for(const key of ['sources','course','resource','url','file'])assert.equal(targetKeyNearMiss({[key]:'a.pdf'},'source'),null,key);
+ assert.equal(targetKeyNearMiss({Source:'a.pdf'}),null,'without a second property, nothing is a near miss of it');
+ assert.ok(sameName('Source:','source'));assert.ok(!sameName('',''));assert.ok(!sameName('sources','source'));
+});
+
 test('legacy target shapes and Markdown preferences are preserved when adopting native settings',async()=>{
  const {annotationTarget,markdownPreferences}=await import('./.generated/readers/preferences.js');
  for(const value of ['[[Folder/book.pdf|Book]]',[{path:'Folder/book.pdf'}],{path:'Folder/book.pdf'}])assert.equal(annotationTarget(value),'Folder/book.pdf');

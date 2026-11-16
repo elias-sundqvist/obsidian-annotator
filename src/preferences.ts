@@ -1,4 +1,5 @@
 import { clone } from './portable';
+import { yamlName } from './note-template';
 /** Versioned native preferences; legacy settings are read without modifying them. */
 export interface ReaderPreferences {
     readingMode: 'scroll' | 'pagination';
@@ -102,14 +103,30 @@ export function annotationTarget(value: unknown): string | null {
 /**
  * A Base that lists every annotation note in the vault, which is to say
  * everything that has been annotated: a note is one when it has an
- * `annotation-target`. The columns are the properties such a note may carry:
- * what "Add the PDF's details" writes, and where the reader was.
+ * `annotation-target`, or, where the reader has named a second property the
+ * source is read from, that property (a note written for one annotation by
+ * "Export each annotation as its own note" carries an `annotation-id` and is not
+ * one, whatever it calls its source). The columns are the properties such a
+ * note may carry: what "Add the PDF's details" writes, and where the reader
+ * was.
  */
-export function sourcesBase(): string {
+export function sourcesBase(alias = ''): string {
+    const second = targetAliasName(alias),
+        given = (name: string) => `'!note[${JSON.stringify(name).replace(/'/g, "''")}].isEmpty()'`,
+        column = (name: string) => yamlName(`note.${name}`),
+        sources = second ? [column('annotation-target'), column(second)] : [column('annotation-target')];
     return [
         'filters:',
         '  and:',
-        '    - \'!note["annotation-target"].isEmpty()\'',
+        // A note made by "Export each annotation as its own note" names its source too, in its own property: not a source's note.
+        ...(second
+            ? [
+                  '    - or:',
+                  `        - ${given('annotation-target')}`,
+                  `        - ${given(second)}`,
+                  `    - 'note["annotation-id"].isEmpty()'`
+              ]
+            : [`    - ${given('annotation-target')}`]),
         'properties:',
         '  file.name:',
         '    displayName: Note',
@@ -130,7 +147,7 @@ export function sourcesBase(): string {
         '    name: Everything annotated',
         '    order:',
         '      - file.name',
-        '      - note.annotation-target',
+        ...sources.map(each => `      - ${each}`),
         '      - note.annotation-progress',
         '      - note.author',
         '      - note.year',
@@ -147,7 +164,7 @@ export function sourcesBase(): string {
         '    order:',
         '      - file.name',
         '      - note.annotation-progress',
-        '      - note.annotation-target',
+        ...sources.map(each => `      - ${each}`),
         '      - file.mtime',
         '    sort:',
         '      - property: file.mtime',
@@ -178,6 +195,11 @@ function lettersApart(a: string, b: string): number {
     }
     return row[b.length];
 }
+/** Whether two property names read the same once case, spaces and punctuation are set aside ("Source:" and "source"). */
+export function sameName(one: string, other: string): boolean {
+    const plain = (name: string) => name.toLowerCase().replace(/[\s\-_:.]+/g, '');
+    return !!plain(one) && plain(one) === plain(other);
+}
 /**
  * The property a note most likely meant as `annotation-target`: one that
  * reads the same once case, spaces and punctuation are set aside
@@ -187,17 +209,27 @@ function lettersApart(a: string, b: string): number {
  * the property holds something a target could be. A property that merely
  * starts the same (`annotation-target-type`, `annotation-progress`) is not
  * a near miss.
+ *
+ * Where the reader has named a second property the source is read from, a
+ * note that has it is not missing anything, and a property that reads the
+ * same as that one once case, spaces and punctuation are set aside ("Source"
+ * for "source") is a near miss of it. Nothing nearer is asked of it: a short
+ * name ("pdf") is within two letters of too many others.
  */
-export function targetKeyNearMiss(frontmatter: unknown): string | null {
+export function targetKeyNearMiss(frontmatter: unknown, alias = ''): string | null {
     if (!frontmatter || typeof frontmatter !== 'object' || Array.isArray(frontmatter)) return null;
     const record = frontmatter as Record<string, unknown>,
-        wanted = 'annotationtarget';
+        wanted = 'annotationtarget',
+        second = targetAliasName(alias);
     if (annotationTarget(record['annotation-target'])) return null;
+    if (second && annotationTarget(record[second])) return null;
     for (const key of Object.keys(record)) {
-        if (key === 'annotation-target') continue;
+        if (key === 'annotation-target' || key === second) continue;
         const letters = key.toLowerCase().replace(/[^a-z]/g, '');
-        if (Math.abs(letters.length - wanted.length) > 2 || lettersApart(letters, wanted) > 2) continue;
-        if (annotationTarget(record[key])) return key;
+        const near =
+            (Math.abs(letters.length - wanted.length) <= 2 && lettersApart(letters, wanted) <= 2) ||
+            (!!second && sameName(key, second));
+        if (near && annotationTarget(record[key])) return key;
     }
     return null;
 }

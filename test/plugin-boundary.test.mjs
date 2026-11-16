@@ -1086,6 +1086,60 @@ test('a note may name its source under a second property of the reader\'s choosi
   assert.equal(Notice.messages.length,before);
  }finally{h.dispose();}
 });
+test('new notes can be written with the second property instead of annotation-target, and everything that writes a target follows; annotation-target stays the default',async()=>{
+ const {Notice}=await import('./.generated/plugin-boundary.mjs');
+ const h=host();try{h.plugin.manifest={id:'obsidian-annotator'};await h.plugin.onload();const made=[];h.app.vault.create=async(path,text)=>{made.push([path,text]);return h.add(path,text);};h.app.vault.cachedRead=async file=>h.contents.get(file.path);
+  for(const name of ['a.pdf','b.pdf','c.pdf','d.pdf'])h.add(name);
+  // Off by default, and without a second property the choice says nothing: annotation-target, as always.
+  assert.equal(h.plugin.display.writeTargetAlias,false);assert.equal(h.plugin.newNoteProperty(),'annotation-target');
+  await h.plugin.setDisplay({writeTargetAlias:true});assert.equal(h.plugin.newNoteProperty(),'annotation-target');
+  await h.plugin.ensureNote('a.pdf');assert.equal(made.at(-1)[1],'---\nannotation-target: "a.pdf"\n---\n\n# Annotations\n');
+  // A second property named and chosen: new notes name their source in it, and are read by it.
+  await h.plugin.setDisplay({targetAlias:'source'});assert.equal(h.plugin.newNoteProperty(),'source');
+  const b=await h.plugin.ensureNote('b.pdf');assert.equal(made.at(-1)[1],'---\nsource: "b.pdf"\n---\n\n# Annotations\n');
+  h.metadata.set(b.path,{frontmatter:{source:'b.pdf'}});assert.equal(h.plugin.targetKey(b),'b.pdf');
+  // From a template that names its source under annotation-target: the note names it once, under the property chosen.
+  h.add('Templates/Note.md','---\nannotation-target: "{{target}}"\nstatus: unread\n---\n# {{title}}\n');h.app.metadataCache.getFirstLinkpathDest=path=>h.files.get(path)||h.files.get(path+'.md')||null;
+  await h.plugin.setDisplay({noteTemplate:'[[Templates/Note]]'});await h.plugin.ensureNote('c.pdf');assert.equal(made.at(-1)[1],'---\nsource: "c.pdf"\nstatus: unread\n---\n\n# c\n');
+  // Turned off again: annotation-target.
+  await h.plugin.setDisplay({writeTargetAlias:false,noteTemplate:''});await h.plugin.ensureNote('d.pdf');assert.equal(made.at(-1)[1],'---\nannotation-target: "d.pdf"\n---\n\n# Annotations\n');
+  // The Base of everything annotated lists notes by either property.
+  await h.plugin.setDisplay({writeTargetAlias:true});h.app.workspace.getLeaf=()=>({openFile:async()=>{}});const before=Notice.messages.length;await h.plugin.makeSourcesBase();
+  assert.match(h.contents.get('Annotated sources.base'),/^filters:\n  and:\n    - or:\n        - '!note\["annotation-target"\]\.isEmpty\(\)'\n        - '!note\["source"\]\.isEmpty\(\)'\n/);
+  assert.equal(String(Notice.messages[before]),'Annotated sources.base made. It lists every note that has an annotation-target or a “source” property.');
+  // A note with no target says which properties were looked for.
+  const none=h.add('None.md','',{title:'x'});assert.equal(h.plugin.unresolvedTarget(none),'This note has no annotation-target or “source” property, so there is no source to open.');
+  // One that names it in the second property only is told about it by that name.
+  assert.match(h.plugin.unresolvedTarget(h.add('Missing.md','',{source:'Missing.pdf'})),/^The source "Missing\.pdf" was not found in the vault/);
+  assert.match(h.plugin.unresolvedTarget(h.add('Missing 2.md','',{'annotation-target':'Missing.pdf',source:'Other.pdf'})),/^The annotation-target "Missing\.pdf" was not found/);
+ }finally{h.dispose();}
+});
+test('a note written for one annotation by the export names its source in "source" and is not read as a source\'s note by that property',async()=>{
+ const h=host();try{h.plugin.manifest={id:'obsidian-annotator'};h.add('Paper.pdf');await h.plugin.onload();h.plugin.display={...h.plugin.display,targetAlias:'source'};
+  const exported=h.add('Paper annotations/One.md','',{'annotation-id':'abc',kind:'highlight',source:'[[Paper.pdf]]'}),reading=h.add('Reading.md','',{source:'[[Paper.pdf]]'});
+  assert.equal(h.plugin.targetKey(exported),null);assert.equal(h.plugin.targetKey(reading),'Paper.pdf');
+  // One that also names it in annotation-target is read by that, as before.
+  assert.equal(h.plugin.targetKey(h.add('Both.md','',{'annotation-id':'x','annotation-target':'Paper.pdf'})),'Paper.pdf');
+ }finally{h.dispose();}
+});
+test('"Annotate the copy from now on" changes the property the note names its source in',async()=>{
+ const {Notice}=await import('./.generated/plugin-boundary.mjs');
+ const h=host();try{await h.plugin.onload();const w=h.dom.window;
+  globalThis.createFragment=build=>{const fragment=w.document.createDocumentFragment();const proto=w.DocumentFragment.prototype;proto.createDiv??=function(o={}){const el=w.document.createElement('div');if(o.text)el.textContent=o.text;this.append(el);return el;};proto.createEl??=function(tag,o={}){const el=w.document.createElement(tag);if(o.text)el.textContent=o.text;for(const[k,v]of Object.entries(o.attr||{}))el.setAttribute(k,v);this.append(el);return el;};w.HTMLElement.prototype.createEl??=proto.createEl;build(fragment);return fragment;};
+  h.app.fileManager={processFrontMatter:async(file,change)=>{const meta=h.metadata.get(file.path)||{frontmatter:{}};meta.frontmatter={...meta.frontmatter};change(meta.frontmatter);h.metadata.set(file.path,meta);}};
+  const source=h.add('Scan.pdf'),copy=h.add('Scan (searchable).pdf'),button=(notice,label)=>[...notice.message.querySelectorAll('button')].find(el=>el.textContent===label);
+  const offer=note=>{h.plugin.notes.set('Scan.pdf',{note,records:[]});h.plugin.offerSearchableCopy(source,copy,'Text recognised on 2 pages.');return Notice.shown.at(-1);};
+  h.plugin.display={...h.plugin.display,targetAlias:'source',writeTargetAlias:true};
+  // Named by the second property only: that property is changed, and no annotation-target is added.
+  const byAlias=h.add('By alias.md','',{source:'Scan.pdf'});button(offer(byAlias),'Annotate the copy from now on').click();for(let i=0;i<5;i++)await new Promise(resolve=>setTimeout(resolve,0));
+  assert.deepEqual(h.metadata.get(byAlias.path).frontmatter,{source:'Scan (searchable).pdf'});
+  // Named by annotation-target (which wins): that one, whatever new notes are written with.
+  const both=h.add('Both.md','',{'annotation-target':'Scan.pdf',source:'Other.pdf'});button(offer(both),'Annotate the copy from now on').click();for(let i=0;i<5;i++)await new Promise(resolve=>setTimeout(resolve,0));
+  assert.deepEqual(h.metadata.get(both.path).frontmatter,{'annotation-target':'Scan (searchable).pdf',source:'Other.pdf'});
+  // A note that names it in neither (a Dataview field) is offered no button.
+  assert.equal(button(offer(h.add('Field.md','annotation-target:: [[Scan.pdf]]',{})),'Annotate the copy from now on'),undefined);
+ }finally{delete globalThis.createFragment;h.dispose();}
+});
 test('the Base of everything annotated is made once, opened, and never written over',async()=>{
  const {Notice}=await import('./.generated/plugin-boundary.mjs');
  const h=host();try{h.plugin.manifest={id:'obsidian-annotator'};const made=[],opened=[];
@@ -1096,6 +1150,26 @@ test('the Base of everything annotated is made once, opened, and never written o
   // The reader's own changes to it stay: a second run opens it and writes nothing.
   h.contents.set('Annotated sources.base','views: mine');await h.plugin.makeSourcesBase();
   assert.deepEqual(made,['Annotated sources.base']);assert.deepEqual(opened,['Annotated sources.base','Annotated sources.base']);assert.equal(h.contents.get('Annotated sources.base'),'views: mine');assert.equal(Notice.messages.length,before+1);
+ }finally{h.dispose();}
+});
+test('with a second property, the near-miss notice names both, and the button renames to the property new notes are written with, or to the second property it nearly is',async()=>{
+ const {Notice}=await import('./.generated/plugin-boundary.mjs');
+ const h=host();try{h.app.fileManager={processFrontMatter:async(file,change)=>{const meta=h.metadata.get(file.path)||{frontmatter:{}};meta.frontmatter={...meta.frontmatter};change(meta.frontmatter);h.metadata.set(file.path,meta);}};
+  h.plugin.manifest={id:'obsidian-annotator'};h.add('Paper.pdf');await h.plugin.onload();h.plugin.autoOpen=false;
+  const open=note=>{const leaf={app:h.app,contentEl:h.dom.window.document.createElement('div'),openFile:async()=>{},setViewState:async()=>{}},view=new MarkdownView(leaf);view.file=note;leaf.view=view;h.app.workspace.getMostRecentLeaf=()=>leaf;h.events.get('file-open')(note);};
+  const press=async()=>{Notice.shown.at(-1).message.querySelector('button').click();for(let i=0;i<5;i++)await new Promise(resolve=>setTimeout(resolve,0));};
+  h.plugin.display={...h.plugin.display,targetAlias:'source',writeTargetAlias:true};
+  // Nearly annotation-target: renamed to the property new notes are written with.
+  const colon=h.add('Colon.md','',{'annotation-target:':'Paper.pdf',title:'Kept'});let before=Notice.messages.length;open(colon);
+  assert.equal(Notice.messages.length,before+1);assert.match(Notice.shown.at(-1).message.textContent,/This note has a property “annotation-target:”\. Annotator reads “annotation-target” or “source”, so no source opens for it\./);
+  await press();assert.deepEqual(h.metadata.get(colon.path).frontmatter,{title:'Kept',source:'Paper.pdf'});assert.match(String(Notice.messages.at(-1)),/^The property is now “source”\./);assert.equal(h.plugin.targetKey(colon),'Paper.pdf');
+  // Where the note already uses that property for something that is no source, it is not written over: annotation-target.
+  const taken=h.add('Taken.md','',{'annotator-target':'Paper.pdf',source:7});open(taken);await press();assert.deepEqual(h.metadata.get(taken.path).frontmatter,{source:7,'annotation-target':'Paper.pdf'});
+  // Nearly the second property: renamed to it, whatever new notes are written with.
+  h.plugin.display={...h.plugin.display,writeTargetAlias:false};
+  const cased=h.add('Cased.md','',{Source:'Paper.pdf'});open(cased);assert.match(Notice.shown.at(-1).message.textContent,/property “Source”/);await press();assert.deepEqual(h.metadata.get(cased.path).frontmatter,{source:'Paper.pdf'});
+  // Off, nearly annotation-target: annotation-target, as before.
+  const slip=h.add('Slip.md','',{'anotation-target':'Paper.pdf'});open(slip);await press();assert.deepEqual(h.metadata.get(slip.path).frontmatter,{'annotation-target':'Paper.pdf'});
  }finally{h.dispose();}
 });
 test('a note whose property is nearly annotation-target is told so once, and the button renames the property',async()=>{
