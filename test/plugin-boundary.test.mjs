@@ -988,9 +988,11 @@ test('a PDF embedded in a note or on a Canvas gets its highlights when it has an
   assert.equal(h.plugin.embedded.size,1);const [stand]=h.plugin.embedded.keys(),binding=h.plugin.bindings.get(stand);
   assert.equal(binding.file,'Paper.pdf');assert.equal(stand.contentEl,first.containerEl);assert.equal(stand.file,paper);assert.ok(h.plugin.notes.has('Paper.pdf'),'its annotations are read');
   // A PDF with no annotation note, something that is not a file, and an embed with no element: made as Obsidian makes them, and nothing more.
+  // (The one with no note only waits to be pressed on, to be annotated; what it waits with goes with it.)
   const untouched=registry.embedByExtension.pdf(info,bare,'');assert.equal(untouched,made[1]);registry.embedByExtension.pdf(info,null,'');registry.embedByExtension.pdf(info,{path:'Paper.pdf'},'');
   made.push=function(embed){delete embed.containerEl;return Array.prototype.push.call(this,embed);};registry.embedByExtension.pdf(info,paper,'');made.push=Array.prototype.push;
-  await settle();assert.equal(h.plugin.embedded.size,1);assert.equal(first.unloads.length,1);assert.equal(untouched.unloads.length,0);
+  await settle();assert.equal(h.plugin.embedded.size,1);assert.equal(first.unloads.length,1);assert.equal(untouched.unloads.length,1);assert.equal(h.plugin.waitingEmbeds.size,1);assert.ok(!h.plugin.bindings.has(untouched));
+  untouched.unload();assert.equal(h.plugin.waitingEmbeds.size,0);
   // Looking over the open tabs leaves an embed alone, on the page or off it: a note out of sight is taken off the page and put back.
   first.containerEl.remove();h.plugin.bindSources();assert.equal(h.plugin.embedded.size,1);assert.ok(h.plugin.bindings.has(stand));doc.body.append(first.containerEl);
   // When Obsidian unloads the embed, its painter goes with it.
@@ -1004,6 +1006,110 @@ test('a PDF embedded in a note or on a Canvas gets its highlights when it has an
   registry.embedByExtension.pdf(info,paper,'');await settle();assert.equal(h.plugin.embedded.size,0);
   // Unloading the plugin gives Obsidian its own maker back.
   for(const fn of h.plugin.cleanups.splice(0).reverse())fn();assert.equal(registry.embedByExtension.pdf,original);
+ }finally{h.dispose();}
+});
+// A PDF embedded by Obsidian's maker, on the same document as `matchPdf`'s tab: its own element and viewer, as Obsidian makes them.
+function embedMaker(h,leaf){
+ const doc=h.dom.window.document,documentOf=()=>leaf.view.viewer.child.pdfViewer.pdfViewer.pdfDocument;
+ const make=function(_info,file){const containerEl=doc.createElement('div');containerEl.className='pdf-embed';doc.body.append(containerEl);return {containerEl,file,_loaded:true,unloads:[],viewer:{child:{pdfViewer:{pdfViewer:{currentPageNumber:1,get pdfDocument(){return documentOf();}}}}},register(done){this.unloads.push(done);},unload(){this._loaded=false;for(const done of this.unloads.splice(0))done();}};};
+ h.app.embedRegistry={embedByExtension:{pdf:make}};
+}
+const pageOf=words=>`<div class="page" data-page-number="1"><div class="textLayer"><span>${words}</span></div></div>`;
+// The passage "machine translation" selected in a page as `pageOf` makes it, and the pointer let go over it.
+function selectIn(h,root){
+ const w=h.dom.window,text=root.querySelector('.textLayer span').firstChild,range=w.document.createRange();range.setStart(text,7);range.setEnd(text,26);
+ const selection=w.getSelection();selection.removeAllRanges();selection.addRange(range);
+ text.parentElement.dispatchEvent(new w.MouseEvent('pointerup',{bubbles:true,cancelable:true,button:0}));
+}
+const pressOn=(h,target,type='pointerdown')=>target.dispatchEvent(new h.dom.window.MouseEvent(type,{bubbles:true,cancelable:true,button:0}));
+test('an embedded PDF is annotated where it is: a selection gets the tab\'s bar, and what is made goes into the PDF\'s own note, never the note it is embedded in, and shows at once in the embed, the tab and the sidebar',async()=>{
+ const {Menu}=await import('./.generated/plugin-boundary.mjs');
+ const h=host();try{
+  const words='Neural machine translation is studied here.',key='Papers/Paper.pdf';
+  const {pdf,leaf}=matchPdf(h,[[words]]);const w=h.dom.window,doc=w.document;w.Range.prototype.getBoundingClientRect=()=>({left:10,top:200,bottom:210,right:40,width:30,height:10});w.Range.prototype.getClientRects=()=>[];
+  // Y names the PDF; X only embeds it.
+  const y=h.add('Notes/Paper notes.md','',{'annotation-target':key}),x=h.add('Notes/Reading list.md','![[Paper.pdf#page=1]]\n',{}),xBefore=h.contents.get(x.path);
+  embedMaker(h,leaf);await h.plugin.onload();h.plugin.bindSources();
+  const embed=h.app.embedRegistry.embedByExtension.pdf({},pdf,'#page=1');await settleMatches();
+  const [stand]=h.plugin.embedded.keys(),inEmbed=h.plugin.bindings.get(stand).host,inTab=h.plugin.bindings.get(leaf.view).host;await inEmbed.loading;await inTab.loading;
+  embed.containerEl.innerHTML=pageOf(words);leaf.contentEl.innerHTML=pageOf(words);await settleMatches();
+  const bar=()=>doc.querySelector('.annotator-selection-actions'),page=()=>embed.containerEl.querySelector('.page');
+  // A press in the embed makes it the PDF being worked in: the commands and the composer go to it, not to the tab.
+  h.plugin.lastSource=leaf.view;pressOn(h,page());assert.equal(h.plugin.lastSource,stand);assert.equal(h.plugin.sourceKey(stand),key);
+  // The selection gets the bar the tab has: the style, six inks and Note, and it says which PDF is in hand.
+  selectIn(h,embed.containerEl);assert.ok(bar(),'the selection bar');assert.equal(bar().querySelectorAll('.annotator-ink-swatch').length,6);assert.ok(bar().querySelector('.annotator-selection-note'));assert.ok(bar().querySelector('.annotator-selection-style'));
+  assert.equal(h.plugin.currentFile,key);
+  // A colour marks it, through the tab's own path: into Y, which the tab and the embed both show at once.
+  bar().querySelector('[data-annotator-ink="blue"]').click();await settleMatches();
+  let rows=h.plugin.notes.get(key).records;assert.equal(rows.length,1);assert.equal(quoteOfRow(rows[0]),'machine translation');assert.equal(rows[0].color,'blue');
+  assert.match(h.contents.get(y.path),/machine translation/);assert.equal(h.contents.get(x.path),xBefore,'nothing is written into the note the PDF is embedded in');
+  assert.ok(Array.isArray(inEmbed.matches.get(rows[0].id)),'placed in the embed');assert.ok(Array.isArray(inTab.matches.get(rows[0].id)),'placed in the tab');
+  assert.equal(h.plugin.currentFile,key);assert.equal(h.plugin.editing?.annotation.id,rows[0].id,'and in the sidebar, selected');
+  // An existing highlight in the embed has the tab's menu (right-click, or the menu key): its colours, its note, Delete.
+  const mark=doc.createElement('button');mark.className='annotator-native-mark';mark.dataset.annotationId=rows[0].id;page().append(mark);
+  let shown=null;const atMouse=Menu.prototype.showAtMouseEvent;Menu.prototype.showAtMouseEvent=function(){shown=this;return this;};
+  const menuOn=target=>{shown=null;const event=new w.MouseEvent('contextmenu',{bubbles:true,cancelable:true});target.dispatchEvent(event);return event.defaultPrevented;};
+  try{
+   h.plugin.lastSource=leaf.view;assert.equal(menuOn(mark),true);assert.equal(h.plugin.lastSource,stand);
+   const titles=shown.items.map(item=>item.title);for(const title of ['Add note','Green','Delete'])assert.ok(titles.includes(title),title);
+   shown.items.find(item=>item.title==='Green').run();await settleMatches();
+   rows=h.plugin.notes.get(key).records;assert.equal(rows[0].color,"green");assert.equal(h.contents.get(x.path),xBefore);
+   // Its note is written beside it, in the embed.
+   menuOn(mark);shown.items.find(item=>item.title==='Add note').run();assert.equal(h.plugin.editMode,true);assert.equal(h.plugin.editing.annotation.id,rows[0].id);assert.equal(h.plugin.bindingFor(key).host,inEmbed,"the composer goes beside it, in the embed");
+   h.plugin.updateComment('Seen in the reading list.');await h.plugin.save();await settleMatches();
+   rows=h.plugin.notes.get(key).records;assert.equal(rows[0].text,'Seen in the reading list.');assert.match(h.contents.get(y.path),/Seen in the reading list\./);assert.equal(h.contents.get(x.path),xBefore);
+   // A press back in the tab gives it back the commands.
+   pressOn(h,leaf.contentEl.querySelector('.page'));assert.equal(h.plugin.lastSource,leaf.view);
+   // On a Canvas, a card not yet selected is Canvas's: a press selects it, the menu is Obsidian's, a selection gets no bar.
+   const card=doc.createElement('div');card.className='canvas-node';doc.body.append(card);card.append(embed.containerEl);
+   pressOn(h,page());assert.equal(h.plugin.lastSource,leaf.view);assert.equal(menuOn(mark),false);assert.equal(shown,null);
+   selectIn(h,embed.containerEl);await settleMatches();assert.equal(bar(),null);
+   // Selected (Obsidian marks it is-focused), it is annotated as in a note.
+   card.classList.add('is-focused');pressOn(h,page());assert.equal(h.plugin.lastSource,stand);selectIn(h,embed.containerEl);assert.ok(bar());pressOn(h,doc.body);assert.equal(bar(),null);
+   assert.equal(menuOn(mark),true);
+   // Delete, from the embed's menu: gone from the note, and the deletion can be undone as in the tab.
+   shown.items.find(item=>item.title==='Delete').run();await settleMatches();assert.equal(h.plugin.notes.get(key).records.length,0);assert.equal(h.contents.get(x.path),xBefore);
+   // Turned off, an embed only shows: no bar, and its menu is Obsidian's.
+   // Areas, drawings and text boxes are made and moved there as in the tab, through the tab's own handlers.
+   assert.equal(typeof inEmbed.onArea,'function');assert.equal(typeof inEmbed.onAreaChange,'function');assert.equal(typeof inEmbed.onTextBox,'function');assert.equal(inEmbed.onPage,null,'an embed scrolled is not the reading position');
+   h.plugin.lastSource=stand;h.plugin.display={...h.plugin.display,embeddedAnnotate:false};h.plugin.annotateEmbedded(false);
+   assert.equal(inEmbed.onArea,null);assert.equal(inEmbed.onAreaChange,null);assert.equal(h.plugin.lastSource,null,'the commands no longer go to it');assert.equal(typeof inTab.onArea,'function','the tab is as it was');
+   h.plugin.lastSource=leaf.view;pressOn(h,page());assert.equal(h.plugin.lastSource,leaf.view);
+   selectIn(h,embed.containerEl);await settleMatches();assert.equal(bar(),null);assert.equal(menuOn(mark),false);
+   h.plugin.display={...h.plugin.display,embeddedAnnotate:true};h.plugin.annotateEmbedded(true);assert.equal(typeof inEmbed.onArea,'function');
+  }finally{Menu.prototype.showAtMouseEvent=atMouse;}
+  // A Canvas card not yet selected lets every press on its marks through to Canvas.
+  const css=nodeRequire('fs').readFileSync(new URL('../styles.css',import.meta.url),'utf8');
+  assert.match(css,/\.canvas-node:not\(\.is-focused\) \.annotator-native-marks \*::before[^{]*\{ pointer-events: none !important; \}/);
+ }finally{h.dispose();}
+});
+test('an embed of a PDF with no annotation note reads nothing until it is pressed on; a passage selected while its text is still being read gets the bar once it is read, and its first highlight makes the note a tab would; other embeds of it then show it',async()=>{
+ const h=host();try{
+  const words='Neural machine translation is studied here.',key='Papers/Paper.pdf';
+  const {pdf,leaf}=matchPdf(h,[[words]]);const w=h.dom.window,doc=w.document;w.Range.prototype.getBoundingClientRect=()=>({left:10,top:200,bottom:210,right:40,width:30,height:10});w.Range.prototype.getClientRects=()=>[];
+  // No tab: only the embeds. Reading the PDF is counted.
+  h.app.workspace.getLeavesOfType=type=>type==='annotator-sidebar'?[{}]:[];h.app.workspace.iterateAllLeaves=()=>{};
+  const pdfDocument=leaf.view.viewer.child.pdfViewer.pdfViewer.pdfDocument,getPage=pdfDocument.getPage;let reads=0;pdfDocument.getPage=async n=>{reads++;return getPage(n);};
+  embedMaker(h,leaf);await h.plugin.onload();h.plugin.bindSources();
+  const one=h.app.embedRegistry.embedByExtension.pdf({},pdf,''),two=h.app.embedRegistry.embedByExtension.pdf({},pdf,'#page=1');
+  one.containerEl.innerHTML=pageOf(words);two.containerEl.innerHTML=pageOf(words);await settleMatches();
+  assert.equal(h.plugin.embedded.size,0);assert.equal(h.plugin.waitingEmbeds.size,2);assert.equal(reads,0,'nothing read');h.plugin.bindSources();assert.equal(h.plugin.embedded.size,0);
+  // A press outside its pages (its toolbar) is not a start; one on a page is.
+  pressOn(h,one.containerEl);assert.equal(h.plugin.embedded.size,0);
+  pressOn(h,one.containerEl.querySelector('.page'));assert.equal(h.plugin.embedded.size,1);assert.equal(h.plugin.waitingEmbeds.size,1);const [stand]=h.plugin.embedded.keys();assert.equal(h.plugin.lastSource,stand);
+  // Selected at once, before the text is read: the bar comes when it is.
+  const bar=()=>doc.querySelector('.annotator-selection-actions');selectIn(h,one.containerEl);assert.equal(bar(),null);await settleMatches();assert.ok(bar(),'offered once the text is read');
+  assert.equal([...h.files.keys()].some(path=>path.endsWith('.md')),false,'no note yet');
+  bar().querySelector('[data-annotator-ink="yellow"]').click();await settleMatches();
+  // The note a tab's first highlight makes: beside the PDF, named after it.
+  const note=h.files.get('Papers/Paper.pdf.annotations.md');assert.ok(note);assert.match(h.contents.get(note.path),/machine translation/);assert.equal(h.plugin.notes.get(key).records.length,1);
+  // The other embed shows it from the next look over the sources, without being pressed on.
+  h.plugin.bindSources();assert.equal(h.plugin.waitingEmbeds.size,0);assert.equal(h.plugin.embedded.size,2);
+  // Let go with their embeds.
+  one.unload();two.unload();assert.equal(h.plugin.embedded.size,0);assert.equal(h.plugin.bindings.size,0);assert.equal(h.plugin.lastSource,null);
+  // Turned off, an embed of a PDF with no note is pressed on in vain.
+  const three=h.app.embedRegistry.embedByExtension.pdf({},h.add('Papers/Other.pdf'),'');three.containerEl.innerHTML=pageOf(words);h.plugin.display={...h.plugin.display,embeddedAnnotate:false};
+  pressOn(h,three.containerEl.querySelector('.page'));assert.equal(h.plugin.embedded.size,0);assert.equal(h.plugin.waitingEmbeds.size,1);
  }finally{h.dispose();}
 });
 test('where Obsidian has no embed maker to wrap, nothing is wrapped and nothing breaks',async()=>{

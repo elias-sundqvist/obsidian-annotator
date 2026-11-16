@@ -5,6 +5,23 @@ What changed for someone using Annotator. How to use each thing is in
 
 ## Unreleased
 
+- **Annotate a PDF where it is embedded.** In a PDF embedded in a note
+  (`![[paper.pdf#page=3]]`) or placed on a Canvas, selecting text brings up
+  the same bar as in the PDF's tab, with the same keys, and a note is written
+  beside the passage. Right-clicking a highlight there gives its menu: colour,
+  style, note, copy, delete. The commands for an area, a drawing and a text
+  box act on the PDF you last pressed on, embed or tab. What you make goes
+  into the PDF's annotation note, never the note it is embedded in, and shows
+  at once in the embed, in the PDF's tabs and in the sidebar; a PDF with no
+  annotation note gets one with its first highlight, as in a tab. On a
+  Canvas, select the card first: a first click selects it and a drag moves
+  it, as before. The new setting **Annotate in embedded PDFs** (on) turns
+  this off.
+- On a Canvas, a first click on a highlight of a card that is not selected
+  selects the card, as Obsidian does, instead of opening the highlight.
+- A passage selected in a PDF while its text is still being read (just
+  opened) gets the selection bar once the text is read, instead of nothing.
+
 - **Sources outside the vault are read where they are**, as before 0.3: a
   Zotero, Calibre or DEVONthink link, a path on your computer and a web
   address (an archive.org book too) are no longer copied into the vault on

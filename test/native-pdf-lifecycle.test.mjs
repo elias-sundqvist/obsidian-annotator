@@ -880,3 +880,21 @@ test('the tab\'s header has a button for text boxes beside marking an area and d
   }finally{adapter.dispose();dom.window.close();}
  }
 });
+test('a passage selected while the PDF\'s text is still being read is offered once it is read: once however often the pointer is let go, and not if the selection went meanwhile',async()=>{
+ let open;const gate=new Promise(resolve=>{open=resolve;});
+ const slow={fingerprints:['one'],numPages:1,async getPage(){await gate;return{async getTextContent(){return{items:[{str:'Alpha passage omega'}]};}};}};
+ const h=host(slow);try{const caught=[];h.adapter.onCapture=capture=>caught.push(capture);h.page();
+  const w=h.dom.window,select=()=>{const text=h.root.querySelector('span').firstChild,range=w.document.createRange();range.setStart(text,6);range.setEnd(text,13);w.getSelection().removeAllRanges();w.getSelection().addRange(range);};
+  const up=()=>h.root.querySelector('span').dispatchEvent(new w.MouseEvent('pointerup',{bubbles:true}));
+  select();up();up();assert.equal(caught.length,0,'nothing yet: the text is being read');
+  open();await h.adapter.loading;await h.flush();assert.equal(caught.length,1);assert.equal(caught[0].exact,'passage');
+  // Read already: at once, as ever.
+  up();assert.equal(caught.length,2);
+ }finally{h.close();}
+ let again;const later=new Promise(resolve=>{again=resolve;});
+ const h2=host({...slow,async getPage(){await later;return slow.getPage();}});try{const caught=[];h2.adapter.onCapture=capture=>caught.push(capture);h2.page();
+  const w=h2.dom.window,text=h2.root.querySelector('span').firstChild,range=w.document.createRange();range.setStart(text,6);range.setEnd(text,13);w.getSelection().addRange(range);
+  h2.root.querySelector('span').dispatchEvent(new w.MouseEvent('pointerup',{bubbles:true}));w.getSelection().removeAllRanges();
+  open();again();await h2.adapter.loading;await h2.flush();assert.equal(caught.length,0,'the selection went: nothing is offered');
+ }finally{h2.close();}
+});

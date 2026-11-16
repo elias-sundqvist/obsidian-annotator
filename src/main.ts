@@ -341,6 +341,22 @@ interface DataviewHost {
         getPlugin(id: string): { api?: { page(path: string): Record<string, unknown> | undefined } } | null | undefined;
     };
 }
+/** As much of what Obsidian's embed maker returns for a PDF as is used: an Obsidian component with the PDF viewer. */
+interface PdfEmbed {
+    containerEl?: HTMLElement;
+    viewer?: unknown;
+    _loaded?: boolean;
+    register?(done: () => void): void;
+}
+/**
+ * Whether what is inside this element is the reader's to answer now. Inside a Canvas card, only once the card is the
+ * one selected (Obsidian's `is-focused`): until then a press selects the card and a drag moves it, as Obsidian does.
+ * Anywhere else, always.
+ */
+function cardInHand(element: HTMLElement): boolean {
+    const card = element.closest?.('.canvas-node');
+    return !card || card.classList.contains('is-focused');
+}
 export default class AnnotatorPlugin extends Plugin {
     reader: ReaderPreferences = readerPreferences(null);
     markdown = markdownPreferences(null);
@@ -653,6 +669,7 @@ export default class AnnotatorPlugin extends Plugin {
         /** Whether the annotation sidebar comes forward when a source is opened. */ sidebarOnOpen: boolean;
         /** Whether an annotation's stored data is folded away in Live Preview. */ foldData: boolean;
         /** Whether a PDF's highlights are shown where it is embedded in a note or placed on a Canvas. */ embeddedHighlights: boolean;
+        /** Whether such an embed is annotated where it is: text selected there gets the selection bar, a highlight there its menu. */ embeddedAnnotate: boolean;
         /** A second property a note's source is read from when it has no `annotation-target`; empty for none. */ targetAlias: string;
         /** Whether new notes name their source in that second property instead of `annotation-target` (only while one is named). */ writeTargetAlias: boolean;
         /** Zotero's data folder, where its links are followed to; empty for the usual place in the home folder. */ zoteroFolder: string;
@@ -674,6 +691,7 @@ export default class AnnotatorPlugin extends Plugin {
         sidebarOnOpen: true,
         foldData: true,
         embeddedHighlights: true,
+        embeddedAnnotate: true,
         targetAlias: '',
         writeTargetAlias: false,
         zoteroFolder: '',
@@ -800,8 +818,21 @@ export default class AnnotatorPlugin extends Plugin {
     private quietSelect = 0;
     private readingCopyDialogs = new Set<ReadingCopyModal>();
     private bindings = new Map<View, { host: SourceHost; file: string; owner: string }>();
-    /** PDFs shown inside a note or on a Canvas, each standing in for a view, with how to tell that Obsidian has dropped it. Their highlights are shown, not made. */
+    /**
+     * PDFs shown inside a note or on a Canvas, each standing in for a view, with how to tell that Obsidian has dropped
+     * it. With "Annotate in embedded PDFs" they are annotated where they are, as a tab is; without, only shown.
+     */
     private embedded = new Map<View, () => boolean>();
+    /** The PDF each of those shows: its source key. */
+    private embeddedFiles = new WeakMap<View, string>();
+    /**
+     * Embeds of a PDF that has no annotation note yet. They cost nothing until they are pressed on (to select text
+     * there, the first highlight making the note); then, or once the PDF has a note, they are bound as the others are.
+     */
+    private waitingEmbeds = new Map<
+        HTMLElement,
+        { file: TFile; embed: PdfEmbed; gone: () => boolean; stop: () => void }
+    >();
     private leafCollections = new Map<WorkspaceLeaf, CollectionContext>();
     private collectionStateCleanups = new Map<View, () => void>();
     private associations: Record<string, string> = {};
@@ -897,6 +928,7 @@ export default class AnnotatorPlugin extends Plugin {
             sidebarOnOpen: shown.sidebarOnOpen !== false,
             foldData: shown.foldData !== false,
             embeddedHighlights: shown.embeddedHighlights !== false,
+            embeddedAnnotate: shown.embeddedAnnotate !== false,
             targetAlias: targetAliasName(shown.targetAlias),
             writeTargetAlias: shown.writeTargetAlias === true,
             zoteroFolder: typeof shown.zoteroFolder === 'string' ? shown.zoteroFolder.trim().slice(0, 1000) : '',
@@ -1574,10 +1606,12 @@ export default class AnnotatorPlugin extends Plugin {
                     return;
                 }
                 // Going to another tab ends area marking in the ones left behind: there is nothing there to drag over. (The sidebar is not another tab.)
+                // An embed is in the tab that holds it.
                 for (const { host } of this.bindings.values()) {
                     const pdf: unknown = host;
-                    if (pdf instanceof NativePdf && (pdf.view as unknown as { leaf?: unknown }).leaf !== leaf)
-                        pdf.leaveArea();
+                    if (!(pdf instanceof NativePdf)) continue;
+                    const own = (pdf.view as unknown as { leaf?: unknown }).leaf;
+                    if (own ? own !== leaf : !leaf.view?.containerEl?.contains(pdf.view.contentEl)) pdf.leaveArea();
                 }
                 if (leaf.view instanceof VideoView) {
                     this.lastVideo = leaf.view;
@@ -1684,8 +1718,17 @@ export default class AnnotatorPlugin extends Plugin {
                 );
                 const id = mark?.dataset.annotationId;
                 if (!mark || !id || this.stopped) return;
-                for (const binding of this.bindings.values()) {
+                // Embeds first: one may be inside a source of its own (a saved page).
+                const bound = [...this.bindings].sort(
+                    ([a], [b]) => Number(this.embedded.has(b)) - Number(this.embedded.has(a))
+                );
+                for (const [view, binding] of bound) {
                     if (!binding.host.view.contentEl.contains(mark)) continue;
+                    // An embed only shown, or a Canvas card not yet selected, leaves the menu to Obsidian.
+                    if (this.embedded.has(view)) {
+                        if (!this.annotatesHere(view)) return;
+                        this.lastSource = view;
+                    }
                     const row = this.notes.get(binding.file)?.records.find(item => item.id === id);
                     if (!row) return;
                     event.preventDefault();
@@ -1693,6 +1736,32 @@ export default class AnnotatorPlugin extends Plugin {
                     this.annotationMenu(binding.file, row).showAtMouseEvent(event);
                     return;
                 }
+            },
+            true
+        );
+        // The PDF last pressed on is the one the reader is working in: an embed in a note or on a Canvas is not a tab,
+        // so no tab change says so. The commands that act on "this PDF" (mark an area, draw, a text box, highlight
+        // the selection) and the composer beside a passage then go to that embed; a press back in a tab returns them.
+        this.registerDomEvent(
+            this.app.workspace.containerEl.ownerDocument,
+            'pointerdown',
+            event => {
+                const target = event.target as Node | null;
+                if (!target || this.stopped) return;
+                // An embed first: it may be inside a source of its own (a saved page).
+                for (const view of this.embedded.keys())
+                    if ((view as FileView).contentEl.contains(target)) {
+                        if (this.annotatesHere(view)) this.lastSource = view;
+                        return;
+                    }
+                if (!this.lastSource || !this.embedded.has(this.lastSource)) return;
+                for (const [view, binding] of this.bindings)
+                    if (binding.host.view.contentEl.contains(target)) {
+                        this.lastSource = view;
+                        const key = this.sourceKey(view);
+                        if (key) this.focusSource(key);
+                        return;
+                    }
             },
             true
         );
@@ -1934,6 +2003,8 @@ export default class AnnotatorPlugin extends Plugin {
         return {
             capture: (capture, action) => {
                 if (this.stopped || this.busy) return;
+                // An embed takes a selection only while it is annotated where it is.
+                if (this.embedded.has(view) && !this.annotatesHere(view)) return;
                 const key = this.sourceKey(view),
                     binding = this.bindings.get(view);
                 if (!key || !binding) return;
@@ -2179,6 +2250,9 @@ export default class AnnotatorPlugin extends Plugin {
         return key && allowedHere(this.placeDevice(), key, this.foldOutsideCase()) ? key : null;
     }
     private baseSourceKey(view: View): string | null {
+        // An embedded PDF: the PDF it shows, wherever it is shown.
+        const embedded = this.embeddedFiles.get(view);
+        if (embedded) return embedded;
         if (view instanceof FileView && view.file) {
             if (this.outsideVault(view.file)) {
                 if (view.getViewType() !== 'pdf' && !(view instanceof EpubView)) return null;
@@ -2459,28 +2533,8 @@ export default class AnnotatorPlugin extends Plugin {
                 }
                 const pdf: unknown = host;
                 if (pdf instanceof NativePdf) {
-                    pdf.onArea = (area, image, words) => {
-                        void this.saveArea(key, pdf, area, image, words);
-                    };
-                    pdf.onDrawing = drawings => {
-                        void this.saveDrawings(key, pdf, drawings);
-                    };
-                    pdf.inkForDrawing = () => this.lastInk;
-                    pdf.onAreaChange = (annotation, area) => {
-                        void this.moveArea(key, annotation, area);
-                    };
-                    pdf.onDrawingChange = (annotation, drawing, ink) => {
-                        void this.changeDrawing(key, annotation, drawing, ink);
-                    };
+                    this.wirePdf(key, pdf);
                     pdf.onPage = () => this.pageMoved(key);
-                    pdf.textSizeForBox = () => this.lastTextSize;
-                    pdf.onTextSize = size => {
-                        if (size === this.lastTextSize) return;
-                        this.lastTextSize = size;
-                        this.queueDraftSave();
-                    };
-                    pdf.onTextBox = (area, size) => this.typeTextBox(key, pdf, area, size);
-                    pdf.onTextBoxOpen = annotation => this.editAnnotation(key, annotation);
                 }
                 if (!this.collectionStateCleanups.has(view))
                     this.collectionStateCleanups.set(
@@ -2507,9 +2561,19 @@ export default class AnnotatorPlugin extends Plugin {
             // An embed that Obsidian never loaded is never unloaded either: one that is neither loaded nor on the page is let go here.
             if (gone()) {
                 this.embedded.delete(view);
+                if (this.lastSource === view) this.lastSource = null;
                 continue;
             }
             live.add(view);
+        }
+        // An embed of a PDF that has a note now (its first highlight was made, here or anywhere) shows its highlights.
+        for (const waiting of [...this.waitingEmbeds.values()]) {
+            if (waiting.gone()) waiting.stop();
+            else if (this.hasNote(waiting.file.path)) {
+                waiting.stop();
+                const stand = this.paintEmbed(waiting.embed, waiting.file);
+                if (stand) live.add(stand);
+            }
         }
         for (const [view, binding] of this.bindings)
             if (!live.has(view)) {
@@ -2523,10 +2587,59 @@ export default class AnnotatorPlugin extends Plugin {
             }
     }
     /**
+     * What a PDF's areas, drawings and text boxes do once made or changed on its page: the same in a tab and in an
+     * embed that is annotated where it is.
+     */
+    private wirePdf(key: string, pdf: NativePdf) {
+        pdf.onArea = (area, image, words) => {
+            void this.saveArea(key, pdf, area, image, words);
+        };
+        pdf.onDrawing = drawings => {
+            void this.saveDrawings(key, pdf, drawings);
+        };
+        pdf.inkForDrawing = () => this.lastInk;
+        pdf.onAreaChange = (annotation, area) => {
+            void this.moveArea(key, annotation, area);
+        };
+        pdf.onDrawingChange = (annotation, drawing, ink) => {
+            void this.changeDrawing(key, annotation, drawing, ink);
+        };
+        pdf.textSizeForBox = () => this.lastTextSize;
+        pdf.onTextSize = size => {
+            if (size === this.lastTextSize) return;
+            this.lastTextSize = size;
+            this.queueDraftSave();
+        };
+        pdf.onTextBox = (area, size) => this.typeTextBox(key, pdf, area, size);
+        pdf.onTextBoxOpen = annotation => this.editAnnotation(key, annotation);
+    }
+    /**
+     * "Annotate in embedded PDFs" changed: the embeds shown now follow at once. Off, an area or text box being placed
+     * in one is left, an area or drawing moved there is no longer saved (its grips go with the next paint), and the
+     * commands no longer go to an embed.
+     */
+    annotateEmbedded(on: boolean) {
+        for (const view of this.embedded.keys()) {
+            const host: unknown = this.bindings.get(view)?.host,
+                key = this.embeddedFiles.get(view);
+            if (!(host instanceof NativePdf) || !key) continue;
+            if (on) {
+                this.wirePdf(key, host);
+                continue;
+            }
+            // (A drawing under way is kept when it is done: its strokes are not thrown away unasked.)
+            host.leaveArea();
+            host.onArea = host.onAreaChange = host.onDrawingChange = host.onTextBox = null;
+            host.onTextBoxOpen = null;
+        }
+        if (!on && this.lastSource && this.embedded.has(this.lastSource)) this.lastSource = null;
+    }
+    /**
      * Obsidian makes a PDF embedded in a note or placed on a Canvas with the same viewer as a PDF tab. Its maker is
-     * wrapped, so that an embed of a PDF that has an annotation note gets the reader's painter too: the highlights
-     * are shown and a click on one opens it in the sidebar. Nothing is made or changed from an embed, and an embed
-     * of a PDF with no annotation note is left exactly as Obsidian made it.
+     * wrapped, so that an embed gets the reader's painter too: the highlights are shown and a click on one opens it
+     * in the sidebar. With "Annotate in embedded PDFs" the embed is annotated as the PDF's tab is (see
+     * `annotatesHere`), and what is made goes into the PDF's own annotation note. An embed of a PDF with no
+     * annotation note is left exactly as Obsidian made it until it is pressed on to be annotated.
      */
     private watchEmbeddedPdfs() {
         const registry = (this.app as unknown as { embedRegistry?: { embedByExtension?: Record<string, unknown> } })
@@ -2535,7 +2648,7 @@ export default class AnnotatorPlugin extends Plugin {
         if (!registry || typeof original !== 'function') return;
         const bind = (embed: unknown, file: unknown) => {
             try {
-                this.bindEmbeddedPdf(embed as Parameters<AnnotatorPlugin['bindEmbeddedPdf']>[0], file);
+                this.bindEmbeddedPdf(embed as PdfEmbed, file);
             } catch (error) {
                 console.error('Annotator: an embedded PDF is shown without its highlights.', error);
             }
@@ -2552,24 +2665,75 @@ export default class AnnotatorPlugin extends Plugin {
     }
     /** Every embedded PDF goes back to how Obsidian shows it: when the setting is turned off. */
     releaseEmbedded() {
+        for (const waiting of [...this.waitingEmbeds.values()]) waiting.stop();
         for (const view of [...this.embedded.keys()]) {
             this.embedded.delete(view);
             this.bindings.get(view)?.host.dispose();
             this.bindings.delete(view);
+            if (this.lastSource === view) this.lastSource = null;
         }
     }
-    private bindEmbeddedPdf(
-        embed: { containerEl?: HTMLElement; viewer?: unknown; register?(done: () => void): void },
-        file: unknown
-    ) {
+    /** Whether a PDF has an annotation note, as far as is known without looking through the vault. */
+    private hasNote(key: string): boolean {
+        const state = this.notes.get(key);
+        return !!state?.note || !!state?.parts || !!this.associations[key];
+    }
+    /**
+     * Whether an embedded PDF is annotated where it is now: the setting is on and, on a Canvas, its card is the one
+     * in hand. A card not yet selected is Canvas's: the first press selects it (and a drag moves it), as Obsidian
+     * does, and only then do its pages take a selection, a highlight's press or its menu.
+     */
+    private annotatesHere(view: View): boolean {
+        if (!this.display.embeddedHighlights || !this.display.embeddedAnnotate || !this.embedded.has(view))
+            return false;
+        return cardInHand((view as FileView).contentEl);
+    }
+    private bindEmbeddedPdf(embed: PdfEmbed, file: unknown) {
         if (this.stopped || !this.display.embeddedHighlights || !(file instanceof TFile) || !embed?.containerEl) return;
         if (this.outsideVault(file)) return;
         const key = file.path;
-        // Only a PDF that has an annotation note costs anything here: no note, no painter.
-        if (!this.notes.get(key)?.note && !this.notes.get(key)?.parts && !this.associations[key]) {
+        // Only a PDF that has an annotation note costs anything here: no note, no painter until one is wanted.
+        if (!this.hasNote(key)) {
             const noted = this.app.vault.getMarkdownFiles().some(note => this.noteMatchesSource(note, key));
-            if (!noted) return;
+            if (!noted) {
+                this.awaitAnnotating(embed, file);
+                return;
+            }
         }
+        this.paintEmbed(embed, file);
+    }
+    /**
+     * An embed of a PDF with no annotation note: nothing is read or painted. A press on its pages, while embeds are
+     * annotated, binds it there and then, so that the passage being selected gets the selection bar (once the PDF's
+     * text has been read) and its first highlight makes the PDF's note, as in a tab.
+     */
+    private awaitAnnotating(embed: PdfEmbed, file: TFile) {
+        const element = embed.containerEl!;
+        if (this.waitingEmbeds.has(element)) return;
+        const pressed = (event: PointerEvent) => {
+            if (this.stopped || !this.display.embeddedAnnotate || !this.display.embeddedHighlights) return;
+            if (!(event.target as Element | null)?.closest?.('.page') || !cardInHand(element)) return;
+            stop();
+            const stand = this.paintEmbed(embed, file);
+            if (stand) this.lastSource = stand;
+        };
+        const stop = () => {
+            element.removeEventListener('pointerdown', pressed, true);
+            if (this.waitingEmbeds.get(element)?.stop === stop) this.waitingEmbeds.delete(element);
+        };
+        element.addEventListener('pointerdown', pressed, true);
+        this.waitingEmbeds.set(element, {
+            file,
+            embed,
+            gone: () => embed._loaded === false && !element.isConnected,
+            stop
+        });
+        if (typeof embed.register === 'function') embed.register(stop);
+    }
+    /** Bind an embed: the reader's painter on Obsidian's viewer, standing in for a view. */
+    private paintEmbed(embed: PdfEmbed, file: TFile): View | null {
+        if (this.stopped || !embed.containerEl) return null;
+        const key = file.path;
         const stand = {
             contentEl: embed.containerEl,
             containerEl: embed.containerEl,
@@ -2580,7 +2744,8 @@ export default class AnnotatorPlugin extends Plugin {
         } as unknown as FileView;
         const host = new NativePdf(
             stand,
-            () => {},
+            // A selection gets the tab's bar, where and while the embed is annotated (`callbacksFor` says when).
+            capture => this.callbacksFor(stand).capture(capture),
             annotation => this.selectAnnotation(key, annotation),
             () => this.refresh(),
             this.remoteUrl(key),
@@ -2588,14 +2753,16 @@ export default class AnnotatorPlugin extends Plugin {
             undefined,
             this.pdfText
         );
-        this.embedded.set(
-            stand,
-            () => (embed as { _loaded?: boolean })._loaded === false && !embed.containerEl?.isConnected
-        );
+        // Areas, drawings and text boxes are made and changed here as in a tab (by their commands: an embed has no
+        // header for their buttons). Where an embed is scrolled to is not the reading position: that is the tab's.
+        if (this.display.embeddedAnnotate) this.wirePdf(key, host);
+        this.embedded.set(stand, () => embed._loaded === false && !embed.containerEl?.isConnected);
+        this.embeddedFiles.set(stand, key);
         this.bindings.set(stand, { host, file: key, owner: uuid() });
         const release = () => {
             if (!this.embedded.delete(stand)) return;
             this.bindings.delete(stand);
+            if (this.lastSource === stand) this.lastSource = null;
             host.dispose();
         };
         // The embed is an Obsidian component: what is registered on it runs when Obsidian unloads it.
@@ -2604,6 +2771,7 @@ export default class AnnotatorPlugin extends Plugin {
         host.view.contentEl.classList.toggle('annotator-native-hide-highlights', !this.highlightsVisible);
         if (this.notes.has(key)) host.setAnnotations(this.notes.get(key)!.records);
         else void this.loadNote(key);
+        return stand;
     }
     private targetProperty(note: TFile, name: string): unknown {
         const read = (key: string): unknown => {
@@ -9681,17 +9849,35 @@ class NativeSettings extends PluginSettingTab {
                     .setDynamicTooltip()
                     .onChange(value => save(plugin.setReader({ ...plugin.reader, [key]: value })))
             );
+        // Annotating an embed needs its highlights shown; while they are not, the choice below is kept as it was made.
+        let annotateEmbeds: { setDisabled(off: boolean): unknown } | null = null;
         new Setting(root)
             .setName('Show highlights in embedded PDFs')
             .setDesc(
-                "A PDF embedded in a note or placed on a Canvas is shown with its highlights, and a click on one opens it in the sidebar. Highlights are made in the PDF's own tab. Applies to embeds shown from now on."
+                'A PDF embedded in a note or placed on a Canvas is shown with its highlights, and a click on one opens it in the sidebar. Applies to embeds shown from now on.'
             )
             .addToggle(control =>
                 control.setValue(plugin.display.embeddedHighlights).onChange(value => {
                     save(plugin.setDisplay({ embeddedHighlights: value }));
                     if (!value) plugin.releaseEmbedded();
+                    annotateEmbeds?.setDisabled(!value);
                 })
             );
+        new Setting(root)
+            .setName('Annotate in embedded PDFs')
+            .setDesc(
+                "Select text in an embedded PDF to highlight it or write a note, with the same bar as in the PDF's tab; right-click a highlight to change its colour, add a note or delete it. What you make goes into the PDF's annotation note, not the note the PDF is embedded in. On a Canvas, select the card first. Off: embeds only show their highlights."
+            )
+            .addToggle(control => {
+                annotateEmbeds = control;
+                control
+                    .setValue(plugin.display.embeddedAnnotate)
+                    .setDisabled(!plugin.display.embeddedHighlights)
+                    .onChange(value => {
+                        save(plugin.setDisplay({ embeddedAnnotate: value }));
+                        plugin.annotateEmbedded(value);
+                    });
+            });
         new Setting(root)
             .setName('Folder for reference notes')
             .setDesc('Where the Citations view makes a note for a cited work. Empty: where Obsidian puts new notes.')

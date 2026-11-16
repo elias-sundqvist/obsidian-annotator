@@ -377,10 +377,26 @@ export class NativePdf {
         } else viewer.currentPageNumber = to.page;
         return true;
     }
+    /** A selection made while the document's text is still being read waits for it: one wait at a time. */
+    private waitingCapture = false;
     private selectionListener = (event: Event) => {
         if ((event.target as Element)?.closest?.('.annotator-native-marks')) return;
         const captured = this.capture();
-        if (typeof captured !== 'string') this.onCapture(captured);
+        if (typeof captured !== 'string') {
+            this.onCapture(captured);
+            return;
+        }
+        // Selected before the text was read (a PDF just opened, an embed just touched): offered once it is read,
+        // if the selection is still there then.
+        const loading = this.loading;
+        if (captured !== INDEXING || !loading || this.waitingCapture) return;
+        this.waitingCapture = true;
+        void loading.then(() => {
+            this.waitingCapture = false;
+            if (this.disposed || this.loading !== loading) return;
+            const again = this.capture();
+            if (typeof again !== 'string') this.onCapture(again);
+        });
     };
     capture(): Capture | string {
         if (!this.view.file) return 'No PDF is open.';

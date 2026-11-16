@@ -1266,6 +1266,8 @@ body:is(.annotator-compact, .annotator-compact-setting) { --annotator-quote-line
 .annotator-area-mode .page { touch-action: none; }
 .annotator-area-mode .annotator-native-marks { pointer-events: none; }
 .annotator-area-mode .annotator-native-marks .annotator-native-mark { pointer-events: none; }
+/* A PDF on a Canvas card that is not selected: its marks let every press through to Canvas, which selects the card (or moves it) first, as Obsidian does. */
+.canvas-node:not(.is-focused) .annotator-native-marks, .canvas-node:not(.is-focused) .annotator-native-marks *, .canvas-node:not(.is-focused) .annotator-native-marks *::before, .canvas-node:not(.is-focused) .annotator-native-marks *::after { pointer-events: none !important; }
 .annotator-area-band { position: absolute; z-index: 9; box-sizing: border-box; pointer-events: none; border: 1.5px dashed var(--interactive-accent); border-radius: 4px; background: color-mix(in srgb, var(--interactive-accent) 12%, transparent); box-shadow: 0 0 0 9999px rgb(0 0 0 / .12); }
 .view-action.annotator-area-action.is-active { background: var(--interactive-accent); color: var(--text-on-accent); }
 /* In the sidebar: the way back to the region, then its picture and the note. */

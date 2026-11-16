@@ -333,9 +333,8 @@ N** returns you to where you were. The command *PDF: go back to where a link
 was followed* does the same and can be given a hotkey.
 
 Where a PDF is embedded in a note (`![[paper.pdf#page=3]]`) or placed on a
-Canvas, its highlights, areas and drawings are shown there too, and a click
-on one opens it in the sidebar. The setting **Show highlights in embedded
-PDFs** turns this off.
+Canvas, its highlights, areas and drawings are shown there too, and you can
+annotate it there: see [embedded PDFs and Canvas](#embedded-pdfs-and-canvas).
 
 ![A dark page with a marked area, its grips, and a drawing](docs/pdf-dark-area-drawing.jpg)
 
@@ -402,6 +401,29 @@ in the strip at the top; the last one used is remembered.
 - A box given up before it has words leaves nothing behind.
 - On a phone the command **Add text box (PDF)** starts it, a tap places it,
   and the words are typed in the sheet above the keyboard.
+
+### Embedded PDFs and Canvas
+
+A PDF embedded in a note or placed on a Canvas shows its highlights, and a
+click on one opens it in the sidebar. You can annotate it there as in its
+tab:
+
+- Select text: the same bar appears, with the mark style, the inks, **Note**
+  and the same keys. A note is written beside the passage, in the embed.
+- Right-click a highlight (or press the menu key on it) for its menu: change
+  the colour or the style, add or edit its note, copy it, delete it.
+- The commands **Mark an area of the page (PDF)…**, **Draw on the page** and
+  **Add text box (PDF)** act on the PDF you last pressed on, embed or tab. An
+  embed has no header of its own, so their buttons are not there.
+- What you make goes into the PDF's annotation note, never into the note
+  the PDF is embedded in, and shows at once in the embed, in any tab of the
+  PDF and in the sidebar. A PDF that has no annotation note yet gets one with
+  its first highlight, as in a tab.
+- On a Canvas, select the card first. A first click selects it, and dragging
+  moves it, as Obsidian does.
+
+**Annotate in embedded PDFs** turns annotating there off, so embeds only
+show their highlights. **Show highlights in embedded PDFs** turns off both.
 
 ### A note page between pages
 
@@ -1225,8 +1247,11 @@ and the PDF export is read back with two independent PDF readers. See
   and vertical text are not read; not offered on iOS and iPadOS before 16.4.
   On a strongly tilted scan, Apple's PDF programs (Preview, Files) may give
   the copy's words out of order; Obsidian does not.
-- In a PDF embedded in a note or placed on a Canvas, highlights are shown but
-  not made: open the PDF in a tab to annotate it.
+- In a PDF embedded in a note or placed on a Canvas, the buttons for an
+  area, a drawing and a text box are not there; their commands are. On a
+  Canvas card that is not selected, a highlight's note is not shown on hover:
+  select the card first. A PDF read where it is (outside the vault) cannot be
+  embedded, as Obsidian embeds only files of the vault.
 - `annotation-pages` is for PDFs, and is read from a note's properties (not
   from a Dataview field in its text). Hypothesis JSON is imported into the
   note of the page being read. An annotation does not move to another note

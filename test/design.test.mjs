@@ -413,6 +413,41 @@ test('the settings are grouped under headings that say what they are about, in s
     } finally { h.dispose(); }
 });
 
+test('annotating in embedded PDFs is one toggle under showing their highlights: on unless turned off, kept, and offered only while highlights are shown there', async () => {
+    const h = host();
+    try {
+        await h.plugin.onload();
+        assert.equal(h.plugin.display.embeddedAnnotate, true);
+        const tab = h.plugin.settingTabs[0]; tab.display();
+        const rows = [...tab.containerEl.querySelectorAll('.setting-item')], names = rows.map(row => row.querySelector('.setting-item-name')?.textContent);
+        const at = names.indexOf('Show highlights in embedded PDFs');
+        assert.equal(names[at + 1], 'Annotate in embedded PDFs', 'right under the setting it needs');
+        const show = rows[at].querySelector('.checkbox-container'), annotate = rows[at + 1].querySelector('.checkbox-container'), said = rows[at + 1].querySelector('.setting-item-description').textContent;
+        // It says what it does and where what is made goes; no tooltip of its own.
+        assert.match(said, /annotation note, not the note the PDF is embedded in/); assert.match(said, /Canvas, select the card first/);
+        assert.equal(rows[at].querySelector('.setting-item-description').textContent.includes("made in the PDF's own tab"), false);
+        assert.equal(annotate.hasAttribute('title'), false);
+        assert.ok(annotate.classList.contains('is-enabled')); assert.ok(!annotate.classList.contains('is-disabled'));
+        const settle = async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); };
+        annotate.click(); await settle();
+        assert.equal(h.plugin.display.embeddedAnnotate, false); assert.equal(h.plugin.data.nativeDisplay.embeddedAnnotate, false);
+        annotate.click(); await settle(); assert.equal(h.plugin.data.nativeDisplay.embeddedAnnotate, true);
+        // Highlights in embeds off: annotating there is not offered, and the choice is kept for when they are on again.
+        show.click(); await settle();
+        assert.equal(h.plugin.display.embeddedHighlights, false); assert.ok(annotate.classList.contains('is-disabled')); annotate.click(); await settle(); assert.equal(h.plugin.display.embeddedAnnotate, true);
+        show.click(); await settle(); assert.ok(!annotate.classList.contains('is-disabled'));
+        // Shown afresh, the same.
+        h.plugin.display = { ...h.plugin.display, embeddedHighlights: false }; tab.containerEl.replaceChildren(); tab.display();
+        const again = [...tab.containerEl.querySelectorAll('.setting-item')].find(row => row.querySelector('.setting-item-name')?.textContent === 'Annotate in embedded PDFs');
+        assert.ok(again.querySelector('.checkbox-container').classList.contains('is-disabled'));
+    } finally { h.dispose(); }
+    // Saved off, read back off; a value that is not false is on.
+    for (const [saved, on] of [[false, false], [true, true], ['no', true]]) {
+        const again = host();
+        try { again.plugin.data = { nativeDisplay: { embeddedAnnotate: saved } }; await again.plugin.onload(); assert.equal(again.plugin.display.embeddedAnnotate, on, String(saved)); } finally { again.dispose(); }
+    }
+});
+
 test('new notes are written with annotation-target unless the reader chooses the second property, which can be chosen only while one is named', async () => {
     const h = host();
     try {
@@ -700,6 +735,13 @@ test('the selection bar survives scrolling elsewhere (the sidebar re-rendering f
         open(); scroll(w.document); assert.equal(bar(), null);
         // With no bar open, scrolling does nothing and nothing is retained.
         scroll(w.document.querySelector('.annotator-card-list')); assert.equal(bar(), null);
+        // A Canvas pans and zooms with the wheel and scrolls nothing: a wheel over what holds the source moves it, one over the sidebar does not.
+        const wheel = target => target.dispatchEvent(new w.Event('wheel', { bubbles: true }));
+        open(); wheel(w.document.querySelector('.annotator-card-list')); assert.ok(bar(), 'a wheel in the sidebar leaves the bar');
+        wheel(w.document.body); assert.equal(bar(), null, 'a wheel over the board the source is on removes it');
+        open(); wheel(w.document.querySelector('i')); assert.equal(bar(), null);
+        // Let go, the bar listens to no more wheels.
+        actions.dispose(); open(); wheel(w.document.body); assert.ok(bar(), 'no wheel listener is left behind');
     } finally { actions.dispose(); w.close(); }
 });
 

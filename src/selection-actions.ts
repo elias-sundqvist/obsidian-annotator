@@ -51,6 +51,8 @@ export class SelectionActions {
         document.addEventListener('pointerdown', this.outside, true);
         document.addEventListener('keydown', this.key, true);
         document.addEventListener('scroll', this.scrolled, true);
+        // A Canvas pans and zooms with the wheel without scrolling anything: the passage moves from under the bar all the same.
+        document.addEventListener('wheel', this.scrolled, { capture: true, passive: true });
     }
     show(capture: SourceCapture, source: HTMLElement) {
         this.hide();
@@ -277,5 +279,6 @@ export class SelectionActions {
         this.document.removeEventListener('pointerdown', this.outside, true);
         this.document.removeEventListener('keydown', this.key, true);
         this.document.removeEventListener('scroll', this.scrolled, true);
+        this.document.removeEventListener('wheel', this.scrolled, true);
     }
 }
