@@ -1622,6 +1622,14 @@
       "parent": "community",
       "dependsOn": [],
       "notes": "Owner, 2026-11-16: hold for now. He is working on the project again for a while and expects to lose steam after some weeks; then it would be good to have someone to hand it off to. His concern: supply-chain attacks. Recommended when the time comes: help through pull requests first, real work (device checks, triage), the Triage role later, write access only behind rulesets (PRs he approves, version tags and the release environment his alone, 2FA); keep the repository and its Obsidian listing under his account; keep it public, not private email."
+    },
+    {
+      "id": "release-034-approvals-keep-their",
+      "title": "Release 0.3.4: approvals keep their meaning, and the fixes since 0.3.3",
+      "status": "todo",
+      "parent": "community",
+      "dependsOn": [],
+      "notes": "next has, since 0.3.3: the saved notice, the Kindle footer, the footer counting only seen chapters, and approvedSources keeping 0.3.2's meaning (place: for read-in-place yeses, so 0.3.2 devices never take them as a yes to download into the vault). Publishing needs the owner's go."
     }
   ]
 }
