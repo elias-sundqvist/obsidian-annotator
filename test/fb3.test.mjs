@@ -56,7 +56,9 @@ async function fb3(body, { meta = {}, pictures = { rChart: ['img/chart.png', PNG
     for (const [, [target, bytes]] of Object.entries(pictures)) if (bytes) parts[`fb3/${target}`] = bytes;
     if (thumbnail && thumbnail[1]) parts[thumbnail[0]] = thumbnail[1];
     Object.assign(parts, files);
-    for (const [name, content] of Object.entries(parts)) if (content !== null) zip.file(name, content);
+    // A fixed date for every entry, the folders JSZip adds too: the same book built twice is the same bytes, so it is the same revision.
+    for (const [name, content] of Object.entries(parts)) if (content !== null) zip.file(name, content, { date: new Date('2020-01-01T00:00:00Z') });
+    zip.forEach((_path, entry) => { entry.date = new Date('2020-01-01T00:00:00Z'); });
     return zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE' });
 }
 const open = bytes => openFictionBook3(bytes, document);
