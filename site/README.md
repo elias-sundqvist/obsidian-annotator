@@ -19,7 +19,7 @@ cp docs/*.gif docs/*.jpg site/media/
 ```
 
 then upload the contents of `site/` (without `README.md` and `.gitignore`).
-The page uses twelve of the files in `docs/`; `drawing.jpg` is not shown.
+The page uses fourteen of the files in `docs/`; `drawing.jpg` is not shown.
 
 ## Preview
 

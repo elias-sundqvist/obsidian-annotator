@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <title>Annotator: read and annotate in Obsidian, keep it as Markdown</title>
-<meta name="description" content="Annotator is a plugin for Obsidian. Read and annotate PDFs, EPUB books, web pages and videos inside Obsidian, and keep what you mark as Markdown in your vault.">
+<meta name="description" content="Annotator is a plugin for Obsidian. Read and annotate PDFs, books, web pages and videos inside Obsidian, and keep what you mark as Markdown in your vault.">
 <meta name="theme-color" content="#F5F2EA" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#151417" media="(prefers-color-scheme: dark)">
 <link rel="canonical" href="https://annotator.esh.sh/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Annotator">
 <meta property="og:title" content="Annotator for Obsidian">
-<meta property="og:description" content="Read and annotate PDFs, EPUB books, web pages and videos inside Obsidian, and keep what you mark as Markdown in your vault.">
+<meta property="og:description" content="Read and annotate PDFs, books, web pages and videos inside Obsidian, and keep what you mark as Markdown in your vault.">
 <meta property="og:url" content="https://annotator.esh.sh/">
 <meta property="og:image" content="https://annotator.esh.sh/og.jpg">
 <meta property="og:image:width" content="1200">
@@ -45,7 +45,7 @@
   <h1 id="title">Annotator</h1>
 
   <div class="annotated">
-    <p class="lede">Read and annotate PDFs, EPUB books, web pages and videos inside Obsidian, and <mark class="ink-yellow">keep what you mark as Markdown</mark> in your vault.</p>
+    <p class="lede">Read and annotate PDFs, books, web pages and videos inside Obsidian, and <mark class="ink-yellow">keep what you mark as Markdown</mark> in your vault.</p>
     <div class="note ink-yellow" role="note" aria-label="A note on this sentence">
       <p class="note__quote">keep what you mark as Markdown</p>
       <p class="note__body">Every annotation is a block in an ordinary note, so it links, embeds, searches and syncs like the rest of your notes.</p>
@@ -76,14 +76,15 @@
       <li class="ink-blue"><i></i>blue</li>
       <li class="ink-green"><i></i>green</li>
     </ul>
-    <p class="keys"><kbd>H</kbd> highlights in the last colour used, <kbd>1</kbd>–<kbd>6</kbd> pick a colour, <kbd>A</kbd> opens a note on the passage.</p>
+    <p class="keys"><kbd>H</kbd> highlights in the last colour used, <kbd>1</kbd>–<kbd>6</kbd> pick a colour, <kbd>A</kbd> opens a note on the passage, <kbd>S</kbd> switches between highlight, underline, strike-out and squiggly line.</p>
   </header>
 
   <article class="spread" aria-labelledby="pdfs">
     <div class="spread__text">
       <h3 id="pdfs">PDFs</h3>
       <p>The reader works on Obsidian’s built-in PDF view. A selection may run over a page break; it is one highlight.</p>
-      <p><strong>Mark an area</strong> keeps a picture of part of a page with a note: a figure, a table, an equation. <strong>Draw on the page</strong> is freehand: underline, circle, point, write in the margin.</p>
+      <p><strong>Mark an area</strong> keeps a picture of part of a page with a note: a figure, a table, an equation. <strong>Draw on the page</strong> is freehand: underline, circle, point, write in the margin. A <strong>text box</strong> keeps typed words on the page.</p>
+      <p>A scanned PDF can be made searchable: <strong>Recognise text…</strong> reads its pages on your device. One long PDF can have a note for each chapter.</p>
       <p><mark class="ink-orange">Export PDF with annotations</mark> saves a copy that any PDF reader shows with the highlights in their colours and their notes as comments, areas as boxes and drawings as ink.</p>
       <div class="note ink-orange" role="note" aria-label="A note on exporting">
         <p class="note__quote">Export PDF with annotations</p>
@@ -104,10 +105,46 @@
     </div>
   </article>
 
+  <article class="spread" aria-labelledby="embeds">
+    <div class="spread__text">
+      <h3 id="embeds">PDFs embedded in notes and on a Canvas</h3>
+      <p>A PDF embedded in a note (<code>![[paper.pdf#page=3]]</code>) or placed on a Canvas shows its highlights, and you can <mark class="ink-purple">annotate it right there</mark>: select text for the same bar and keys, or right-click a highlight to change its colour, add a note or delete it.</p>
+      <div class="note ink-purple" role="note" aria-label="A note on embeds">
+        <p class="note__quote">annotate it right there</p>
+        <p class="note__body">What you make goes into the PDF’s own annotation note, never into the note it is embedded in, and shows at once in every place the PDF is open.</p>
+      </div>
+    </div>
+    <div class="spread__media">
+      <figure class="shot shot--dark">
+        <img src="media/embedded-pdf.jpg" width="1500" height="938" loading="lazy" decoding="async"
+             alt="A Canvas with a PDF on a card. A highlight on the card has been right-clicked, and its menu offers a note, a reply, copying, six colours, the mark styles and Delete. The annotation list beside it shows the PDF’s annotations.">
+        <figcaption>A PDF on a Canvas card: a highlight’s menu, and the PDF’s annotations beside it.</figcaption>
+      </figure>
+    </div>
+  </article>
+
+  <article class="spread" aria-labelledby="websites">
+    <div class="spread__text">
+      <h3 id="websites">For a website or a print</h3>
+      <p>Many places that show a PDF hide its annotations: a browser’s viewer, a website made from your vault, a print. <mark class="ink-green">Export PDF with annotations drawn in</mark> saves a copy where the highlights, lines, areas and drawings are part of the pages, and each note is written beside its passage in a column added at the page’s edge.</p>
+      <div class="note ink-green" role="note" aria-label="A note on the drawn-in export">
+        <p class="note__quote">Export PDF with annotations drawn in</p>
+        <p class="note__body">The page’s text can still be selected and searched, and the original PDF is not changed.</p>
+      </div>
+    </div>
+    <div class="spread__media">
+      <figure class="shot">
+        <img src="media/drawn-pdf-export.jpg" width="1200" height="1102" loading="lazy" decoding="async"
+             alt="A PDF page with highlights in blue and orange, a struck-out sentence, an underline and a marked area drawn into it, small numbers beside the passages, and a column on the right with the numbered notes.">
+        <figcaption>A page of the drawn-in copy: the marks are part of the page, and the notes are in the margin with their numbers.</figcaption>
+      </figure>
+    </div>
+  </article>
+
   <article class="spread" aria-labelledby="books">
     <div class="spread__text">
       <h3 id="books">Books</h3>
-      <p>EPUB books have a reader of their own, in the Scroll or the Pages layout. <strong>Contents</strong> lists the book’s own table of contents, with where you are and how many annotations each chapter holds. <strong>Find</strong> looks through the whole book and lists every match under its chapter.</p>
+      <p>EPUB, FB2 and FB3 books, and Kindle books without DRM (MOBI, AZW3), have a reader of their own, in the Scroll or the Pages layout. <strong>Contents</strong> lists the book’s own table of contents, with where you are and how many annotations each chapter holds. <strong>Find</strong> looks through the whole book and lists every match under its chapter.</p>
       <p>A picture in the book can be kept with a note. <mark class="ink-pink">Reading controls</mark> change how the page looks.</p>
       <div class="note ink-pink" role="note" aria-label="A note on the reading controls">
         <p class="note__quote">Reading controls</p>
@@ -161,6 +198,15 @@
       </figure>
     </div>
   </article>
+</section>
+
+<!-- 3b. Where your sources are -->
+<section class="section wrap" aria-labelledby="library">
+  <header class="section__head">
+    <h2 id="library">Your library stays where it is</h2>
+    <p>A note’s <code>annotation-target</code> can be a file in the vault, a file elsewhere on your computer, a web address, or a link from your reference manager: <strong>Zotero</strong>, <strong>Calibre</strong> and <strong>DEVONthink</strong> links, and <strong>archive.org</strong> book pages. On a computer, these are read where they are and only read, never changed: nothing is copied into your vault unless you ask.</p>
+    <p><strong>Annotate a copy in the vault</strong> makes a copy that syncs, for reading on your phone or offline, with the same annotations. The annotations themselves are always in your vault.</p>
+  </header>
 </section>
 
 <!-- 4. Your notes stay yours -->
@@ -256,7 +302,7 @@ annotation-target: "Showcase/Attention Is All You Need.pdf"
   <div class="facts">
     <div class="fact">
       <h3>Proved</h3>
-      <p>The rules that decide what is written into your notes are written in Bend and proved for every input: 182 laws, checked on every build, and a second time by Bend’s small kernel, which has its own proof in Lean. The rest is tested.</p>
+      <p>The rules that decide what is written into your notes are written in Bend and proved for every input: 263 laws, checked on every build, and a second time by Bend’s small kernel, which has its own proof in Lean. The rest is tested.</p>
       <p><a href="https://github.com/elias-sundqvist/obsidian-annotator/blob/master/proofs/README.md">The proofs</a></p>
     </div>
     <div class="fact">
@@ -266,7 +312,7 @@ annotation-target: "Showcase/Attention Is All You Need.pdf"
     </div>
     <div class="fact">
       <h3>Small</h3>
-      <p>The plugin is three files, about 1.5 MB on disk; version 0.2 was 26.3 MB. Enabling it at each start takes 0.014 s on a desktop, where 0.2 took 1.1 s.</p>
+      <p>The plugin is three files, about 2 MB on disk; version 0.2 was 26.3 MB. Enabling it at each start takes well under a tenth of a second on a desktop, where 0.2 took 1.1 s.</p>
       <p><a href="https://github.com/elias-sundqvist/obsidian-annotator/blob/master/docs/MEASUREMENTS.md">How it was measured</a></p>
     </div>
   </div>
@@ -278,7 +324,7 @@ annotation-target: "Showcase/Attention Is All You Need.pdf"
     <div class="get__main">
       <h2 id="get">Getting it</h2>
       <p>In Obsidian: <strong>Settings → Community plugins → Browse</strong>, search for “Annotator”, install and enable it.</p>
-      <p>Version 0.3 needs Obsidian 1.11.4 or later and works on desktop (macOS, Windows, Linux) and Android. On iOS and iPadOS it has been tested in the iOS Simulator; a check inside Obsidian on an iPhone or iPad is still to come.</p>
+      <p>Version 0.3 needs Obsidian 1.11.4 or later and works on desktop (macOS, Windows, Linux) and Android. Reading files where they are, outside the vault, needs Obsidian 1.14.4 on a computer. On iOS and iPadOS it has been tested in the iOS Simulator; a check inside Obsidian on an iPhone or iPad is still to come.</p>
       <p class="actions">
         <a class="btn btn--primary" href="obsidian://show-plugin?id=obsidian-annotator">Open in Obsidian</a>
       </p>
