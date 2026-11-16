@@ -54,12 +54,19 @@ assets…" (`readers.test.mjs`), "network CSS, dynamic selectors…"
 
 - **A note's `annotation-target` outside the vault is asked about.**
   Before an http(s) target is fetched, or a file outside the vault is read
-  and copied in, the reader asks, naming the address or the path. For a web
-  address the answer is remembered (it can be given for the whole site), so
-  a later change at the same address is not asked about again. For a file
-  on this computer the answer is for the one copy then made, and is not
-  kept: while the copy is in the vault the file outside is not read again,
-  and if it is read again it is asked about again. A Zotero or Calibre link
+  (where it is, or to copy it in), the reader asks, naming the address or
+  the path. For a web address the answer is remembered (it can be given for
+  the whole site), so a later change at the same address is not asked about
+  again. For a file on this computer read where it is, the yes is kept on
+  this computer only (Obsidian's storage for this computer and vault, never
+  the plugin's settings, so it does not sync), for that file, or, with
+  **Always from this library**, for every file under a Zotero `storage`
+  folder or a Calibre library the settings name. A note that names any other
+  file is asked about again. What a later file at an allowed path could do
+  is limited to what any PDF or book can do in the reader (below), and if it
+  is another version its annotations are marked as made on another version.
+  For a file copied in, the answer is for the one copy then made, and is
+  not kept. A Zotero or Calibre link
   is first followed to a path inside the folder the settings name, and a
   DEVONthink link to the path DEVONthink gives (see below); that path is then
   asked about in the same way. An archive.org item link
@@ -103,11 +110,35 @@ assets…" (`readers.test.mjs`), "network CSS, dynamic selectors…"
   the reader asks in a dialog of its own (warning when the address is plain
   http), sends them only to that address's origin, and keeps them in memory
   until the plugin is unloaded. It asks three times at most per download.
-- **Nothing is written beside a file outside the vault.** Since 1.14.4
-  Obsidian can open a file that is not in the vault, and its file functions
-  then write wherever that file's path says. The reader names its notes and
-  exports after their source, so a source that is not in the vault is not
-  annotated where it lies: it gets no note, no export and no saved position.
+- **Nothing outside the vault is written, changed or deleted, except the
+  plugin's own download cache.** Since 1.14.4 Obsidian can open a file that
+  is not in the vault (a `TExternalFile`, whose path begins `file:`), and its
+  file functions then write wherever that path says. Every write the reader
+  makes to the vault goes through one check (`vaultWrite` in `main.ts`,
+  `vaultWritable` in `in-place.ts`) that refuses a path beginning `file:`,
+  an absolute path, a drive letter, a network path, a path that climbs out,
+  and any file object that can say where it really is. A source read where
+  it is is only read: its annotations go into the note that names it; an
+  export of it, a searchable copy of it and a note for some of its pages
+  either go beside that note or are refused with the offer of a copy in the
+  vault. A file outside the vault that no note names (one Obsidian opened
+  with "Open with") gets no note and no annotations until the reader presses
+  one of the notice's buttons. Reading positions and the ties between
+  sources and notes are not kept in the settings under this computer's paths.
+  Tests: "read where it is, a file is bound to its note only once allowed
+  here…" (`plugin-boundary.test.mjs`) and "nothing outside the vault passes
+  the check…" (`in-place.test.mjs`).
+- **The download cache.** A web source read where it is is downloaded to
+  the system's cache folder (`~/Library/Caches/Annotator for Obsidian`,
+  `%LOCALAPPDATA%\Annotator for Obsidian\Cache`, or
+  `$XDG_CACHE_HOME`/`~/.cache/annotator-for-obsidian`), only after the
+  question. The plugin writes there only into folders named by the SHA-256
+  of the address and of the bytes, under a name made safe from the address,
+  by writing a temporary file and renaming it; it never writes over a file
+  there, and checks every path it writes is inside the cache. Which download
+  an address means is kept in Obsidian's storage for this computer and
+  vault. The cache is not synced; **Clear the download cache** removes the
+  downloads no tab shows, and only folders named by digests.
 - **Remote video files** (`.mp4` and similar targets) are loaded by the
   built-in player from wherever the target points.
 - **Imported comments** are rendered as Markdown like the user's own.
@@ -230,5 +261,9 @@ program, and this is the only program it runs.
 - **This computer's key and the folders files may be copied from** without
   a question (Open from outside Obsidian), in Obsidian's own storage for
   this computer and vault. They are not in the vault and do not sync.
+- **The files and libraries allowed to be read where they are, and which
+  download each web address means**, in the same storage
+  (`annotator-in-place`). Not in the vault, not synced. The downloads
+  themselves are in the system's cache folder (above).
 - **Settings, reading positions and unfinished drafts** are in the plugin's
   `data.json` inside the vault's configuration folder, as with any plugin.

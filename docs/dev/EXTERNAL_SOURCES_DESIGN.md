@@ -239,7 +239,7 @@ one stays in the cache).
 | Links to passages, the annotation list and its search | yes | yes |
 | Reading position | yes (kept under the target as written) | yes |
 | Export notes, citations, PDF details, take in a PDF's annotations | yes | yes |
-| Export PDF with annotations | yes, written beside the note | yes, beside the copy |
+| Export PDF with annotations (either kind) | no: says so, offers a copy | yes, beside the copy |
 | New annotation note for pages… | yes, beside the note, same target | yes |
 | Searchable copy (text recognition) | no: says so, offers a copy | yes |
 | On a phone or tablet | no: says why, offers a copy (web) | yes, once synced |
@@ -247,6 +247,22 @@ one stays in the cache).
 | Highlights in an embedded PDF (`![[…pdf]]`) | no: an embed names a vault file | yes |
 | Earlier versions after a change | web: kept in the cache; files: no | yes, reviewed revisions |
 | Network paths (`\\server\…`) | no (refused, as in 0.3.2) | no |
+
+The view of an in-place source has a header action **Annotate a copy in
+the vault**; the command of that name does the same; and where an action
+needs a copy, the notice that says so has the button.
+
+The export first wrote beside the note; when the export with annotations
+drawn in arrived on `next`, the owner's coordinator asked that both kinds of
+export, which write a file beside the PDF, offer the copy instead, as the
+searchable copy does. One rule: what writes a file beside the PDF needs the
+copy.
+
+A file Obsidian opened from outside the vault (Open with) and that no note
+names gets two buttons: **Annotate where it is** (a note naming it is made,
+and it is read in place) and **Annotate a copy in the vault** (0.3.2's
+behaviour). The `annotator-open` address and the share menu still copy, as
+their recipes promise.
 
 ### Phones and tablets
 
@@ -282,6 +298,46 @@ one stays in the cache).
 - Reading where it is: desktop, Obsidian 1.14.4 or later, detected at run
   time (the `TExternalFile` export). `minAppVersion` stays 1.11.4.
 - Earlier versions, phones and tablets: copies, as 0.3.
+
+## What was tried in Obsidian
+
+Obsidian 1.15.1 (the shared test instance, macOS), with this branch's
+release build, against the test data the real programs made:
+
+- A Zotero 10.0.9 link (`zotero://open-pdf/library/items/IKUUN4F6`) to the
+  PDF in Zotero's data folder: the question showed its four answers (they
+  overflowed the dialog at first: the row now wraps); **Read where it is**
+  opened the file in Obsidian's PDF view as a `TExternalFile`; the path,
+  written through `/tmp`, was resolved to `/private/tmp`; the note's
+  annotation was painted on the page and listed in the sidebar; the header
+  had **Annotate a copy in the vault**; nothing was added to the vault.
+- A Calibre 9.18 link (`calibre://show-book/My_Test_Library/1`): **Always
+  from this library** kept the library folder on this device; the EPUB opened
+  in the book reader in place, titled by the book; a highlight made by
+  selecting and pressing H was written into the note; the Calibre folder was
+  unchanged. **Annotate a copy in the vault** in the header made
+  `Annotator sources/<hash>.epub`, showed it in the same tab with the same
+  annotation, kept the note's `calibre://` link, and the header action went
+  away.
+- A web address served from this computer: **Read this file from the web?**
+  with **Always from 127.0.0.1:8765**; the PDF was downloaded to
+  `~/Library/Caches/Annotator for Obsidian/<hash>/<hash>/Trace based
+  JIT.pdf`, read there, its tab named by the file; an annotation marked as
+  made on another fingerprint brought the notice about another version.
+  **Export PDF with annotations drawn in** on it said it needs a copy, with
+  the button.
+- With both outside tabs open, the plugin was disabled and enabled again:
+  both were bound to their notes again (the Zotero one only after the fix
+  that resolves the paths notes write when a restored tab shows the file's
+  own path).
+- At the end, the Obsidian window stopped answering while the released
+  0.3.1 build was being enabled again; it was reloaded through the debugging
+  port and came back with 0.3.1, its settings byte for byte as before, and
+  the same tabs. What stopped it was not found.
+
+Zotero and Calibre themselves were not started: their links and folders
+were followed as 0.3.2 does (tried against both programs before), and
+reading in place changes nothing on their side.
 
 ## Stages
 

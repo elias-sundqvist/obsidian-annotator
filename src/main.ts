@@ -2044,7 +2044,8 @@ export default class AnnotatorPlugin extends Plugin {
         copy.textContent = 'Annotate a copy in the vault';
         place.className = 'annotator-outside-place';
         place.textContent = 'Annotate where it is';
-        said.append(`${words} `, ...(this.readsInPlace() ? [place, ' '] : []), copy);
+        said.append(page.createElement('div'), ...(this.readsInPlace() ? [place] : []), copy);
+        (said.firstChild as HTMLElement).textContent = words;
         const notice = new Notice(said, 20000);
         copy.addEventListener('click', () => {
             notice.hide?.();
@@ -2076,6 +2077,28 @@ export default class AnnotatorPlugin extends Plugin {
             source = key ? this.inPlace.get(key) : undefined;
         return source ? `target:${source.origin}` : path;
     }
+    /**
+     * Resolves the paths notes write for files on this computer to the files' own (links followed), each once a
+     * session, and says whether any key changed. Asks the disk: used only for a view no note's key matches.
+     */
+    private resolveInPlace(): boolean {
+        let changed = false;
+        for (const [key, entry] of [...this.inPlace]) {
+            if (!entry.uri.startsWith('file:') || this.resolvedPaths.has(key)) continue;
+            let real = key;
+            try {
+                real = externalKey(this.desktopFiles().realpathSync(externalPath(key)));
+            } catch {
+                real = key;
+            }
+            this.resolvedPaths.set(key, real);
+            if (real !== key) {
+                this.placeKey(real, entry);
+                changed = true;
+            }
+        }
+        return changed;
+    }
     /** Looks at every note's target again (no disk is touched), so the outside files they name are known. */
     private learnInPlace() {
         if (!this.inPlaceStale) return;
@@ -2099,6 +2122,9 @@ export default class AnnotatorPlugin extends Plugin {
             this.learnInPlace();
             key = this.inPlaceKey(path);
         }
+        // A tab Obsidian restored shows the file's own path, which a note may write another way (through a link, as
+        // /tmp is on a Mac). The paths notes write are resolved once a session, and only when a view needs it.
+        if (!key && this.resolveInPlace()) key = this.inPlaceKey(path);
         return key && allowedHere(this.placeDevice(), key, this.foldOutsideCase()) ? key : null;
     }
     private baseSourceKey(view: View): string | null {
@@ -8471,7 +8497,8 @@ export default class AnnotatorPlugin extends Plugin {
             press = page.createElement('button');
         press.className = 'mod-cta annotator-annotate-copy';
         press.textContent = 'Annotate a copy in the vault';
-        said.append(`${why} `, press);
+        said.append(page.createElement('div'), press);
+        (said.firstChild as HTMLElement).textContent = why;
         const notice = new Notice(said, ACTION_NOTICE_MS);
         press.addEventListener('click', () => {
             notice.hide?.();
@@ -8689,6 +8716,11 @@ export default class AnnotatorPlugin extends Plugin {
                 "Name Zotero's data folder in Annotator's settings: this computer's home folder is not known."
             );
         return home.replace(/[\\/]+$/, '');
+    }
+    /** The same, for the one question asked of the disk without waiting (resolving a path a tab shows). */
+    private desktopFiles(): typeof import('node:fs') {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        return require('fs');
     }
     private desktopFileSystem(): typeof import('node:fs/promises') {
         // Desktop only, and only when a file outside the vault is read: an import at the top would be loaded on phones too.

@@ -1944,7 +1944,7 @@ test('an archive.org item link as a target is looked up once after one question 
 async function placeHost(){
  const {externalFiles,ExternalFileStandIn}=await import('./.generated/plugin-boundary.mjs');
  const fs=nodeRequire('fs'),os=nodeRequire('os'),path=nodeRequire('path'),root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'annotator-place-')));
- const h=openHost();h.plugin.manifest={id:'obsidian-annotator'};externalFiles(true);Platform.isDesktopApp=true;
+ const h=openHost();h.plugin.manifest={id:'obsidian-annotator'};h.plugin.desktopFiles=()=>fs;externalFiles(true);Platform.isDesktopApp=true;
  const lookups=[],inVault=h.app.vault.getAbstractFileByPath,read=h.app.vault.readBinary;
  h.app.vault.getAbstractFileByPath=p=>{if(/^file:/.test(p)){lookups.push(p);const real=p.slice(5);return fs.existsSync(real)&&fs.statSync(real).isFile()?new ExternalFileStandIn(p):null;}return inVault(p);};
  h.app.vault.readBinary=async file=>/^file:/.test(file.path)?new Uint8Array(fs.readFileSync(file.path.slice(5))).buffer:read(file);
@@ -1988,6 +1988,8 @@ test('read where it is, a file is bound to its note only once allowed here, as i
   assert.equal(h.plugin.sourceKey(shown.view),null);
   await h.plugin.openNoteTarget(note);assert.equal(h.opened.at(-1).file.path,key);assert.equal(h.plugin.targetKey(note),key);
   assert.equal(h.plugin.sourceKey(shown.view),key);
+  // Restored at the next start, the tab shows the file's own path before any note was opened: the link the note writes is resolved then.
+  h.plugin.resolvedPaths.clear();h.plugin.inPlace.clear();h.plugin.inPlaceStale=true;assert.equal(h.plugin.sourceKey(shown.view),key);assert.equal(h.plugin.targetKey(note),key);
   // On a Mac's disk a name in other letters' case is the same file.
   Platform.isMacOS=true;const upper=leaf(new ExternalFileStandIn('file:'+paper.replace('Paper.pdf','PAPER.pdf')));assert.equal(h.plugin.sourceKey(upper.view),key);
   Platform.isMacOS=false;assert.equal(h.plugin.sourceKey(upper.view),null);

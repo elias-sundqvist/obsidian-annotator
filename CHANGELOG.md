@@ -5,6 +5,33 @@ What changed for someone using Annotator. How to use each thing is in
 
 ## Unreleased
 
+- **Sources outside the vault are read where they are**, as before 0.3: a
+  Zotero, Calibre or DEVONthink link, a path on your computer and a web
+  address (an archive.org book too) are no longer copied into the vault on
+  their own. On a computer with Obsidian 1.14.4 or later the file is opened
+  where it lies and only read; a web address is downloaded to this
+  computer's cache, not into the vault. The first time, the reader asks:
+  **Read where it is**, **Annotate a copy in the vault**, or, for a Zotero or
+  Calibre library, **Always from this library**. The answer is kept on this
+  computer, not in the settings that sync.
+- **Annotate a copy in the vault** (in that question, as a button in the
+  view's header, and as a command) makes the copy 0.3 made, read from then
+  on on every device, with the same annotations; the note keeps its link. A
+  copy is named after the note's link, so a phone finds it even when the
+  plugin's settings do not sync. Exporting a PDF with its annotations and
+  making a searchable copy of a scan need the copy, and offer it.
+- Copies made by 0.3 are read as before. The setting **Copy outside sources
+  into the vault** brings back copying for every new source. Phones and
+  tablets, and Obsidian before 1.14.4, read copies; a phone offers to
+  download a web source, and says what to do on the computer for a file
+  that is only there.
+- When a PDF read where it is has annotations made on another version of it
+  (Zotero or Calibre replaced the file), the reader says so on opening.
+  **Refresh cached PDF or EPUB** downloads a web source again and reviews
+  the change; **Clear the download cache** removes downloads no tab shows.
+- A file Obsidian opened from outside the vault ("Open with") can be
+  annotated where it is (**Annotate where it is**) or as a copy.
+
 - **Write new notes with this property instead** (under **Also read the
   source from this property**): new annotation notes, from the heading or
   your template, and notes for some pages of a PDF can name their source in

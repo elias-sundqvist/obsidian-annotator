@@ -1828,7 +1828,9 @@ body.annotator-reading-fullscreen .workspace-leaf.mod-active > .workspace-leaf-c
 
 /* Open from outside Obsidian: the recipe as text to copy, and the button in the notice for a file outside the vault. */
 .annotator-open-with-recipe { width: 24em; max-width: 100%; font-family: var(--font-monospace); font-size: var(--font-smallest); white-space: pre; resize: vertical; }
-.notice .annotator-outside-copy { display: block; margin-top: var(--size-4-2); }
+.notice :is(.annotator-outside-copy, .annotator-outside-place, .annotator-annotate-copy) { display: inline-block; margin: var(--size-4-2) var(--size-4-2) 0 0; }
+/* A question with several answers (Read where it is, a copy, always): they wrap rather than run past the dialog's edge. */
+.annotator-confirm .setting-item-control { flex-wrap: wrap; justify-content: flex-end; row-gap: var(--size-4-2); }
 /* ── Text boxes: words typed onto a PDF page ──────────────────────────────
    An area whose note is shown on the page. The words are the page's own ink
    on an opaque ground of the page's paper, so they read on a light, a sepia

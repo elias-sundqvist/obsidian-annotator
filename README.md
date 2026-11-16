@@ -814,10 +814,53 @@ changed. A page saved from a browser keeps the address it came from.
 
 ## Sources outside the vault
 
-A note may point at a file on the internet or elsewhere on your computer. The
-first time, the reader asks, then downloads or copies it once into
-`Annotator sources` in your vault and reads it from there. If that fails it
-says why, and nothing is left behind.
+A note may point at a file on the internet or elsewhere on your computer: a
+path, a web address, or a [Zotero](#with-zotero), [Calibre](#with-calibre),
+[DEVONthink](#with-devonthink) or [archive.org](#books-from-archiveorg) link.
+Such a file is **read where it is**, and nothing is put into the vault: your
+annotations go into the note, and the file is only read, never changed.
+
+- **The first time**, the reader asks: **Read where it is**, **Annotate a
+  copy in the vault**, or **Not now**. For a file in a Zotero or Calibre
+  library there is also **Always from this library**, and for a web address
+  **Always from** its site. The answer is kept on this computer only (not in
+  the settings that sync), so another computer asks for itself, and a note
+  that points somewhere else is asked about again.
+- **A web address** is downloaded to this computer's cache (on a Mac
+  `~/Library/Caches/Annotator for Obsidian`; on Windows `%LOCALAPPDATA%`; on
+  Linux `~/.cache`), not into the vault, under its own name, and read from
+  there; opened again, it is not downloaded again. **Refresh cached PDF or
+  EPUB** downloads it again and, if it changed, shows which annotations are
+  still found before you take the new one; the earlier download stays.
+  **Clear the download cache** removes the downloads no tab shows.
+- **Annotate a copy in the vault** (in the first question, as the button in
+  the view's header, or as a command) copies the file into `Annotator
+  sources`, where it is read from then on, on every device. The note keeps
+  its link, and its annotations stay as they are: they belong to the same
+  file. A copy is what a phone reads (below), and what is needed to export
+  the PDF with its annotations or to make a searchable copy of a scan, since
+  those write a file beside the PDF; asked for one of those on a file read
+  where it is, the reader says so and offers the copy.
+- **If the file changes** (Zotero or Calibre replaced it, a new version of a
+  paper), each annotation still knows the version it was made on. When some
+  were made on another version, the reader says so once on opening: their
+  passages are found by their words and marked in the list; areas and
+  drawings from the other version are not placed. A copy in the vault keeps
+  one version fixed.
+- **On a phone or tablet** a file is read from the vault. A copy made on a
+  computer syncs and is read; it is found by its name, which follows from
+  the note's link, so this works even when the plugin's settings do not
+  sync. A web address without a copy is offered as one (**Download a copy**).
+  A file that is only on a computer cannot be read on the phone, and the
+  reader says what to do: on that computer, open the note and choose
+  **Annotate a copy in the vault**.
+- **Copies made by Annotator 0.3** are still read, as before. With the
+  setting **Copy outside sources into the vault**, every new outside source
+  is copied in the first time, as 0.3 did. Reading where it is needs
+  Obsidian 1.14.4 or later on a computer; with an older Obsidian the reader
+  offers the copy.
+
+If something fails it says why, and nothing is left behind.
 
 A server that keeps the file behind a user name and password (HTTP Basic, as
 nginx or Apache put in front of a Calibre-Web library) is signed in to when
@@ -865,9 +908,9 @@ chooses one:
   pages themselves, with the same text over them to select and search.
 
 A file larger than the reader takes (PDFs up to 128 MB, EPUBs up to 64 MB)
-is passed over. The file chosen is downloaded once into `Annotator sources`
-like any other, and remembered for the item; the note keeps the link you
-wrote.
+is passed over. The file chosen is read like any web address (downloaded to
+this computer's cache, or copied into the vault if you choose), and
+remembered for the item; the note keeps the link you wrote.
 
 Only books that archive.org lets anyone download can be read this way. A
 book it lends (**Borrow** on its page) is refused with that reason: its
@@ -880,24 +923,28 @@ archive.org** answers it for every item). It then asks archive.org's public
 metadata service once which files the item has
 (`https://archive.org/metadata/ID`), and downloads the one chosen from
 `https://archive.org/download/…`, which archive.org hands to one of its file
-servers. Nothing else is sent: no account, no sign-in. From then on the copy
-in the vault is read, offline.
+servers. Nothing else is sent: no account, no sign-in. From then on the
+download (or the copy in the vault) is read, offline.
 
 ### Open a file from outside Obsidian
 
 A PDF or a book in your Downloads, on the desktop or in a mail can be handed
-to Annotator from the file manager or a share sheet. It is copied into
-`Annotator sources`, a note named after it is made where your new notes go,
-and it opens in the reader. The file itself is not changed. Opened again,
-the same file shows the copy and its note; nothing is copied twice.
+to Annotator from the file manager or a share sheet. A note named after it is
+made where your new notes go, and it opens in the reader: copied into
+`Annotator sources` (the recipes and addresses below always copy), or, from
+Obsidian's own "Open with", read where it is if you choose. The file itself
+is not changed. Opened again, the same file shows its note (and its copy);
+nothing is copied twice.
 
 - **With Obsidian's own "Open with"** (a computer, Obsidian 1.14.4 or later,
   installed from a current installer). Right-click the file, Open with,
   Obsidian. Obsidian shows it as it is, outside the vault and without
-  annotations, with a button: **Copy into the vault and annotate**. The copy
-  then takes its place in the same tab. The command *Copy this file into the
-  vault and annotate it* does the same. Obsidian opens such a file in the
-  vault you used last.
+  annotations, with two buttons. **Annotate where it is** makes a note that
+  names the file, and the file is annotated where it lies, as any outside
+  source is. **Annotate a copy in the vault** copies it in, and the copy
+  takes its place in the same tab; the command *Annotate a copy of this file
+  in the vault* does the same. Obsidian opens such a file in the vault you
+  used last.
 - **With a double-click.** In Annotator's settings, under **Open from
   outside Obsidian**, press **Make a key**. The settings then show a recipe
   for your computer: a few lines to paste into Terminal (macOS), a terminal
@@ -937,8 +984,12 @@ Zotero can stay your library while you annotate in Obsidian.
   last part is the PDF's key. On a computer the reader finds the file in
   Zotero's data folder (the folder
   `Zotero` in your home folder, or the one named in the setting **Zotero data
-  folder**), asks once, copies it into `Annotator sources` and reads the
-  copy. Zotero need not be running, and its file is never changed. The link
+  folder**), asks once (**Always from this library** answers it for every
+  file in Zotero's `storage`) and reads the file where Zotero keeps it:
+  Zotero stays the library, and nothing is copied into the vault unless you
+  choose **Annotate a copy in the vault**. Zotero need not be running, and
+  its file is never changed. Another computer with the same Zotero library
+  finds the same file through the same link. The link
   must be to the PDF itself: a link to the item it belongs to names no file.
   The file's path works too
   (`/Users/me/Zotero/storage/N7SMB24A/Attention.pdf`; in Zotero, right-click
@@ -953,7 +1004,8 @@ Zotero can stay your library while you annotate in Obsidian.
 - **Details.** **Add the PDF's details to the note** reads what the PDF
   records about itself. Nothing is read from Zotero's database.
 
-Following a link was tried on macOS against a Zotero 10 library. The
+Following a link and reading the file where it is were tried on macOS
+against a Zotero 10 library, in Obsidian 1.15.1. The
 exchange of highlights rests on both programs following the PDF standard and
 has not been tried with Zotero itself.
 
@@ -965,9 +1017,12 @@ Calibre, right-click the book's details and choose **Copy link to book**).
 Name the library's folder in the setting **Calibre library folders**. On a
 computer the reader finds the book there, takes its EPUB (or its PDF when
 there is no EPUB, or the one a `view-book` link names; a book with neither,
-its AZW3 or MOBI), asks once and reads a copy kept in `Annotator sources`.
+its AZW3 or MOBI), asks once (**Always from this library** answers it for
+the whole library) and reads the book where Calibre keeps it; nothing is
+copied into the vault unless you choose **Annotate a copy in the vault**.
 Calibre need not be running and its files are never changed. A book that has
-none of these formats has to be converted in Calibre first. This was tried on macOS against a Calibre 9 library.
+none of these formats has to be converted in Calibre first. This was tried
+on macOS against a Calibre 9 library, reading in place in Obsidian 1.15.1.
 
 ## With DEVONthink
 
@@ -982,14 +1037,14 @@ running and will be opened. macOS then asks whether Obsidian may control
 DEVONthink: allow it (if you said no, turn it on in **System Settings →
 Privacy & Security → Automation**, under Obsidian). The file found, inside
 the database or, for an indexed item, where it is, is then asked about once
-and read from a copy kept in `Annotator sources`, like any file outside the
-vault. Nothing in DEVONthink is changed. The database must be open in
+and read where it is, like any file outside the vault (or copied in, if you
+choose). Nothing in DEVONthink is changed. The database must be open in
 DEVONthink, and the item must be a PDF or EPUB. If DEVONthink later moves
-the file before it has been copied, the link is followed again.
+the file, the link is followed again.
 
 This works on a Mac only: DEVONthink is asked through macOS. On a phone or a
-tablet, open the note once on the Mac first; the copy it keeps in the vault
-is then read there. On Windows or Linux, point `annotation-target` at the
+tablet, open the note on the Mac and choose **Annotate a copy in the
+vault**; the copy is then read there. On Windows or Linux, point `annotation-target` at the
 file's path (in DEVONthink, **Show in Finder**) or at a copy in the vault.
 Following a link was tried on macOS against DEVONthink 4.4.2, with
 DEVONthink running and not running. DEVONthink 3 is asked the same way but
