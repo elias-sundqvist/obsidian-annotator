@@ -3,32 +3,7 @@
 What changed for someone using Annotator. How to use each thing is in
 [README.md](README.md).
 
-## Unreleased
-
-- **Annotate a PDF where it is embedded.** In a PDF embedded in a note
-  (`![[paper.pdf#page=3]]`) or placed on a Canvas, selecting text brings up
-  the same bar as in the PDF's tab, with the same keys, and a note is written
-  beside the passage. Right-clicking a highlight there gives its menu: colour,
-  style, note, copy, delete. The commands for an area, a drawing and a text
-  box act on the PDF you last pressed on, embed or tab. What you make goes
-  into the PDF's annotation note, never the note it is embedded in, and shows
-  at once in the embed, in the PDF's tabs and in the sidebar; a PDF with no
-  annotation note gets one with its first highlight, as in a tab. On a
-  Canvas, select the card first: a first click selects it and a drag moves
-  it, as before. The new setting **Annotate in embedded PDFs** (on) turns
-  this off.
-- On a Canvas, a first click on a highlight of a card that is not selected
-  selects the card, as Obsidian does, instead of opening the highlight.
-- A passage selected in a PDF while its text is still being read (just
-  opened) gets the selection bar once the text is read, instead of nothing.
-- Pressing `A` on a selection opens the note without the selection bar
-  coming back over it (it could cover **Cancel** and the save hint when the
-  key was let go before the note took the focus), as the **Note** button
-  already did.
-- A refusal is said as it is written, without "Error: " before it: an
-  archive.org book that is only lent, a source outside the vault that was
-  not allowed, and the reader's other explanations. Something unexpected
-  still says what kind of error it was.
+## 0.3.3 (2026-11-16)
 
 - **Sources outside the vault are read where they are**, as before 0.3: a
   Zotero, Calibre or DEVONthink link, a path on your computer and a web
@@ -56,22 +31,18 @@ What changed for someone using Annotator. How to use each thing is in
   the change; **Clear the download cache** removes downloads no tab shows.
 - A file Obsidian opened from outside the vault ("Open with") can be
   annotated where it is (**Annotate where it is**) or as a copy.
-
-- **Write new notes with this property instead** (under **Also read the
-  source from this property**): new annotation notes, from the heading or
-  your template, and notes for some pages of a PDF can name their source in
-  your own property instead of `annotation-target`. Off by default, and
-  recommended off: a note written this way is read only by Annotator 0.3.2
-  and later with the same property set, not by Annotator 0.2 or tools that
-  read `annotation-target`. Everything else that writes a source follows:
-  the notice about a property that is nearly `annotation-target` renames it
-  to your property (and one that is nearly your property, `Source` for
-  `source`, to it), **Annotate the copy from now on** changes the property
-  the note uses, and **Make a Base of everything annotated** lists notes
-  that have either property.
-- With a second property for the source, the notes written by **Export each
-  annotation as its own note** (which name their annotation's source in
-  `source`) are no longer taken for notes about that source.
+- **Annotate a PDF where it is embedded.** In a PDF embedded in a note
+  (`![[paper.pdf#page=3]]`) or placed on a Canvas, selecting text brings up
+  the same bar as in the PDF's tab, with the same keys, and a note is written
+  beside the passage. Right-clicking a highlight there gives its menu: colour,
+  style, note, copy, delete. The commands for an area, a drawing and a text
+  box act on the PDF you last pressed on, embed or tab. What you make goes
+  into the PDF's annotation note, never the note it is embedded in, and shows
+  at once in the embed, in the PDF's tabs and in the sidebar; a PDF with no
+  annotation note gets one with its first highlight, as in a tab. On a
+  Canvas, select the card first: a first click selects it and a drag moves
+  it, as before. The new setting **Annotate in embedded PDFs** (on) turns
+  this off.
 - **A PDF with your annotations drawn in, for websites and printing.**
   **Export PDF with annotations drawn in (for websites and printing)**
   (command palette, or the sidebar's menu) saves
@@ -103,12 +74,40 @@ What changed for someone using Annotator. How to use each thing is in
 - A book on archive.org can be a note's source by its page's address
   (`https://archive.org/details/…`, also a link to one of its pages). After
   the usual question, which names archive.org, the reader asks archive.org
-  once which files the item has, downloads its book once and remembers it;
-  the note keeps the link as written. The uploader's own EPUB or PDF is
+  once which files the item has, downloads its book to this computer's cache
+  and reads it there, like any web address; the note keeps the link as
+  written. The uploader's own EPUB or PDF is
   chosen first, then the PDF archive.org made from the scans (its EPUB is
   the OCR text), or the file the link names. A book archive.org lends
   (**Borrow**) is refused with that reason. Until now such a link was opened
   as a web page.
+- **Write new notes with this property instead** (under **Also read the
+  source from this property**): new annotation notes, from the heading or
+  your template, and notes for some pages of a PDF can name their source in
+  your own property instead of `annotation-target`. Off by default, and
+  recommended off: a note written this way is read only by Annotator 0.3.2
+  and later with the same property set, not by Annotator 0.2 or tools that
+  read `annotation-target`. Everything else that writes a source follows:
+  the notice about a property that is nearly `annotation-target` renames it
+  to your property (and one that is nearly your property, `Source` for
+  `source`, to it), **Annotate the copy from now on** changes the property
+  the note uses, and **Make a Base of everything annotated** lists notes
+  that have either property.
+- With a second property for the source, the notes written by **Export each
+  annotation as its own note** (which name their annotation's source in
+  `source`) are no longer taken for notes about that source.
+- On a Canvas, a first click on a highlight of a card that is not selected
+  selects the card, as Obsidian does, instead of opening the highlight.
+- A passage selected in a PDF while its text is still being read (just
+  opened) gets the selection bar once the text is read, instead of nothing.
+- Pressing `A` on a selection opens the note without the selection bar
+  coming back over it (it could cover **Cancel** and the save hint when the
+  key was let go before the note took the focus), as the **Note** button
+  already did.
+- A refusal is said as it is written, without "Error: " before it: an
+  archive.org book that is only lent, a source outside the vault that was
+  not allowed, and the reader's other explanations. Something unexpected
+  still says what kind of error it was.
 
 ## 0.3.2 (2026-11-15)
 
