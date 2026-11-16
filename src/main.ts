@@ -98,12 +98,15 @@ import {
     externalKey,
     copyNameNow,
     externalPath,
+    fileYes,
     inCache,
     isExternalKey,
+    keptYes,
     libraryOf,
     placeDevice,
     sameExternal,
     vaultWritable,
+    yesFor,
     type PlaceDevice
 } from './in-place';
 import type { Annotation, NoteProblem } from './codec';
@@ -532,19 +535,21 @@ export default class AnnotatorPlugin extends Plugin {
             origin = null;
         }
         // A yes to read an address where it is (downloaded to this computer's cache) is not a yes to copy it into the
-        // vault: a copy is asked for with its own question, also on a phone the settings sync to. Kept as `copy:…`.
-        const scope = how === 'place' ? '' : 'copy:';
-        if (this.approvedSources.has(scope + url) || (origin && this.approvedSources.has(scope + origin))) return 'yes';
+        // vault: a copy is asked for with its own question, also on a phone the settings sync to. Kept as `place:…`
+        // and `copy:…`; the address alone is 0.3.2's yes to download it into the vault (see KeptYes).
+        const scope = how === 'place' ? 'place' : 'copy',
+            held = (address: string) => yesFor(address, scope).some(item => this.approvedSources.has(item));
+        if (held(url) || (origin && held(origin))) return 'yes';
         const choice = await this.sourceApproval(url, kind, how);
         if (choice === 'no') throw new Error('Not opened: this source is outside the vault and was not allowed.');
         // A yes for an internet address is kept: the address means the same file everywhere. A yes for a file on this
         // computer is for the one copy now made, and is not kept: the same path may hold another file later, or on
         // another computer the settings sync to.
         if (choice === 'copy') {
-            this.approvedSources.add(`copy:${url}`);
+            this.approvedSources.add(keptYes(url, 'copy'));
             return 'copy';
         }
-        this.approvedSources.add(scope + (choice === 'always' && origin ? origin : url));
+        this.approvedSources.add(keptYes(choice === 'always' && origin ? origin : url, scope));
         return 'yes';
     }
     /**
@@ -989,8 +994,7 @@ export default class AnnotatorPlugin extends Plugin {
                 if (typeof path === 'string') this.remoteSources[url] = path;
         if (Array.isArray(this.savedData.approvedSources))
             for (const item of this.savedData.approvedSources)
-                if (typeof item === 'string' && item.length < 4000 && !/^(?:copy:)?file:/i.test(item))
-                    this.approvedSources.add(item);
+                if (typeof item === 'string' && item.length < 4000 && !fileYes(item)) this.approvedSources.add(item);
         this.addSettingTab(new NativeSettings(this.app, this));
         if (Platform.isDesktopApp && Platform.isMacOS) void this.readVaultCase();
         this.register(() => {
@@ -5751,7 +5755,7 @@ export default class AnnotatorPlugin extends Plugin {
                 appLinkPaths: { ...this.appLinkPaths },
                 archiveFiles: { ...this.archiveFiles },
                 remoteSources: { ...this.remoteSources },
-                approvedSources: [...this.approvedSources].filter(item => !/^(?:copy:)?file:/i.test(item)),
+                approvedSources: [...this.approvedSources].filter(item => !fileYes(item)),
                 remoteHistory: clone(this.remoteHistory),
                 nativeDrafts: [...this.draftSessions.values()].map(session => clone(session)),
                 annotationMarkdownSettings: {
@@ -8964,9 +8968,9 @@ export default class AnnotatorPlugin extends Plugin {
                 return { status: response.status, arrayBuffer: response.arrayBuffer };
             });
             // The yes for the item is the yes for its file, in the way it was given: to read it where it is, or to copy it.
-            if (Platform.isMobile || !this.readsInPlace() || choice === 'copy')
-                this.approvedSources.add(`copy:${file.url}`);
-            else this.approvedSources.add(file.url);
+            this.approvedSources.add(
+                keptYes(file.url, Platform.isMobile || !this.readsInPlace() || choice === 'copy' ? 'copy' : 'place')
+            );
             if (choice === 'copy') this.wantCopy.add(file.url);
             this.archiveFiles[item.key] = file.url;
             await this.persist();

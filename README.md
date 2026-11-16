@@ -845,9 +845,12 @@ annotations go into the note, and the file is only read, never changed.
 - **The first time**, the reader asks: **Read where it is**, **Annotate a
   copy in the vault**, or **Not now**. For a file in a Zotero or Calibre
   library there is also **Always from this library**, and for a web address
-  **Always from** its site. The answer is kept on this computer only (not in
-  the settings that sync), so another computer asks for itself, and a note
-  that points somewhere else is asked about again.
+  **Always from** its site. The answer for a file is kept on this computer
+  only (not in the settings that sync), so another computer asks for
+  itself, and a note that points somewhere else is asked about again. The
+  answer for a web address is kept in the settings, since the address means
+  the same file everywhere; a phone still asks before it puts a copy into
+  the vault.
 - **A web address** is downloaded to this computer's cache (on a Mac
   `~/Library/Caches/Annotator for Obsidian`; on Windows `%LOCALAPPDATA%`; on
   Linux `~/.cache`), not into the vault, under its own name, and read from

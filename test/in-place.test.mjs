@@ -21,7 +21,10 @@ const {
     libraryOf,
     copyOrigin,
     copyName,
-    COPY_ENDINGS
+    COPY_ENDINGS,
+    keptYes,
+    yesFor,
+    fileYes
 } = await import('./.generated/readers/in-place.js');
 const { remoteFilename } = await import('./.generated/readers/remote-source.js');
 
@@ -136,4 +139,17 @@ test('which origin a file read where it is answers to is kept on this device, so
     const kept = placeDevice({ names: { 'file:/Users/me/a.epub': 'calibre://show-book/Books/7', 'file:/Users/me/../x.epub': 'x', 'notakey': 'y', 'file:/Users/me/b.epub': 7 } });
     assert.deepEqual(kept.names, { 'file:/Users/me/a.epub': 'calibre://show-book/Books/7' });
     assert.deepEqual(placeDevice(null).names, {});
+});
+
+test('a kept yes for a web address means what it meant in the version that wrote it: the address alone is 0.3.2\'s yes to download into the vault', () => {
+    const url = 'https://example.org/a.pdf';
+    assert.equal(keptYes(url, 'place'), 'place:https://example.org/a.pdf');
+    assert.equal(keptYes('origin:https://example.org', 'copy'), 'copy:origin:https://example.org');
+    // A yes to copy, either form, also allows reading where it is; a yes to read where it is allows no more.
+    assert.deepEqual(yesFor(url, 'copy'), [`copy:${url}`, url]);
+    assert.deepEqual(yesFor(url, 'place'), [`place:${url}`, `copy:${url}`, url]);
+    assert.equal(yesFor(url, 'copy').includes(`place:${url}`), false);
+    // A file on a computer is never kept, in any form.
+    for (const item of ['file:///a.pdf', 'copy:file:///a.pdf', 'place:file:///a.pdf', 'FILE:///a.pdf']) assert.equal(fileYes(item), true, item);
+    for (const item of [url, `copy:${url}`, `place:${url}`, 'origin:https://example.org']) assert.equal(fileYes(item), false, item);
 });

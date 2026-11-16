@@ -196,6 +196,31 @@ export function allowedHere(device: PlaceDevice, key: string, foldCase: boolean)
             (item.startsWith('folder:') ? wanted.startsWith(fold(item.slice(7))) : fold(item) === wanted)
     );
 }
+/**
+ * A yes for something outside the vault that is kept in the settings that sync (`approvedSources`): for an address,
+ * or for a whole site as `origin:https://host`. Every version reads the same list, so what an entry means must not
+ * change between them:
+ * - the address alone was 0.3.2's yes, to download it into the vault (the only form 0.3.2 reads). It still means
+ *   that: a yes to copy it.
+ * - `copy:` and the address (0.3.3 on): a yes to copy it into the vault, as 0.3.2's. 0.3.2 does not read it.
+ * - `place:` and the address (after 0.3.3): a yes to read it where it is, downloaded to this computer's cache, and no
+ *   more. 0.3.2 and 0.3.3 do not read it, and keep it.
+ * A yes to copy an address is also a yes to read it where it is: that downloads the same file, to the cache instead.
+ */
+export type KeptYes = 'copy' | 'place';
+/** The entry that keeps a yes, for an address or `origin:https://host`. */
+export function keptYes(address: string, how: KeptYes): string {
+    return `${how}:${address}`;
+}
+/** The entries any of which allows `how` for an address or `origin:https://host` (see KeptYes). */
+export function yesFor(address: string, how: KeptYes): string[] {
+    const copy = [keptYes(address, 'copy'), address];
+    return how === 'place' ? [keptYes(address, 'place'), ...copy] : copy;
+}
+/** Whether an entry of `approvedSources` names a file on a computer: never kept, as the path may hold another file. */
+export function fileYes(item: string): boolean {
+    return /^(?:(?:copy|place):)?file:/i.test(item);
+}
 /** The library folder (Zotero's `storage`, a Calibre library) a file is in, as a key ending in `/`, or null. */
 export function libraryOf(key: string, libraries: string[], foldCase: boolean): string | null {
     if (!safeExternalKey(key)) return null;

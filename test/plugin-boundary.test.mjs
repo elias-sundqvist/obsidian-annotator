@@ -2260,6 +2260,41 @@ test('a yes to read a web source where it is is not a yes to copy it: a phone as
   h.answer='yes';await h.plugin.openNoteTarget(note);assert.equal(h.copies().length,1);
  }finally{delete globalThis.__annotatorTestRequest;h.done();}
 });
+test('a yes 0.3.2 kept for a web address still means a yes to download it into the vault, here and on a phone, and is saved as 0.3.2 wrote it',async()=>{
+ const h=await placeHost();try{
+  const cache=h.path.join(h.root,'Cache');h.plugin.cacheFolder=()=>cache;let requests=0;globalThis.__annotatorTestRequest=async()=>{requests++;return {status:200,arrayBuffer:new TextEncoder().encode('%PDF-1.7 web').buffer};};
+  const url='https://example.org/old.pdf',site='https://example.net/any.pdf',note=h.add('Old.md','',{'annotation-target':url}),other=h.add('Site.md','',{'annotation-target':site});
+  // The settings as 0.3.2 left them: a yes for an address, an "always from" a site, and a file 0.3.1 kept (not kept since 0.3.2).
+  const kept=[url,'origin:https://example.net'];h.plugin.data={approvedSources:[...kept,'file:///Users/someone/Old.pdf']};await h.plugin.onload();
+  await h.plugin.persist();assert.deepEqual(h.plugin.data.approvedSources,kept,'loaded and saved unchanged, for 0.3.2 to read');
+  // On this computer, read where it is: no question (as 0.3.3), nothing put into the vault.
+  await h.plugin.openNoteTarget(note);await h.plugin.openNoteTarget(other);assert.deepEqual(h.asked,[]);assert.equal(requests,2);assert.deepEqual(h.copies(),[]);
+  // On a phone the settings sync to, or with copies on: downloaded into the vault without a question, as 0.3.2 did.
+  Platform.isMobile=true;Platform.isDesktopApp=false;
+  await h.plugin.openNoteTarget(note);await h.plugin.openNoteTarget(other);assert.deepEqual(h.asked,[]);assert.equal(h.copies().length,2);
+  await h.plugin.persist();for(const item of kept)assert.ok(h.plugin.data.approvedSources.includes(item));
+  assert.equal(h.plugin.data.approvedSources.some(item=>item.includes('file:')),false);
+ }finally{delete globalThis.__annotatorTestRequest;h.done();}
+});
+test('a yes to read a web address where it is is kept as place:, which no version takes for a yes to download it into the vault',async()=>{
+ const h=await placeHost();try{
+  const cache=h.path.join(h.root,'Cache');h.plugin.cacheFolder=()=>cache;globalThis.__annotatorTestRequest=async()=>({status:200,arrayBuffer:new TextEncoder().encode('%PDF-1.7 web').buffer});
+  const url='https://example.org/read.pdf',site='https://example.net/one.pdf',again='https://example.net/two.pdf';
+  const note=h.add('R.md','',{'annotation-target':url}),one=h.add('One.md','',{'annotation-target':site}),two=h.add('Two.md','',{'annotation-target':again});
+  h.plugin.data={approvedSources:['copy:https://example.com/copied.pdf']};await h.plugin.onload();
+  h.answer='yes';await h.plugin.openNoteTarget(note);h.answer='always';await h.plugin.openNoteTarget(one);assert.equal(h.asked.length,2);
+  await h.plugin.openNoteTarget(two);assert.equal(h.asked.length,2,'"always from" the site answers another address there');
+  await h.plugin.persist();const synced=structuredClone(h.plugin.data.approvedSources);
+  assert.deepEqual([...synced].sort(),['copy:https://example.com/copied.pdf',`place:${url}`,'place:origin:https://example.net']);
+  // 0.3.2 reads only an address alone, or origin: and a site, as a yes to download into the vault: none is here.
+  const old=new Set(synced),allowedBy032=address=>old.has(address)||old.has(`origin:${new URL(address).origin}`);
+  assert.equal([url,site,again].some(allowedBy032),false);
+  // Nor does a phone of this version take it so: it asks before it downloads into the vault.
+  h.plugin.approvedSources=new Set(synced);Platform.isMobile=true;Platform.isDesktopApp=false;h.answer='no';
+  await assert.rejects(h.plugin.openNoteTarget(note),/not allowed/);await assert.rejects(h.plugin.openNoteTarget(two),/not allowed/);
+  assert.deepEqual(h.asked.slice(-2).map(asked=>asked.how),['phone','phone']);assert.deepEqual(h.copies(),[]);
+ }finally{delete globalThis.__annotatorTestRequest;h.done();}
+});
 test('paths no one allowed here are not asked of the disk, not even to match a tab',async()=>{
  const h=await placeHost();try{
   const asked=[],files=h.fs;h.plugin.desktopFiles=()=>({...files,realpathSync:path=>{asked.push(path);return files.realpathSync(path);}});

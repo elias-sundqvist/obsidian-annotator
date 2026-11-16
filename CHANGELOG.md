@@ -20,6 +20,12 @@ What changed for someone using Annotator. How to use each thing is in
   chapter you can see. It said so on an ordinary chapter while a Project
   Gutenberg header or licence, kept ready just above or below, was out of
   view; it now changes as you scroll one into view or out of it.
+- A web address you allowed in 0.3.2 is again a yes to download it into the
+  vault: 0.3.3 took it for a yes to read it where it is only, so a phone,
+  or a computer with copies on, asked again. A yes to read a web address
+  where it is is now kept in a form 0.3.2 and 0.3.3 do not read, so a device
+  still on 0.3.2, or a downgrade, no longer takes it for a yes to download
+  into the vault.
 
 ## 0.3.3 (2026-11-16)
 

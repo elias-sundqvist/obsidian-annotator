@@ -213,7 +213,24 @@ key, or by the library folder. Why remembered, when 0.3 forgot a yes for a
 file after copying it: in place, every opening reads the file again, and a
 question each time would be noise. A note synced from someone else that
 names another file is still asked about. A yes for a web address is kept as
-before (`approvedSources`).
+before, in `approvedSources` (in `data.json`: the address means the same
+file everywhere), by the address or as `origin:https://host` for a site.
+Every version reads that one list, so an entry keeps the meaning of the
+version that wrote it:
+
+| Entry | Written by | Means | Read by |
+| --- | --- | --- | --- |
+| the address alone | 0.3.2 (and 0.3.0, 0.3.1) | yes to download it into the vault | every version; 0.3.3 took it for a yes to read where it is only |
+| `copy:` and the address | 0.3.3 on | yes to copy it into the vault | 0.3.3 on |
+| `place:` and the address | after 0.3.3 | yes to read it where it is (this computer's cache), no more | after 0.3.3; 0.3.2 and 0.3.3 keep it unread |
+
+A yes to copy (either form) also allows reading where it is. 0.3.3 wrote a
+yes to read where it is as the address alone, which 0.3.2 reads as a yes to
+download into the vault, on a second device or after a downgrade; since
+0.3.3 that yes is `place:…`, which 0.3.2 and 0.3.3 do not read. An entry
+0.3.3 wrote cannot be told from 0.3.2's and is read as 0.3.2 reads it.
+`file:` entries (kept by 0.3.0 and 0.3.1) are dropped since 0.3.2, in every
+form (`fileYes`), so settings holding only those are saved as an empty list.
 
 ### A source that changes
 

@@ -74,8 +74,9 @@ assets…" (`readers.test.mjs`), "network CSS, dynamic selectors…"
   ever resolved on disk in the background (a note can name any path,
   including a network share whose lookup would reach out). A yes to read a
   web address where it is is kept apart from a yes to copy it into the vault
-  (`copy:…` in the settings): a phone the settings sync to asks before it
-  downloads a copy. What a later file at an allowed path could do
+  (`place:…` and `copy:…` in the settings): a phone the settings sync to asks
+  before it downloads a copy, and so does 0.3.2, which reads neither. A yes
+  0.3.2 kept (the address alone) is still a yes to download into the vault. What a later file at an allowed path could do
   is limited to what any PDF or book can do in the reader (below), and if it
   is another version its annotations are marked as made on another version.
   For a file copied in, the answer is for the one copy then made, and is
