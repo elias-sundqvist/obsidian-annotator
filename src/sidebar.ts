@@ -379,7 +379,7 @@ export class AnnotationView extends ItemView {
             editing = plugin.editing,
             draft = plugin.draft;
         const focus =
-            plugin.editMode && plugin.editorSessionKey
+            plugin.composing && plugin.editorSessionKey
                 ? `editor:${plugin.editorSessionKey}`
                 : selected
                   ? `selection:${selected.revision}:${selected.exact}`
@@ -893,8 +893,9 @@ export class AnnotationView extends ItemView {
         }
 
         // ── Composer ───────────────────────────────────────────────────────
-        // When the note is being written beside its passage, the sidebar shows the card, not a second editor.
-        const composerOpen = plugin.editMode && !!(selected || editing || draft) && !plugin.composerOnPage;
+        // When the note is being written beside its passage, the sidebar shows the card, not a second editor. A passage
+        // marked at once is only being saved: no editor for it here either.
+        const composerOpen = plugin.composing && !!(selected || editing || draft) && !plugin.composerOnPage;
         // On a phone the keyboard takes half the screen; while writing, the header steps aside (see styles).
         this.contentEl.classList.toggle('is-composing', composerOpen);
         let composerPlaced = false;
@@ -1185,7 +1186,7 @@ export class AnnotationView extends ItemView {
             };
             return card;
         };
-        if (!plugin.editMode) this.editorContext = '';
+        if (!plugin.composing) this.editorContext = '';
         // A new passage or page note is composed above the list; edits and replies open where they belong.
         const composerSlot = this.contentEl.createDiv({ cls: 'annotator-composer-slot' });
         if (composerOpen && !editing && !draft?.parent) renderComposer(composerSlot, 'top');

@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 const setup = new JSDOM('<body></body>', { pretendToBeVisual: true }); globalThis.window = setup.window; globalThis.document = setup.window.document;
-const { Native, TFile, Notice, AnnotationView, summaryMarkdown, annotationMarkdown, annotationNotes, annotationThreads, scanLibrary, displayTitle, INKS, inkOf, inkAt, inkLabel, noteGist, placeComposer, around, themeChooser, openPageAppearance, PAGE_THEMES } = await import('./.generated/plugin-boundary.mjs');
+const { Native, TFile, Notice, Platform, AnnotationView,summaryMarkdown, annotationMarkdown, annotationNotes, annotationThreads, scanLibrary, displayTitle, INKS, inkOf, inkAt, inkLabel, noteGist, placeComposer, around, themeChooser, openPageAppearance, PAGE_THEMES } = await import('./.generated/plugin-boundary.mjs');
 const { create: storeCreate, readAll: storeRead, recolor } = await import('./.generated/codec.mjs');
 setup.window.close();
 
@@ -146,6 +146,55 @@ test('highlight and copy its link: the link of the highlight just made, and noth
         // The command is there for a hotkey.
         assert.ok(h.plugin.commands.some(command => command.id === 'highlight-selection-copy-link' && command.name === 'Highlight selection and copy its link'));
     } finally { h.dispose(); }
+});
+
+test('a passage marked at once opens no composer while it is saved: nothing takes the focus and the page does not move, on a phone or a computer', async () => {
+    for (const phone of [true, false])
+        for (const composer of ['page', 'sidebar']) {
+            const h = await collection([quoted('a', 'Passage')]), win = h.dom.window, doc = win.document, where = `${phone ? 'phone' : 'computer'}, composer in the ${composer}`;
+            Platform.isMobile = Platform.isPhone = phone;
+            try {
+                h.plugin.display = { ...h.plugin.display, composer };
+                // The host's Markdown editor, as much of it as the composer uses.
+                class HostEditor {
+                    constructor(_app, el) { this.text = ''; this.cm = { contentDOM: el.appendChild(doc.createElement('div')) }; this.cm.contentDOM.tabIndex = 0; this.editor = { focus: () => this.cm.contentDOM.focus(), lastLine: () => 0, getLine: () => this.text, setCursor() {} }; }
+                    buildLocalExtensions() { return []; } onUpdate() {} set(value) { this.text = value; } get() { return this.text; } destroy() {}
+                }
+                class Embedded extends HostEditor {}
+                h.app.embedRegistry = { embedByExtension: { md: () => ({ showEditor() { this.editMode = new Embedded(h.app, doc.createElement('div')); }, unload() {} }) } };
+                h.app.scope = {}; h.app.keymap = { pushScope() {}, popScope() {} }; h.app.workspace.rightSplit.collapse = () => {};
+                // The page, with the passage selected in it and laid out as a browser lays it out.
+                const page = doc.body.appendChild(doc.createElement('div')), paragraph = page.appendChild(doc.createElement('p'));
+                paragraph.textContent = 'Before the new passage, after it.';
+                const range = doc.createRange(); range.setStart(paragraph.firstChild, 11); range.setEnd(paragraph.firstChild, 22);
+                doc.getSelection().removeAllRanges(); doc.getSelection().addRange(range);
+                win.Range.prototype.getClientRects = () => [{ left: 10, top: 300, right: 200, bottom: 320, width: 190, height: 20 }];
+                const scrolled = []; win.Element.prototype.scrollIntoView = function (options) { scrolled.push([this.tagName, options]); };
+                h.plugin.hostFor = () => ({ view: { contentEl: page }, payload: async (capture, comment, id) => quoted(id, capture.exact, { text: comment }), isCurrent: () => true, identity: () => ({ uri: 'urn:x-pdf:draft' }), status: () => 'Page 1', activate() {} });
+                const { view } = h.sidebar(); h.app.workspace.getLeavesOfType = type => (type === 'annotator-sidebar' ? [{ view }] : []);
+                const records = [], added = new win.MutationObserver(found => records.push(...found)); added.observe(doc.body, { childList: true, subtree: true });
+                const focused = []; doc.addEventListener('focusin', event => focused.push(event.target.className || event.target.tagName), true);
+                await h.plugin.beginCapture({ file: h.file.path, exact: 'new passage', revision: 'r' }, 'highlight');
+                // Long enough for anything a composer does once it is open: its editor takes the focus after 30 ms, and
+                // on a phone the passage is brought to the top above the sheet after 350 ms.
+                await new Promise(resolve => setTimeout(resolve, 400));
+                const editors = [...records, ...added.takeRecords()].flatMap(record => [...record.addedNodes]).filter(node => node.nodeType === 1 && (node.matches('.annotator-floating-composer, .annotator-editor-card') || node.querySelector('.annotator-floating-composer, .annotator-editor-card')));
+                added.disconnect();
+                assert.ok(h.records().some(row => row.target[0].selector[0].exact === 'new passage'), `${where}: the passage is marked`);
+                assert.equal(h.plugin.editMode, false, where);
+                assert.deepEqual(editors.map(node => node.className), [], `${where}: no composer was opened for it, not even for a moment`);
+                assert.deepEqual(focused, [], `${where}: nothing took the focus (on a phone that raises the keyboard, and the page shrinks under it)`);
+                assert.deepEqual(scrolled, [], `${where}: nothing was scrolled`);
+                // A passage that could not be marked is kept as a draft, and its composer opens to try again from.
+                h.plugin.hostFor = () => ({ view: { contentEl: page }, payload: async () => { throw new Error('Chapter changed; select the passage again.'); }, isCurrent: () => true, identity: () => ({ uri: 'urn:x-pdf:draft' }), status: () => 'Page 1', activate() {} });
+                doc.getSelection().removeAllRanges(); doc.getSelection().addRange(range);
+                const said = console.error; console.error = () => {};
+                try { await h.plugin.beginCapture({ file: h.file.path, exact: 'new passage', revision: 'r' }, 'highlight'); } finally { console.error = said; }
+                assert.equal(h.plugin.editMode, true, where);
+                assert.ok(doc.querySelector(composer === 'page' ? '.annotator-floating-composer' : '.annotator-editor-card'), `${where}: the kept draft is open`);
+                h.plugin.cancelEdit();
+            } finally { Platform.isMobile = Platform.isPhone = false; h.dispose(); }
+        }
 });
 
 test('the sidebar groups passages under section headings, shows an ink legend and filters by ink', async () => {
