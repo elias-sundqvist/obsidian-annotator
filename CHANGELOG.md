@@ -3,7 +3,7 @@
 What changed for someone using Annotator. How to use each thing is in
 [README.md](README.md).
 
-## Unreleased
+## 0.3.4 (2026-11-16)
 
 - Reading a book in the Scroll layout, a long chapter after another long
   one can be read to its end again. A screen or so in, the view jumped back
