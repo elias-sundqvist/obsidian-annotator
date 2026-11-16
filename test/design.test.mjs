@@ -398,7 +398,7 @@ test('the settings are grouped under headings that say what they are about, in s
         assert.deepEqual(under('Sidebar'), ['Compact cards', 'Open the sidebar when a source opens', 'Always show card actions']);
         assert.deepEqual(under('Annotation notes'), ['New annotation notes start with', 'Template for new annotation notes', 'Write new annotations under this heading', 'Give each annotation a heading', 'Level of annotation headings', 'Highlight quotes in the note', 'Keep text before the quote', 'Keep text after the quote', 'Keep reading progress in the note', 'Fold annotation data in Live Preview']);
         assert.deepEqual(under('Copying and exporting'), ['Copied link', 'Export style', 'Link exports back to the passage']);
-        assert.deepEqual(under('Opening'), ['Open annotation notes in the reader', 'Default target folders', 'Also read the source from this property']);
+        assert.deepEqual(under('Opening'), ['Open annotation notes in the reader', 'Default target folders', 'Also read the source from this property', 'Write new notes with this property instead']);
         assert.deepEqual(under('Sources outside the vault'), ['Zotero data folder', 'Calibre library folders']);
         assert.ok(under('Reading').includes('Show highlights in embedded PDFs') && under('Reading').includes('Folder for reference notes'));
         // Obsidian's guidelines for headings: sentence case, and no "settings" in them.
@@ -411,6 +411,41 @@ test('the settings are grouped under headings that say what they are about, in s
         assert.equal(h.plugin.display.zoteroFolder, '~/Elsewhere'); assert.equal(h.plugin.display.writeUnder, '## Highlights');
         assert.equal(h.plugin.data.nativeDisplay.zoteroFolder, '~/Elsewhere'); assert.equal(h.plugin.data.nativeDisplay.writeUnder, '## Highlights');
     } finally { h.dispose(); }
+});
+
+test('new notes are written with annotation-target unless the reader chooses the second property, which can be chosen only while one is named', async () => {
+    const h = host();
+    try {
+        await h.plugin.onload();
+        const tab = h.plugin.settingTabs[0]; tab.display();
+        const row = name => [...tab.containerEl.querySelectorAll('.setting-item')].find(each => each.querySelector('.setting-item-name')?.textContent === name);
+        const alias = row('Also read the source from this property').querySelector('input'), write = row('Write new notes with this property instead'), toggle = write.querySelector('.checkbox-container');
+        const settle = async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); };
+        const type = async value => { alias.value = value; alias.dispatchEvent(new h.dom.window.Event('input')); await settle(); };
+        // Right under the property it writes; it says why annotation-target is recommended and who cannot read a note written the other way.
+        assert.equal(write.previousElementSibling, row('Also read the source from this property'));
+        const said = write.querySelector('.setting-item-description').textContent;
+        assert.match(said, /Off is recommended: annotation-target is read by Annotator 0\.2, by other devices and by other tools\./);
+        assert.match(said, /read only by Annotator 0\.3\.2 and later with the same property set above, and not by Annotator 0\.2\./);
+        assert.doesNotMatch(row('Also read the source from this property').querySelector('.setting-item-description').textContent, /still written with annotation-target/);
+        // No second property: off, and it cannot be turned on.
+        assert.ok(toggle.classList.contains('is-disabled')); assert.equal(toggle.classList.contains('is-enabled'), false);
+        toggle.click(); await settle(); assert.equal(h.plugin.display.writeTargetAlias, false); assert.equal(h.plugin.newNoteProperty(), 'annotation-target');
+        // Named: it can be, and is kept with the settings.
+        await type('source'); assert.equal(toggle.classList.contains('is-disabled'), false);
+        toggle.click(); await settle();
+        assert.equal(h.plugin.display.writeTargetAlias, true); assert.equal(h.plugin.data.nativeDisplay.writeTargetAlias, true); assert.equal(h.plugin.newNoteProperty(), 'source');
+        // Cleared (as on the way to another name): disabled and shown off, new notes get annotation-target, and the choice comes back with a name.
+        await type(''); assert.ok(toggle.classList.contains('is-disabled')); assert.equal(toggle.classList.contains('is-enabled'), false); assert.equal(h.plugin.newNoteProperty(), 'annotation-target');
+        await type('pdf'); assert.ok(toggle.classList.contains('is-enabled')); assert.equal(h.plugin.newNoteProperty(), 'pdf');
+        // The reader's own properties are no second property.
+        await type('annotation-target'); assert.ok(toggle.classList.contains('is-disabled')); assert.equal(h.plugin.newNoteProperty(), 'annotation-target');
+    } finally { h.dispose(); }
+    // Read back as saved; anything but true is off.
+    for (const [kept, property] of [[{ targetAlias: 'source', writeTargetAlias: true }, 'source'], [{ targetAlias: 'source', writeTargetAlias: 'yes' }, 'annotation-target'], [{ targetAlias: '', writeTargetAlias: true }, 'annotation-target']]) {
+        const again = host();
+        try { again.plugin.data = { nativeDisplay: kept }; await again.plugin.onload(); assert.equal(again.plugin.newNoteProperty(), property, JSON.stringify(kept)); } finally { again.dispose(); }
+    }
 });
 
 test('a new passage is marked in the style last chosen, as a tag the note shows; the style is remembered with the inks', async () => {

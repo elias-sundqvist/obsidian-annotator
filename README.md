@@ -132,9 +132,17 @@ space pasted from a web page) still finds that file.
 
 If your notes already name their source in another property (`source`, `pdf`,
 `file`), name that property in the setting **Also read the source from this
-property**: a note without `annotation-target` is then read by it. New
-annotation notes are still written with `annotation-target`, and it wins
-where a note has both.
+property**: a note without `annotation-target` is then read by it, and
+`annotation-target` wins where a note has both. New annotation notes are
+written with `annotation-target`, which Annotator 0.2, other devices and other
+tools read. To have them written with your property instead, turn on **Write
+new notes with this property instead** below it: new notes, notes for some
+pages of a PDF, and a property renamed from the notice about a near miss then
+use your property, and **Make a Base of everything annotated** lists notes by
+either. A note written this way is read only by Annotator 0.3.2 and later with
+the same property set, not by Annotator 0.2, so leave it off if you use those.
+The notes written by **Export each annotation as its own note** name their
+annotation's source in `source` and are never read as a source's note.
 
 ### A note for each chapter of a PDF
 
@@ -218,7 +226,20 @@ views:
 ```
 
 `annotation-progress` is there when
-[reading progress](#reading-progress) is kept in the note.
+[reading progress](#reading-progress) is kept in the note. With a second
+property for the source (here `source`), the filter asks for either, and
+leaves out the notes written for single annotations:
+
+```yaml
+filters:
+  and:
+    - or:
+        - '!note["annotation-target"].isEmpty()'
+        - '!note["source"].isEmpty()'
+    - 'note["annotation-id"].isEmpty()'
+```
+
+An `Annotated sources.base` made before is not changed when the setting is.
 
 Nothing is stored anywhere else. If a block in the note is damaged (a sync
 conflict, a slip of the hand), the readable annotations are still shown, the

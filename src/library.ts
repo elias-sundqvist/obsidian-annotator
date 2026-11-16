@@ -4,7 +4,9 @@ import { INKS, inkOf, type Ink } from './ink';
 import { quoteOf } from './source';
 
 /**
- * The vault's annotated sources: every note with an `annotation-target`.
+ * The vault's annotated sources: every note with an `annotation-target`
+ * (or the second property the reader has named, where it has no
+ * `annotation-target`).
  * One scan feeds the "open annotated source" switcher and the migration
  * check. It only reads; nothing is rewritten.
  */
@@ -263,7 +265,7 @@ export class MigrationModal extends Modal {
                 list(
                     'Source not found',
                     unresolved,
-                    entry => `annotation-target “${entry.target}” does not resolve to a file or URL right now.`
+                    entry => `The source “${entry.target}” does not resolve to a file or URL right now.`
                 );
                 new Setting(body)
                     .setName('Open annotation notes in the reader')

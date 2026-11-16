@@ -2,8 +2,9 @@
  * Annotation notes that each hold a range of one PDF's pages: a note for each chapter of a textbook, instead of one
  * note for the whole book or the book cut into files.
  *
- * Such a note names the PDF in `annotation-target` exactly as any annotation note does, so older versions of the
- * reader, Bases and other tools still read it as a note about that PDF; its pages are a property of their own,
+ * Such a note names the PDF in `annotation-target` exactly as any annotation note does (or in the property the reader
+ * has chosen new notes be written with), so older versions of the reader, Bases and other tools still read it as a
+ * note about that PDF; its pages are a property of their own,
  * `annotation-pages`: "10-100", "200-" (to the end), or "7" (one page). Pages are counted from 1, as the PDF view
  * numbers them, and both ends are in the range.
  *

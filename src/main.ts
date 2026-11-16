@@ -39,7 +39,7 @@ import { pageWords } from './scan-words';
 import { ScanDialog, type ScanChoice, type ScanQuestion } from './scan-dialog';
 import { readPdfAnnotations, replacing } from './pdf-read';
 import { addDetails } from './pdf-details';
-import { newNoteText, DEFAULT_NOTE_HEADING } from './note-template';
+import { newNoteText, DEFAULT_NOTE_HEADING, TARGET_PROPERTY } from './note-template';
 import { DEFAULT_HEADING_LEVEL, HEADING_LEVELS, headingLevel, type HeadingOptions } from './note-headings';
 import { namedHeading } from './note-place';
 import { HeadingModal } from './heading-dialog';
@@ -217,6 +217,7 @@ import {
     annotationTarget,
     targetKeyNearMiss,
     targetAliasName,
+    sameName,
     sourcesBase,
     markdownPreferences,
     type ReaderPreferences,
@@ -458,6 +459,7 @@ export default class AnnotatorPlugin extends Plugin {
         /** Whether an annotation's stored data is folded away in Live Preview. */ foldData: boolean;
         /** Whether a PDF's highlights are shown where it is embedded in a note or placed on a Canvas. */ embeddedHighlights: boolean;
         /** A second property a note's source is read from when it has no `annotation-target`; empty for none. */ targetAlias: string;
+        /** Whether new notes name their source in that second property instead of `annotation-target` (only while one is named). */ writeTargetAlias: boolean;
         /** Zotero's data folder, where its links are followed to; empty for the usual place in the home folder. */ zoteroFolder: string;
         /** Calibre library folders, one to a line, where its book links are followed to. */ calibreLibraries: string;
         /** What a copied or dragged annotation link is, as a template; empty for the plain link. */ linkTemplate: string;
@@ -477,6 +479,7 @@ export default class AnnotatorPlugin extends Plugin {
         foldData: true,
         embeddedHighlights: true,
         targetAlias: '',
+        writeTargetAlias: false,
         zoteroFolder: '',
         calibreLibraries: '',
         linkTemplate: '',
@@ -698,6 +701,7 @@ export default class AnnotatorPlugin extends Plugin {
             foldData: shown.foldData !== false,
             embeddedHighlights: shown.embeddedHighlights !== false,
             targetAlias: targetAliasName(shown.targetAlias),
+            writeTargetAlias: shown.writeTargetAlias === true,
             zoteroFolder: typeof shown.zoteroFolder === 'string' ? shown.zoteroFolder.trim().slice(0, 1000) : '',
             calibreLibraries: typeof shown.calibreLibraries === 'string' ? shown.calibreLibraries.slice(0, 4000) : '',
             linkTemplate: typeof shown.linkTemplate === 'string' ? shown.linkTemplate.slice(0, 2000) : '',
@@ -2179,9 +2183,42 @@ export default class AnnotatorPlugin extends Plugin {
         };
         const value = read(name);
         // A note may name its source under a second property of the reader's choosing. `annotation-target` wins
-        // where a note has both, and is what new notes are written with.
+        // where a note has both. A note written for one annotation by "Export each annotation as its own note" names
+        // its source in `source` and is not a source's note, whatever the second property is.
         if (name !== 'annotation-target' || annotationTarget(value) || !this.display.targetAlias) return value;
+        if (this.app.metadataCache.getFileCache(note)?.frontmatter?.['annotation-id'] !== undefined) return value;
         return read(this.display.targetAlias) || value;
+    }
+    /**
+     * The property new notes name their source in: `annotation-target`, which every version of Annotator and other
+     * tools read, unless the reader has chosen to write the second property instead.
+     */
+    newNoteProperty(): string {
+        return this.display.writeTargetAlias && this.display.targetAlias ? this.display.targetAlias : TARGET_PROPERTY;
+    }
+    /** The properties a note's source is read from, as said to the reader: “annotation-target” or “source”. */
+    private targetPropertyNames(): string {
+        return this.display.targetAlias
+            ? `“${TARGET_PROPERTY}” or “${this.display.targetAlias}”`
+            : `“${TARGET_PROPERTY}”`;
+    }
+    /**
+     * The property of its own a note names its source in, to be changed there: `annotation-target`, or the second
+     * property where the note has only that; null when its properties name none.
+     */
+    private sourcePropertyOf(note: TFile): string | null {
+        const frontmatter = this.app.metadataCache.getFileCache(note)?.frontmatter as
+            Record<string, unknown> | undefined;
+        if (!frontmatter) return null;
+        const alias = this.display.targetAlias;
+        if (
+            !annotationTarget(frontmatter[TARGET_PROPERTY]) &&
+            alias &&
+            frontmatter['annotation-id'] === undefined &&
+            annotationTarget(frontmatter[alias])
+        )
+            return alias;
+        return frontmatter[TARGET_PROPERTY] !== undefined ? TARGET_PROPERTY : null;
     }
     private targetType(note: TFile): string | null {
         return annotationTarget(this.targetProperty(note, 'annotation-target-type'));
@@ -2302,12 +2339,16 @@ export default class AnnotatorPlugin extends Plugin {
     }
     /** Why a note's target leads nowhere, in words that say what was looked for and where, and what to do. */
     private unresolvedTarget(note: TFile): string {
-        const raw = annotationTarget(this.targetProperty(note, 'annotation-target'));
-        if (!raw) return 'This note has no annotation-target property, so there is no source to open.';
+        const raw = annotationTarget(this.targetProperty(note, 'annotation-target')),
+            alias = this.display.targetAlias;
+        if (!raw)
+            return `This note has no annotation-target${alias ? ` or “${alias}”` : ''} property, so there is no source to open.`;
+        // Said by the property the note names it in: the second property, where the note has only that.
+        const named = this.sourcePropertyOf(note) ?? TARGET_PROPERTY;
         if (/^[a-z][a-z0-9+.-]*:/i.test(raw) && !/^(?:https?|file):/i.test(raw) && !/^[a-z]:[\\/]/i.test(raw))
-            return `The annotation-target "${raw}" is not an address the reader can open (a file in the vault, a file on this computer, or an http(s) address).`;
+            return `The ${named} "${raw}" is not an address the reader can open (a file in the vault, a file on this computer, or an http(s) address).`;
         const tried = targetCandidates(raw, this.customDefaultPath).slice(1);
-        return `The annotation-target "${raw}" was not found in the vault${
+        return `The ${named} "${raw}" was not found in the vault${
             tried.length
                 ? ` (also looked for ${tried
                       .slice(0, 3)
@@ -2752,7 +2793,7 @@ export default class AnnotatorPlugin extends Plugin {
                     8000
                 );
         }
-        const given = pages ? { pages } : {};
+        const given = { ...(pages ? { pages } : {}), property: this.newNoteProperty() };
         let text = newNoteText({ target, title, date, heading: this.display.noteHeading, template, ...given });
         // What annotations are appended to must read as a note without annotations; a template that does not is not used.
         try {
@@ -6479,10 +6520,8 @@ export default class AnnotatorPlugin extends Plugin {
     /** Say what a run came to, with a way to open the copy and, where the PDF has an annotation note, to make the copy what that note is about. */
     private offerSearchableCopy(source: TFile, saved: TFile, words: string) {
         const note = this.notes.get(source.path)?.note ?? null,
-            pointed =
-                !!note &&
-                saved.path !== source.path &&
-                this.app.metadataCache.getFileCache(note)?.frontmatter?.['annotation-target'] !== undefined;
+            // The property the note names its source in is the one changed: a note read by the second property keeps it.
+            property = note && saved.path !== source.path ? this.sourcePropertyOf(note) : null;
         const message = createFragment(fragment => {
             fragment.createDiv({ text: words });
             const row = fragment.createDiv();
@@ -6494,7 +6533,7 @@ export default class AnnotatorPlugin extends Plugin {
                 const open = row.createEl('button', { text: 'Open the copy', attr: { type: 'button' } });
                 open.onclick = () => this.openMade(saved);
             }
-            if (pointed && note) {
+            if (property && note) {
                 const use = row.createEl('button', {
                     text: 'Annotate the copy from now on',
                     attr: { type: 'button', 'aria-label': `Make ${note.basename} the annotation note of the copy` }
@@ -6505,7 +6544,7 @@ export default class AnnotatorPlugin extends Plugin {
                     use.disabled = true;
                     void this.app.fileManager
                         .processFrontMatter(note, frontmatter => {
-                            (frontmatter as Record<string, unknown>)['annotation-target'] = copy.path;
+                            (frontmatter as Record<string, unknown>)[property] = copy.path;
                         })
                         .then(() => this.app.workspace.getLeaf('tab').openFile(copy))
                         .catch(error => this.fail(error));
@@ -6680,8 +6719,12 @@ export default class AnnotatorPlugin extends Plugin {
         const path = 'Annotated sources.base';
         let base = this.app.vault.getAbstractFileByPath(path);
         if (!base) {
-            base = await this.app.vault.create(path, sourcesBase());
-            new Notice(`${path} made. It lists every note that has an annotation-target.`, 8000);
+            base = await this.app.vault.create(path, sourcesBase(this.display.targetAlias));
+            const alias = this.display.targetAlias;
+            new Notice(
+                `${path} made. It lists every note that has an annotation-target${alias ? ` or a “${alias}” property` : ''}.`,
+                8000
+            );
         }
         if (!(base instanceof TFile)) throw new Error(`${path} is a folder; a Base cannot be made there.`);
         await this.app.workspace.getLeaf('tab').openFile(base);
@@ -6942,12 +6985,12 @@ export default class AnnotatorPlugin extends Plugin {
     private readonly hintedTargetKeys = new Set<string>();
     /**
      * A note whose property is nearly `annotation-target` ("annotation-target:" with the colon in its name,
-     * "annotator-target") opens no source, and nothing used to say why. It is told so once per note, with a
-     * button that renames the property.
+     * "annotator-target"), or nearly the second property the source is read from ("Source" for "source"), opens no
+     * source, and nothing used to say why. It is told so once per note, with a button that renames the property.
      */
     private hintTargetKey(note: TFile | null) {
         if (this.stopped || !note || note.extension !== 'md' || this.hintedTargetKeys.has(note.path)) return;
-        const key = targetKeyNearMiss(this.app.metadataCache.getFileCache(note)?.frontmatter);
+        const key = targetKeyNearMiss(this.app.metadataCache.getFileCache(note)?.frontmatter, this.display.targetAlias);
         if (!key) return;
         try {
             // A target given another way (a Dataview field in the note's text) is a target: nothing is amiss.
@@ -6962,7 +7005,7 @@ export default class AnnotatorPlugin extends Plugin {
         rename.textContent = 'Rename the property';
         rename.className = 'annotator-notice-action';
         message.append(
-            `This note has a property “${key}”. Annotator reads “annotation-target”, so no source opens for it.`,
+            `This note has a property “${key}”. Annotator reads ${this.targetPropertyNames()}, so no source opens for it.`,
             rename
         );
         const notice = new Notice(message, 15000) as Notice & { hide?(): void };
@@ -6971,19 +7014,30 @@ export default class AnnotatorPlugin extends Plugin {
             void this.renameTargetKey(note, key).catch(error => this.fail(error));
         };
     }
+    /**
+     * The property is renamed to the one it nearly is: the second property where it is nearly that, else the one new
+     * notes are written with. A second property the note already uses for something else is not written over; the
+     * property is then renamed to `annotation-target`.
+     */
     private async renameTargetKey(note: TFile, key: string) {
-        let renamed = false;
+        let renamed = null as string | null;
+        const alias = this.display.targetAlias;
         await this.app.fileManager.processFrontMatter(note, frontmatter => {
             const record = frontmatter as Record<string, unknown>;
             // The note may have been put right by hand since the notice was shown.
-            if (!(key in record) || annotationTarget(record['annotation-target'])) return;
-            record['annotation-target'] = record[key];
+            if (!(key in record) || annotationTarget(record[TARGET_PROPERTY])) return;
+            if (alias && annotationTarget(record[alias])) return;
+            let to = alias && sameName(key, alias) ? alias : this.newNoteProperty();
+            const taken = record[to];
+            if (to !== TARGET_PROPERTY && taken !== undefined && taken !== null && String(taken).trim())
+                to = TARGET_PROPERTY;
+            record[to] = record[key];
             delete record[key];
-            renamed = true;
+            renamed = to;
         });
         new Notice(
             renamed
-                ? 'The property is now “annotation-target”. Open the note again, or run “Switch between reader and Markdown note”.'
+                ? `The property is now “${renamed}”. Open the note again, or run “Switch between reader and Markdown note”.`
                 : 'Nothing to rename: the note has changed since.'
         );
     }
@@ -8527,17 +8581,41 @@ class NativeSettings extends PluginSettingTab {
                         save(plugin.savePreferences());
                     })
             );
+        // Writing new notes with the second property is offered only while there is one; cleared and named again,
+        // the choice made before stands.
+        let writeAlias: { setValue(on: boolean): unknown; setDisabled(off: boolean): unknown } | null = null;
+        const showWriteAlias = () => {
+            writeAlias?.setValue(plugin.display.writeTargetAlias && !!plugin.display.targetAlias);
+            writeAlias?.setDisabled(!plugin.display.targetAlias);
+        };
         new Setting(root)
             .setName('Also read the source from this property')
             .setDesc(
-                'A note names its source in the property annotation-target. If your notes already name it in another property (source, pdf, file), write that name here: a note without annotation-target is then read by it. New annotation notes are still written with annotation-target, and Annotator 0.2 on another device reads only that.'
+                'A note names its source in the property annotation-target. If your notes already name it in another property (source, pdf, file), write that name here: a note without annotation-target is then read by it.'
             )
             .addText(control =>
                 control
                     .setPlaceholder('none')
                     .setValue(plugin.display.targetAlias)
-                    .onChange(value => save(plugin.setDisplay({ targetAlias: targetAliasName(value) })))
+                    .onChange(value => {
+                        save(plugin.setDisplay({ targetAlias: targetAliasName(value) }));
+                        showWriteAlias();
+                    })
             );
+        new Setting(root)
+            .setName('Write new notes with this property instead')
+            .setDesc(
+                'New annotation notes, and notes for some pages of a PDF, name their source in the property above instead of annotation-target. Off is recommended: annotation-target is read by Annotator 0.2, by other devices and by other tools. A note written this way is read only by Annotator 0.3.2 and later with the same property set above, and not by Annotator 0.2.'
+            )
+            .addToggle(control => {
+                writeAlias = control;
+                showWriteAlias();
+                // Shown off while no second property is named; that is not the reader turning it off.
+                control.onChange(value => {
+                    if (!plugin.display.targetAlias || value === plugin.display.writeTargetAlias) return;
+                    save(plugin.setDisplay({ writeTargetAlias: value }));
+                });
+            });
 
         new Setting(root).setName('Sources outside the vault').setHeading();
         new Setting(root)
