@@ -1590,6 +1590,22 @@
       "dependsOn": [],
       "estimate": 3,
       "notes": "Owner, 2026-11-16 (issue 92): embeds show highlights and open them on click; make embeds more editable (making highlights, areas, notes in an embedded PDF).\n\nDone 2026-11-16: On next: Annotate in embedded PDFs (selection bar, highlight menu, area commands in embeds and on Canvas); tried live"
+    },
+    {
+      "id": "saved-notice-stays-on-screen-unt",
+      "title": "Saved notice stays on screen until something removes it",
+      "status": "todo",
+      "parent": "community",
+      "dependsOn": [],
+      "notes": "Seen while recording 0.3.3: after a save, 'Annotation saved to Markdown.' stays in the top-right corner. Check whether a real user sees it linger; make it go by itself."
+    },
+    {
+      "id": "kindle-books-check-the-unsupport",
+      "title": "Kindle books: check the 'Unsupported publisher styling omitted' footer",
+      "status": "todo",
+      "parent": "community",
+      "dependsOn": [],
+      "notes": "Seen while recording 0.3.3: a Calibre-made AZW3 shows 'Unsupported publisher styling omitted' in its footer throughout. Find what is omitted; show it less, or support it."
     }
   ]
 }
