@@ -8464,9 +8464,13 @@ class NativeSettings extends PluginSettingTab {
             [
                 'includePrefix',
                 'Keep text before the quote',
-                'Store a little surrounding text so a passage can be found again if the source changes.'
+                'Show the words just before the passage in the annotation note, in italics. The note stores them either way, so the passage is found again if the source changes.'
             ],
-            ['includePostfix', 'Keep text after the quote', '']
+            [
+                'includePostfix',
+                'Keep text after the quote',
+                'Show the words just after the passage in the annotation note, in italics.'
+            ]
         ] as const)
             new Setting(root)
                 .setName(label)
