@@ -6,7 +6,7 @@
  */
 import { cachedSourceUrl, localTarget } from './local-source';
 import { digest } from './source';
-import { originalName, type RemoteKind } from './remote-source';
+import { originalName, sourceEnding, type RemoteKind } from './remote-source';
 
 /**
  * The key of a file outside the vault, as Obsidian writes a `TExternalFile`'s path: `file:` and the absolute path,
@@ -111,21 +111,16 @@ export function cacheRoot(env: CacheHome): string | null {
     if (env.platform === 'darwin') return `${trim(env.home)}/Library/Caches/Annotator for Obsidian`;
     return `${absolute(env.xdgCache) ? trim(env.xdgCache!) : `${trim(env.home)}/.cache`}/annotator-for-obsidian`;
 }
-const ENDINGS: Record<RemoteKind, string> = { pdf: 'pdf', epub: 'epub', mobi: 'mobi' };
 /** The name a download is kept under: the one its address gives it, made safe for every system, with its kind's ending. */
 export function cacheFileName(url: string, kind: RemoteKind): string {
     const named = [...originalName(url)]
-            .map(char => (char.charCodeAt(0) < 32 ? ' ' : char))
-            .join('')
-            .replace(/[\\/:*?"<>|#^[\]]/g, ' ')
-            .replace(/\s+/g, ' ')
-            .replace(/^[.\s]+|[.\s]+$/g, '')
-            .slice(0, 100),
-        ending =
-            kind === 'mobi'
-                ? /\.(mobi|prc|azw3)$/i.exec(new URL(url).pathname)?.[1].toLowerCase() || 'mobi'
-                : ENDINGS[kind];
-    return `${named || 'source'}.${ending}`;
+        .map(char => (char.charCodeAt(0) < 32 ? ' ' : char))
+        .join('')
+        .replace(/[\\/:*?"<>|#^[\]]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .replace(/^[.\s]+|[.\s]+$/g, '')
+        .slice(0, 100);
+    return `${named || 'source'}.${sourceEnding(url, kind)}`;
 }
 /** Where one download is kept: a folder for the address, one in it for the bytes, the file named as above. */
 export function cachePath(root: string, urlHash: string, bytesHash: string, name: string): string {
@@ -248,7 +243,7 @@ export function copyOrigin(raw: string): string {
     return text;
 }
 /** The endings a copy of a source may have, by the kinds the reader opens. */
-export const COPY_ENDINGS = ['pdf', 'epub', 'mobi', 'azw3', 'prc'];
+export const COPY_ENDINGS = ['pdf', 'epub', 'mobi', 'azw3', 'prc', 'fb2', 'fbz', 'fb3'];
 /** The copy's place in the vault: `Annotator sources/<SHA-256 of the target as written>.<ending>`. */
 export async function copyName(origin: string, ending: string): Promise<string> {
     if (!COPY_ENDINGS.includes(ending)) throw new Error('Not a kind of source the reader keeps.');
@@ -280,7 +275,7 @@ const ROUND = Uint32Array.from([
     0xc67178f2
 ]);
 /** SHA-256 (FIPS 180-4) of some bytes, as lowercase hexadecimal. */
-function sha256Hex(bytes: Uint8Array): string {
+export function sha256Hex(bytes: Uint8Array): string {
     const length = bytes.length,
         blocks = Math.ceil((length + 9) / 64),
         padded = new Uint8Array(blocks * 64);

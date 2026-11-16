@@ -5,14 +5,42 @@ What changed for someone using Annotator. How to use each thing is in
 
 ## Unreleased
 
+- "Open with Annotator" is installed with a button: **Install**, in the
+  settings under **Open from outside Obsidian**, on macOS, Windows and
+  Linux. It does what the recipe did, for this vault and this computer's
+  key (made if there is none), with nothing downloaded and nothing pasted
+  into a terminal, and then says how to make it the app a double-click
+  starts. The settings say whether it is installed on this computer, and
+  for this vault; **Uninstall** takes it away. The recipe is still there,
+  under **Do it yourself**, for where the button cannot work.
+- A file opened with "Open with Annotator" is annotated where it is, at
+  once: no question, nothing copied into the vault. A note named after it
+  is made where your new notes go, and **Annotate a copy in the vault** is
+  in its tab when you want a copy. Files copied in before still open their
+  copy, and files allowed before stay allowed. On an Obsidian before
+  1.14.4, which cannot read a file outside the vault, or with **Copy outside
+  sources into the vault** on, the file is copied in after the question, as
+  before.
+- "Open with Annotator" and the `annotator-open` address take every kind of
+  book the reader opens: FictionBook (FB2, FBZ, `.fb2.zip`, FB3) and Kindle
+  books (MOBI, PRC, AZW3) as well as PDF and EPUB. Each system offers the app
+  for them as a second choice, never as the default by itself (on Linux,
+  every type freedesktop.org names; there is none for FBZ or FB3). Install
+  again, or copy the recipe again, to have them; the steps to take it away
+  by hand now name these types too.
+- A file that is already open is shown in its tab when it is opened again
+  from outside Obsidian, instead of in a new tab each time.
+- The settings call Obsidian's button on Android **Import into vault**, as
+  Obsidian does, and say that on a phone or tablet a file cannot be handed
+  over where it is: it is copied into the vault first. The address shown in
+  the settings is shown whole, across the row.
 - The Windows recipe for "Open with Annotator" no longer leaves a window
   open. On Windows 11, where Windows Terminal is the default terminal, a
   Terminal window stayed open for up to a minute each time a file was
   opened with it; the script now runs in a console with no window. Explorer
   also lists it by its name, "Open with Annotator", with Obsidian's icon,
-  where it said "Windows PowerShell". Copy the recipe from the settings
-  again and paste it into PowerShell to have both; the steps to take it
-  away are the same.
+  where it said "Windows PowerShell". Press **Install** (or copy the recipe
+  again) to have both.
 
 ## 0.3.4 (2026-11-16)
 

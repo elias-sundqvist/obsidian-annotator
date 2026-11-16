@@ -5,92 +5,105 @@ Annotator's reader. The README has the short version, under "Open a file
 from outside Obsidian"; this page says what each way does, line by line, and
 how to take it away again.
 
-Whichever way the file comes, a note named after it is made where your new
-notes go, and the file opens in the reader. The recipes and addresses below
-copy it into `Annotator sources` in your vault first. Obsidian's own "Open
-with" lets you choose: annotate the file where it is, or a copy. The file
-itself is never changed. The same file opened again shows its note, and its
-copy if it has one.
+Every kind of file the reader opens can come this way: PDF, EPUB,
+FictionBook (`.fb2`, `.fbz`, `.fb2.zip`, `.fb3`) and Kindle books (`.mobi`,
+`.prc`, `.azw3`). Whichever way the file comes, a note named after it is
+made where your new notes go, and the file opens in the reader. On a
+computer with Obsidian 1.14.4 or later it is read where it is: nothing is
+copied into the vault, and **Annotate a copy in the vault** in the tab's
+header makes a copy when you want one. The file itself is never changed. The
+same file opened again shows its note, in the tab it is already open in.
 
-## Obsidian's own "Open with"
+## Open with Annotator: the Install button
 
-On a computer, Obsidian 1.14.4 and later can open a file that is not in the
-vault. For a PDF or a book, Annotator then shows two buttons:
+In Annotator's settings, under **Open from outside Obsidian**, press
+**Install**. It adds "Open with Annotator" to Finder's, Explorer's or your
+file manager's Open with, for PDFs and books, for this vault. The settings
+then say whether it is installed on this computer, and for this vault; if a
+new key was made since, or it was installed from another vault, they say so,
+and **Install again** makes it open files here.
 
-- **Annotate where it is** makes a note that names the file, and the file is
-  read where it lies, like any source outside the vault.
-- **Annotate a copy in the vault** copies it in, and the copy takes its place
-  in the same tab. The command *Annotate a copy of this file in the vault*
-  does the same.
+A file opened with it goes straight to the reader, with no question: the
+app carries this computer's key (below), which a web page cannot know, and
+choosing a file in your own file manager is the yes. The file is allowed to
+be read where it is on this computer, as **Annotate where it is** allows it,
+that file and no other. On an Obsidian before 1.14.4, which cannot read a
+file outside the vault, or with **Copy outside sources into the vault** on,
+it is copied into `Annotator sources` instead, after a question for each
+folder (**Copy this file**, **Always from this folder** or **Not now**); the
+folders allowed so are listed in the settings, with **Forget them**.
 
-Nothing needs setting up, but:
+Install does what the recipe for the system does (below, under "Do it
+yourself"), on your press and at no other time. Nothing is downloaded and no
+shell is started: each program is named by its full path and given its
+arguments as a list, so no path or name can be read as a command. If there
+is no key yet, Install makes one. If it fails, the settings say why and
+unfold the recipe, to paste by hand.
 
-- Obsidian appears under "Open with" only when it was installed from a
-  current installer, not merely updated inside the app.
-- Obsidian opens the file in the vault you used last.
-- Obsidian shows the file first, and annotating it needs one press.
-
-The recipes below go straight to the reader, in the vault the recipe was
-made in.
-
-## The recipes
-
-In Annotator's settings, under **Open from outside Obsidian**, press **Make
-a key**. The settings then show the recipe for the computer you are on, with
-the vault and the key written into it, and a **Copy** button. Each recipe
-makes, for every file it is handed, one address:
-
-```
-obsidian://annotator-open?vault=<this vault>&key=<this computer's key>&source=<the file's full path>
-```
-
-and asks the system to open it. That is all a recipe does: nothing is
-downloaded, nothing is installed for other users, nothing runs in the
-background.
-
-The first file from a folder is asked about in Obsidian: **Copy this file**,
-**Always from this folder**, or **Not now**. The folders you allowed are
-listed in the settings, with **Forget them**.
+**Uninstall** takes away what Install made, and only that. The key stays;
+**Remove** next to it ends it.
 
 ### macOS
 
-Paste the recipe into Terminal. It:
+Install:
 
-1. writes a short AppleScript into an app, "Open with Annotator", in the
-   Applications folder of your home folder (`osacompile`, part of macOS);
-2. tells the system the app opens PDFs and EPUBs as a second choice, never
-   by itself (`LSHandlerRank` Alternate, with the types `com.adobe.pdf` and
-   `org.idpf.epub-container`);
-3. signs it for this Mac only (`codesign --sign -`) and registers it.
+1. compiles the app's AppleScript into "Open with Annotator" in the
+   Applications folder of your home folder (`/usr/bin/osacompile`);
+2. writes into its `Info.plist` (`/usr/bin/plutil`) its identifier,
+   `sh.esh.annotator.open-with`; the types it opens, as a second choice and
+   never by itself (`LSHandlerRank` Alternate): PDF and EPUB by the types
+   macOS declares for them (`com.adobe.pdf`, `org.idpf.epub-container`),
+   FictionBook and Kindle books by extension, since macOS declares no type
+   for them; and a digest of the address it opens, by which the settings
+   tell which vault and key it was made for;
+3. signs it for this Mac only (`/usr/bin/codesign --sign -`) and registers
+   it with Launch Services (`lsregister -f`).
 
-Then select a PDF in Finder, choose File → Get Info, and under "Open with"
-choose Other…, "Open with Annotator", and **Change All**. Do the same for a
-book.
+An app of that name that Annotator did not make is left alone: Install and
+Uninstall say so and change nothing.
+
+To open a kind of file with it by a double-click: select one in Finder,
+choose File → Get Info, under "Open with" choose "Open with Annotator", and
+press **Change All**. Do the same for each kind of book.
+
+Uninstall unregisters the app (`lsregister -u`) and deletes it. If you had
+made it the default for PDFs or books, choose another app for them the same
+way: Get Info, Open with, Change All.
 
 The first time Obsidian reads from Downloads, Documents or Desktop, macOS
-asks whether Obsidian may; say yes. Recent macOS may warn before pasting a
-command into Terminal; the recipe is the text shown in the settings, and
-nothing else.
-
-To take it away: delete "Open with Annotator" from the Applications folder
-of your home folder, and choose another app under Get Info for PDFs and
-books if you had made it the default.
+asks whether Obsidian may; say yes.
 
 ### Windows
 
-Paste the recipe into a PowerShell window. It:
+Install:
 
 1. writes a one-line script, `open.ps1`, into
    `%LOCALAPPDATA%\OpenWithAnnotator`;
-2. adds, for your account only (`HKEY_CURRENT_USER\Software\Classes`), a
-   program "Open with Annotator", `Annotator.OpenWith`, that runs that
-   script, with Obsidian's icon if Windows knows where Obsidian is;
-3. offers it under "Open with" for `.pdf` and `.epub`, beside the programs
-   already there. It does not change the default (but if the app chosen for
-   a type has since been uninstalled, Windows may put it first).
+2. asks `%SystemRoot%\System32\reg.exe` to add, for your account only
+   (`HKEY_CURRENT_USER\Software\Classes`), a program "Open with Annotator",
+   `Annotator.OpenWith`, that runs that script, with Obsidian's icon if
+   Windows knows where Obsidian is (`reg query` of the program Windows
+   starts for `obsidian://` addresses);
+3. asks it to add `Annotator.OpenWith` to the list of programs for `.pdf`,
+   `.epub`, `.fb2`, `.fbz`, `.fb3`, `.mobi`, `.prc` and `.azw3`, beside the
+   programs already there. `reg add` adds a value to a list that is there
+   and leaves its other values; it does not change the default (but if the
+   app chosen for a type has since been uninstalled, Windows may put it
+   first).
 
-Then right-click a PDF, choose Open with → Choose another app, and pick
-"Open with Annotator". Do the same for a book.
+Why `reg.exe` and not the PowerShell recipe: each value is one argument, so
+nothing is read as a script, and Obsidian starting PowerShell to change the
+registry is the pattern security software watches for. The program itself
+runs PowerShell, as the recipe's does, when you open a file with it.
+
+To open a kind of file with it by a double-click: right-click one in
+Explorer, choose Open with → Choose another app, pick "Open with Annotator"
+and press **Always**. Do the same for each kind of book.
+
+Uninstall asks `reg.exe` to delete the program's key and its one entry in
+each list, and deletes the script's folder. If you had made it the default
+for a kind of file, Windows asks which app to use the next time you open
+one.
 
 The script runs in a console with no window (`conhost.exe --headless`, part
 of Windows 10 since version 1809 and of Windows 11), so no window opens.
@@ -103,69 +116,123 @@ Smart App Control, where it is on, is a policy of Windows' App Control. App
 Control lets a PowerShell script it does not know run in PowerShell's
 constrained language, and the script's one line works there; but this has
 not been tried with Smart App Control on. A VBScript or JScript it does not
-know, App Control blocks outright, which is one reason the recipe has no such
+know, App Control blocks outright, which is one reason there is no such
 launcher. Obsidian's own "Open with" needs no script at all.
-
-To take it away, in PowerShell:
-
-```powershell
-Remove-Item -Recurse "HKCU:\Software\Classes\Annotator.OpenWith"
-foreach ($e in ".pdf", ".epub") { Remove-ItemProperty "HKCU:\Software\Classes\$e\OpenWithProgids" -Name "Annotator.OpenWith" }
-Remove-Item -Recurse "$env:LOCALAPPDATA\OpenWithAnnotator"
-```
-
-The first line takes the program away with its name and icon; the second
-takes its entry, and only its entry, out of the lists of programs for
-`.pdf` and `.epub`; the third deletes the script. If a list was made by the
-recipe, it stays, empty, which changes nothing.
 
 ### Linux
 
-Paste the recipe into a terminal. It writes two files under your home
-folder:
+Install writes two files under your home folder:
 
 - `~/.local/bin/open-with-annotator`, a shell script that turns each path
   into an address with nothing but `od` and `printf` and opens it with
   `xdg-open`;
 - `~/.local/share/applications/open-with-annotator.desktop`, which tells the
-  desktop that it opens `application/pdf` and `application/epub+zip`. It is
-  not shown in the application menu.
+  desktop that it opens `application/pdf`, `application/epub+zip`,
+  `application/x-fictionbook+xml`, `application/x-zip-compressed-fb2`
+  (`.fb2.zip`), `application/x-mobipocket-ebook` (`.mobi`, `.prc`) and
+  `application/vnd.amazon.mobi8-ebook` (`.azw3`). It is not shown in the
+  application menu. freedesktop.org's list of types has none for `.fbz` or
+  `.fb3`, so those are not offered here; the address takes them.
 
+and runs `/usr/bin/update-desktop-database` on that folder, if it is there.
 Then choose "Open with Annotator" in your file manager's Open With for a PDF
-or a book. To make it the default for books:
+or a book. To make it the default for a type:
 
 ```bash
 xdg-mime default open-with-annotator.desktop application/epub+zip
 ```
 
+Uninstall deletes the two files. If you had made it the default with
+`xdg-mime`, choose another default the same way.
+
 `xdg-open` needs Obsidian registered for `obsidian://` addresses. The
 Flatpak does that itself; for the AppImage, Obsidian's help says how to make
 the desktop entry. The Flatpak sees your home folder and removable drives,
-but not `/tmp`: a file there cannot be read.
+but not `/tmp`: a file there cannot be read. A home folder whose path holds
+`"`, `` ` ``, `$`, `\` or `%` cannot be written into a desktop entry as it
+is; there the settings offer the recipe only.
 
-To take it away:
+## Do it yourself: the recipes
 
-```bash
-rm ~/.local/bin/open-with-annotator ~/.local/share/applications/open-with-annotator.desktop
+Under **Do it yourself** in the settings is the recipe for the computer you
+are on, with the vault and the key written into it, and a **Copy** button.
+It does what Install does, pasted into Terminal (macOS), a terminal (Linux)
+or a PowerShell window (Windows). Each makes, for every file it is handed,
+one address:
+
 ```
+obsidian://annotator-open?vault=<this vault>&key=<this computer's key>&source=<the file's full path>
+```
+
+and asks the system to open it. That is all: nothing is downloaded, nothing
+is installed for other users, nothing runs in the background.
+
+- **macOS:** the same `osacompile`, `plutil`, `codesign` and `lsregister`
+  steps, in a shell. Recent macOS may warn before pasting a command into
+  Terminal; the recipe is the text shown in the settings, and nothing else.
+  To take it away: delete "Open with Annotator" from the Applications folder
+  of your home folder (or press **Uninstall**).
+- **Windows:** the same keys and values, written by PowerShell. An
+  extension's list of programs is made only when it is missing (in Windows
+  PowerShell, `New-Item -Force` on a key that exists empties it). To take it
+  away, in PowerShell (or press **Uninstall**):
+
+  ```powershell
+  Remove-Item -Recurse "HKCU:\Software\Classes\Annotator.OpenWith"
+  foreach ($e in ".pdf", ".epub", ".fb2", ".fbz", ".fb3", ".mobi", ".prc", ".azw3") { Remove-ItemProperty "HKCU:\Software\Classes\$e\OpenWithProgids" -Name "Annotator.OpenWith" -ErrorAction SilentlyContinue }
+  Remove-Item -Recurse "$env:LOCALAPPDATA\OpenWithAnnotator"
+  ```
+
+  The first line takes the program away with its name and icon; the second
+  takes its entry, and only its entry, out of the lists of programs; the
+  third deletes the script. If a list was made by the recipe, it stays,
+  empty, which changes nothing.
+- **Linux:** the same two files. To take it away:
+
+  ```bash
+  rm ~/.local/bin/open-with-annotator ~/.local/share/applications/open-with-annotator.desktop
+  ```
 
 ### A script of your own
 
 Make the address above, with the full path URL-encoded (every `/` as `%2F`,
-a space as `%20`, `&` as `%26`, `#` as `%23`), and open it. The key is in
-the settings. **New key** ends the old one: every recipe made with it stops
-being answered. **Remove** takes the key away, and then no address reads a
-file outside the vault.
+a space as `%20`, `&` as `%26`, `#` as `%23`), and open it. **The address
+itself** under Do it yourself shows it with the vault and the key. **New
+key** ends the old one: the app and every recipe made with it stop being
+answered (press **Install again**). **Remove** takes the key away, and then
+no address reads a file outside the vault.
+
+## Obsidian's own "Open with"
+
+On a computer, Obsidian 1.14.4 and later can open a file that is not in the
+vault. For a PDF or a book, Annotator then shows two buttons:
+
+- **Annotate where it is** makes a note that names the file, and the file is
+  read where it lies, like any source outside the vault.
+- **Annotate a copy in the vault** copies it in, and the copy takes its place
+  in the same tab. The command *Annotate a copy of this file in the vault*
+  does the same.
+
+Nothing needs installing, but:
+
+- Obsidian appears under "Open with" only when it was installed from a
+  current installer, not merely updated inside the app.
+- Obsidian opens the file in the vault you used last.
+- Obsidian shows the file first, and annotating it needs one press.
+
+"Open with Annotator" goes straight to the reader, in the vault it was
+installed from.
 
 ## Phones and tablets
 
 A phone's Obsidian cannot read a file outside its vault, so the file is
-first saved into the vault, and then opened.
+first saved into the vault, and then opened. It cannot be handed to
+Annotator where it is, from the file manager or the share sheet.
 
 ### Android
 
-- **A PDF:** share it to Obsidian, choose **Import**, then **Open in
-  Annotator**. Obsidian saves it where your attachments go.
+- **A PDF:** share it to Obsidian, choose **Import into vault**, then **Open
+  in Annotator**. Obsidian saves it where your attachments go.
 - **A book:** Obsidian is not offered for books in the share sheet. With a
   vault kept in the phone's storage (not in Obsidian's own, which other apps
   cannot reach), copy the book into the vault's folder with your file

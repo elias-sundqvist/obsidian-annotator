@@ -2316,3 +2316,87 @@ test('a book read where it is finds its reading position when its tab is restore
   }finally{second.done();}
  }finally{h.done();}
 });
+
+// Open with Annotator, on an Obsidian that reads files where they are. Tabs are kept as Obsidian keeps them, so that a
+// tab already showing a file can be found again.
+function withTabs(h){
+ const tabs=[];
+ h.app.workspace.getLeaf=()=>{const leaf=new WorkspaceLeaf();leaf.app=h.app;leaf.view=new FileView(leaf);leaf.view.leaf=leaf;leaf.view.getViewType=()=>'pdf';
+  leaf.openFile=async file=>{leaf.view.file=file;h.opened.push({file,leaf});};
+  leaf.setViewState=async state=>{leaf.view.file=h.app.vault.getAbstractFileByPath(state.state.file);leaf.view.getViewType=()=>state.type;h.opened.push({file:leaf.view.file,leaf,type:state.type});};
+  tabs.push(leaf);return leaf;};
+ h.app.workspace.iterateAllLeaves=fn=>tabs.forEach(fn);const shown=[];h.app.workspace.setActiveLeaf=leaf=>shown.push(leaf);
+ return {tabs,shown};
+}
+test('a file handed over with this computer\'s key is read where it is at once: no question, a note where new notes go, and its tab is reused',async()=>{
+ const h=await placeHost();try{
+  const {tabs,shown}=withTabs(h);let questions=0;h.plugin.openApproval=async()=>{questions++;return 'no';};
+  const paper=h.put('Downloads/A paper #1 50%.pdf'),untouched=h.fs.statSync(paper).mtimeMs;h.newNotes.path='Inbox';
+  await h.plugin.onload();const key=h.plugin.newOpenKey();
+  await h.fire({source:paper,key});
+  // No folder question and no copy question: the key is the yes, as a press of Annotate where it is would be.
+  assert.equal(questions,0);assert.deepEqual(h.asked,[]);
+  assert.deepEqual(h.made,['Inbox/A paper 1 50%.md']);assert.equal(h.metadata.get('Inbox/A paper 1 50%.md').frontmatter['annotation-target'],paper);
+  assert.equal(h.opened.at(-1).file.path,'file:'+paper);assert.deepEqual(h.copies(),[]);assert.equal(tabs.length,1);
+  // Allowed on this device, for that file only, as Annotate where it is allows it; no folder is.
+  assert.deepEqual(h.store.get('annotator-in-place').allowed,['file:'+paper]);assert.deepEqual(h.store.get('annotator-open-with').folders,[]);
+  // In the tab, Annotate a copy in the vault is there, as for any source read where it is.
+  h.plugin.currentFile='file:'+paper;assert.equal(h.plugin.commands.find(each=>each.id==='annotate-copy-in-vault').checkCallback(true),true);
+  // The same file again: its tab is shown, no second tab, no second note, no question.
+  await h.fire({source:paper,key});assert.equal(tabs.length,1);assert.equal(shown.at(-1),tabs[0]);assert.deepEqual(h.made,['Inbox/A paper 1 50%.md']);assert.equal(questions+h.asked.length,0);
+  // A tab Obsidian restored at the next start, which the plugin did not open, is found too.
+  h.plugin.leafCollections.clear();await h.fire({source:'file://'+paper.split('/').map(encodeURIComponent).join('/'),key});assert.equal(tabs.length,1);
+  // Every kind of book the reader opens, read where it is in the book reader.
+  const books=[['Novel.fb2','<?xml version="1.0"?><FictionBook/>'],['Zipped.fb2.zip','PK'],['Packaged.fb3','PK'],['Kindle.azw3','x'],['Old.mobi','x'],['Book.epub','PK']].map(([name,body])=>h.put('Books/'+name,body));
+  for(const book of books){await h.fire({source:book,key});assert.equal(h.opened.at(-1).file.path,'file:'+book,book);}
+  // FictionBooks and Kindle books by name in the book reader; an EPUB as Obsidian opens it, in the same reader.
+  assert.deepEqual(h.opened.slice(-6).map(each=>each.type),[...Array(5).fill('annotator-native-epub'),undefined]);assert.equal(tabs.length,7);assert.deepEqual(h.copies(),[]);assert.equal(questions+h.asked.length,0);
+  assert.deepEqual(h.made.slice(1),['Inbox/Novel.md','Inbox/Zipped.md','Inbox/Packaged.md','Inbox/Kindle.md','Inbox/Old.md','Inbox/Book.md']);
+  // Without the key nothing is read, asked or made, whatever the address says.
+  const made=h.made.length,opened=h.opened.length;await h.fire({source:h.put('Downloads/Other.pdf')});await h.fire({source:h.put('Downloads/Other.pdf'),key:key+'x'});
+  assert.equal(h.made.length,made);assert.equal(h.opened.length,opened);
+  // Nothing outside the vault was written or changed.
+  assert.equal(h.fs.statSync(paper).mtimeMs,untouched);assert.deepEqual(h.fs.readdirSync(h.path.join(h.root,'Downloads')).sort(),['A paper #1 50%.pdf','Other.pdf']);
+ }finally{h.done();}
+});
+test('a file copied in before, a file allowed before, and a folder allowed for copies all keep working when files are read where they are',async()=>{
+ const h=await placeHost();try{
+  withTabs(h);let questions=0;h.plugin.openApproval=async()=>{questions++;return 'folder';};
+  const copied=h.put('Kept/Copied.pdf','%PDF-1.7 copied'),allowed=h.put('Zotero/storage/AAAA1111/Allowed.pdf'),fresh=h.put('Kept/Fresh.pdf');
+  await h.plugin.onload();const key=h.plugin.newOpenKey();
+  // As 0.3.4 left them: a copy made by address, a folder allowed for copies, and a file allowed to be read where it is.
+  h.plugin.display={...h.plugin.display,copySources:true};await h.fire({source:copied,key});assert.equal(questions,1);const copy=h.opened.at(-1).file.path;assert.ok(copy.startsWith('Annotator sources/'));
+  h.plugin.display={...h.plugin.display,copySources:false};h.store.set('annotator-in-place',{allowed:['file:'+allowed],downloads:{},names:{}});h.plugin.placeKept=null;
+  // The copy is still what is shown for that file; nothing is asked.
+  await h.fire({source:copied,key});assert.equal(h.opened.at(-1).file.path,copy);assert.equal(questions,1);
+  // The file allowed before keeps its allowance, and is read where it is.
+  await h.fire({source:allowed,key});assert.equal(h.opened.at(-1).file.path,'file:'+allowed);assert.ok(h.store.get('annotator-in-place').allowed.includes('file:'+allowed));
+  // Another file of the folder allowed for copies is read where it is (no question), and the folder stays listed for where copies are made.
+  await h.fire({source:fresh,key});assert.equal(h.opened.at(-1).file.path,'file:'+fresh);assert.equal(questions,1);assert.deepEqual(h.store.get('annotator-open-with').folders,[h.path.join(h.root,'Kept')]);
+  assert.equal(h.copies().length,1);assert.deepEqual(h.asked,[]);
+ }finally{h.done();}
+});
+test('where files cannot be read where they are (an older Obsidian, or copies chosen), a file handed over is copied in after the folder question, as before',async()=>{
+ const h=await placeHost();try{
+  const {externalFiles}=await import('./.generated/plugin-boundary.mjs');
+  withTabs(h);const asked=[];let answer='no';h.plugin.openApproval=async path=>{asked.push(path);return answer;};
+  const paper=h.put('Downloads/Paper.pdf'),book=h.put('Downloads/Novel.fb2','<?xml version="1.0" encoding="utf-8"?><FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0"><description><title-info><book-title>Novel</book-title></title-info></description><body><section><p>Words.</p></section></body></FictionBook>');
+  await h.plugin.onload();const key=h.plugin.newOpenKey();
+  externalFiles(false);
+  await h.fire({source:paper,key});assert.deepEqual(asked,[paper]);assert.deepEqual(h.made,[]);assert.equal(h.opened.length,0);
+  answer='file';await h.fire({source:paper,key});assert.equal(asked.length,2);assert.ok(h.opened.at(-1).file.path.startsWith('Annotator sources/'));
+  // A FictionBook is copied in as one, under its own ending.
+  await h.fire({source:book,key});assert.equal(asked.length,3);assert.match(h.opened.at(-1).file.path,/^Annotator sources\/[0-9a-f]{64}\.fb2$/);assert.equal(h.opened.at(-1).type,'annotator-native-epub');
+  // With copies chosen in the settings, on an Obsidian that could read in place: the same question.
+  externalFiles(true);h.plugin.display={...h.plugin.display,copySources:true};answer='no';await h.fire({source:h.put('Downloads/Third.pdf'),key});assert.equal(asked.length,4);
+ }finally{h.done();}
+});
+test('an address for a file of the vault shows the tab it is open in, and opens a FictionBook or a Kindle book in the book reader',async()=>{
+ const h=openHost();try{
+  const {tabs,shown}=withTabs(h);h.plugin.manifest={id:'obsidian-annotator'};
+  const pdf=h.add('Papers/Paper.pdf'),fb2=h.add('Books/Novel.fb2.zip'),kindle=h.add('Books/Book.azw3');await h.plugin.onload();
+  await h.fire({file:'Papers/Paper.pdf'});await h.fire({file:'Papers/Paper.pdf'});assert.equal(tabs.length,1);assert.equal(shown.at(-1),tabs[0]);assert.equal(h.opened.length,1);
+  await h.fire({file:'Books/Novel.fb2.zip'});assert.equal(h.opened.at(-1).file,fb2);assert.equal(h.opened.at(-1).type,'annotator-native-epub');
+  await h.fire({file:'Books/Book.azw3'});assert.equal(h.opened.at(-1).file,kindle);await h.fire({file:'Books/Book.azw3'});assert.equal(tabs.length,3);
+ }finally{h.dispose();}
+});

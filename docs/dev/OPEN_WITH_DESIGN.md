@@ -222,7 +222,7 @@ Sharing to Obsidian on a phone:
   any file type, only for the `obsidian:` scheme. **ran**. So an EPUB cannot
   be shared to it, and tapping a downloaded file never offers Obsidian.
 - The web half of the receiver: files shared to the app bring up a menu with
-  their names and **Import**; importing saves each where attachments go,
+  their names and **Import into vault**; importing saves each where attachments go,
   then shows a second menu and fires the workspace event
   `receive-files-menu` with that menu and the saved files. **read (Obsidian
   1.15.0)**. The event is not in the published typings: **read** (typings
@@ -629,7 +629,7 @@ Notes:
 As the user would see it:
 
 - **A** (**unconfirmed**): in a browser or mail app, Share → Obsidian;
-  Obsidian shows a menu naming the file; **Import**; a second menu; **Open
+  Obsidian shows a menu naming the file; **Import into vault**; a second menu; **Open
   in Annotator**; the PDF opens in the reader.
 - **B**: in the Files app, copy the EPUB into the vault's folder; open
   Obsidian; find the file; tap it.

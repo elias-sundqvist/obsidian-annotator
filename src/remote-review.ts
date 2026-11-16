@@ -29,12 +29,16 @@ export async function reviewRemote(
         if (!current()) throw new Error('Source review was cancelled or the plugin unloaded.');
     };
     check();
-    if (kind === 'epub' || kind === 'mobi') {
-        // A Kindle book's reader is loaded when the first one is reviewed, as when one is opened.
+    if (kind !== 'pdf') {
+        // A Kindle book's or a FictionBook's reader is loaded when the first one is reviewed, as when one is opened.
         const book =
                 kind === 'mobi'
                     ? await (await import('./mobi-book')).openMobi(bytes, document)
-                    : await openPublication(bytes, document),
+                    : kind === 'fb2'
+                      ? await (await import('./fb2-book')).openFictionBook(bytes, document)
+                      : kind === 'fb3'
+                        ? await (await import('./fb3-book')).openFictionBook3(bytes, document)
+                        : await openPublication(bytes, document),
             resolver = new EpubResolver(book, await publicationSections(book, document, current));
         check();
         return {

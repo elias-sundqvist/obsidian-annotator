@@ -1828,8 +1828,18 @@ body.annotator-reading-fullscreen .workspace-leaf.mod-active > .workspace-leaf-c
 .annotator-sign-in .annotator-sign-in-field input { width: 100%; }
 .annotator-sign-in .mod-warning { color: var(--text-error); }
 
-/* Open from outside Obsidian: the recipe as text to copy, and the button in the notice for a file outside the vault. */
-.annotator-open-with-recipe { width: 24em; max-width: 100%; font-family: var(--font-monospace); font-size: var(--font-smallest); white-space: pre; resize: vertical; }
+/* Open from outside Obsidian: the recipe and the address as text to copy, across the whole row under what they are for
+   (an address wraps rather than being cut off); what Install came to; the recipe folded under "Do it yourself"; and the
+   button in the notice for a file outside the vault. */
+.annotator-open-with-block { flex-wrap: wrap; row-gap: var(--size-4-2); }
+.annotator-open-with-block > .setting-item-control { flex: 1 1 100%; justify-content: flex-start; align-items: flex-start; }
+.annotator-open-with-recipe { flex: 1 1 auto; width: 100%; min-width: 0; font-family: var(--font-monospace); font-size: var(--font-smallest); white-space: pre; resize: vertical; }
+.annotator-open-with-recipe.is-address { white-space: pre-wrap; overflow-wrap: anywhere; resize: none; }
+.annotator-open-with-state { margin-top: var(--size-4-1); color: var(--text-normal); }
+.annotator-open-with-state.mod-warning { color: var(--text-error); }
+.annotator-open-with-manual { border-top: 1px solid var(--background-modifier-border); }
+.annotator-open-with-manual > summary { padding: var(--size-4-3) 0; cursor: var(--cursor); color: var(--text-normal); font-size: var(--font-ui-medium); }
+.annotator-open-with-manual > .setting-item:first-of-type { border-top: none; }
 .notice :is(.annotator-outside-copy, .annotator-outside-place, .annotator-annotate-copy) { display: inline-block; margin: var(--size-4-2) var(--size-4-2) 0 0; }
 /* A question with several answers (Read where it is, a copy, always): they wrap rather than run past the dialog's edge. */
 .annotator-confirm .setting-item-control { flex-wrap: wrap; justify-content: flex-end; row-gap: var(--size-4-2); }

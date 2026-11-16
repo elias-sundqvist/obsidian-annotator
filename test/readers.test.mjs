@@ -280,6 +280,26 @@ test('a Kindle book outside the vault is a source when it is a file on this comp
  assert.deepEqual(remoteRevisions({'file:///Books/k.azw3':[revision,{...revision,kind:'fb2'}]}),{'file:///Books/k.azw3':[revision]});
 });
 
+test('a FictionBook outside the vault is a source when it is a file on this computer, kept under its own ending, and is checked to be one',async()=>{
+ const {remoteKind,remoteFilename,remoteLabel,sourceEnding,validateRemote}=await import('./.generated/readers/remote-source.js');
+ const {cacheFileName,copyName,COPY_ENDINGS}=await import('./.generated/readers/in-place.js');
+ for(const name of ['book.fb2','BOOK.FB2','book.fbz','book.fb2.zip'])assert.equal(remoteKind(`file:///Books/A%20Book/${name}`),'fb2',name);
+ assert.equal(remoteKind('file:///Books/book.fb3'),'fb3');assert.equal(remoteLabel('fb2'),'FictionBook');assert.equal(remoteLabel('fb3'),'FictionBook');
+ // One on the web is not fetched (as for a Kindle book), and a plain archive is no book.
+ for(const url of ['https://example.org/book.fb2','https://example.org/book.fb3','file:///Books/book.zip','file:///Books/book.fb2.tar'])assert.equal(remoteKind(url),null,url);
+ // A zipped FictionBook is kept as .fbz: a .zip is not the reader's to claim. The ending is one a copy may have.
+ assert.deepEqual(['file:///a/b.fb2','file:///a/b.fbz','file:///a/b.FB2.ZIP','file:///a/b.fb3'].map((url,i)=>sourceEnding(url,i===3?'fb3':'fb2')),['fb2','fbz','fbz','fb3']);
+ for(const ending of ['fb2','fbz','fb3'])assert.ok(COPY_ENDINGS.includes(ending));
+ assert.match(await remoteFilename('file:///Books/Novel.fb2.zip','fb2'),/^Annotator sources\/[0-9a-f]{64}\.fbz$/);assert.match(await copyName('/Books/Novel.fb3','fb3'),/\.fb3$/);
+ assert.equal(cacheFileName('file:///Books/Novel%20one.fb2.zip','fb2'),'Novel one.fbz');
+ // An FB2 is XML (with or without a byte order mark, UTF-8 or UTF-16) or zipped; an FB3 is a package (a zip).
+ const bytes=text=>new TextEncoder().encode(text).buffer;
+ for(const good of [bytes('<?xml version="1.0"?><FictionBook/>'),bytes('﻿\n  <FictionBook/>'),new Uint8Array([0xff,0xfe,0x3c,0]).buffer,new Uint8Array([0xfe,0xff,0,0x3c]).buffer,new Uint8Array([0x50,0x4b,3,4]).buffer])validateRemote(good,'fb2');
+ validateRemote(new Uint8Array([0x50,0x4b,3,4]).buffer,'fb3');
+ for(const bad of [bytes('%PDF-1.7'),bytes('just words'),new Uint8Array(80).buffer])assert.throws(()=>validateRemote(bad,'fb2'),/This file is not a FictionBook\./);
+ assert.throws(()=>validateRemote(bytes('<?xml version="1.0"?>'),'fb3'),/This file is not a FictionBook\./);assert.throws(()=>validateRemote(new ArrayBuffer(0),'fb2'),/Remote FictionBook exceeds its size limit or is empty/);
+});
+
 test('annotation navigation preserves ordinary links, modifier destinations, and later plugin wrappers',async()=>{
  const {installAnnotationLinks}=await import('./.generated/readers/link-navigation.js');const ordinary=[],routed=[];
  const original=async(...args)=>ordinary.push(args),workspace={openLinkText:original};

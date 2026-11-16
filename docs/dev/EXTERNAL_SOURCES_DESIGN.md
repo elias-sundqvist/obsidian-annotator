@@ -278,8 +278,34 @@ copy.
 A file Obsidian opened from outside the vault (Open with) and that no note
 names gets two buttons: **Annotate where it is** (a note naming it is made,
 and it is read in place) and **Annotate a copy in the vault** (0.3.2's
-behaviour). The `annotator-open` address and the share menu still copy, as
-their recipes promise.
+behaviour).
+
+A file handed over by "Open with Annotator" (the `annotator-open` address
+with this computer's key) is read where it is at once, as **Annotate where
+it is** would: the owner, after trying the copy flow on 2026-11-16, said the
+default expectation is to start annotating the file as an outside source,
+not to be asked to copy it. The key is the yes: only what the reader
+installed or pasted on this computer carries it, so the request can only be
+the reader's own double-click (`docs/SECURITY.md`). How a file from outside
+reaches the reader:
+
+| Way | Obsidian 1.14.4+, computer | Older Obsidian, or copies chosen | Phone or tablet |
+| --- | --- | --- | --- |
+| Obsidian's own Open with | shown as Obsidian shows it; **Annotate where it is** or **Annotate a copy in the vault** | (not offered by Obsidian before 1.14.4) | (not offered) |
+| "Open with Annotator" (address with the key) | read where it is, no question; a note where new notes go; the file (and a link's target) allowed on this device | copied in after the folder question (**Copy this file**, **Always from this folder**, **Not now**) | refused: save it into the vault first |
+| Address without the key | nothing looked at | nothing looked at | nothing looked at |
+| Address with `file=` (a file of the vault) | opened, in the tab it is open in | the same | the same |
+| Share sheet (Android) | — | — | **Import into vault**, then **Open in Annotator** |
+
+What was allowed before stays: a file copied in before (`remoteSources`)
+shows its copy; files and libraries allowed to be read where they are stay
+allowed; folders allowed for copies are still used where files are copied
+in, and listed in the settings only there or while some are kept. In the
+tab of a file read where it is, **Annotate a copy in the vault** is in the
+header, as for any in-place source. An address for a file already open
+shows its tab instead of opening another (`tabShowing`: a tab showing the
+file with no other note's annotations chosen, found whether the plugin
+opened it or Obsidian restored it).
 
 ### Phones and tablets
 

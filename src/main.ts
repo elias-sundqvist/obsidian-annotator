@@ -60,12 +60,24 @@ import {
     noteTitle,
     openDevice,
     openRequest,
+    readerFile,
     shownPath,
+    OPEN_WITH_DEFAULT,
+    OPEN_WITH_GONE,
     sourceAddress,
     windowsRecipe,
     type OpenDevice,
     type OpenRequest
 } from './open-with';
+import {
+    install,
+    installPlace,
+    installState,
+    uninstall,
+    type InstallPlace,
+    type InstallState,
+    type InstallTools
+} from './open-with-install';
 import {
     FileView,
     MarkdownView,
@@ -226,6 +238,7 @@ import {
     remoteRevisions,
     revisionFilename,
     remoteLabel,
+    sourceEnding,
     type RemoteKind,
     type RemoteRevision
 } from './remote-source';
@@ -8051,7 +8064,29 @@ export default class AnnotatorPlugin extends Plugin {
                 (leaf.view as FileView | undefined)?.file?.path === source
             )
                 return leaf;
-        return null;
+        // A tab the reader opened another way (restored at start, or by Obsidian's own Open with) that shows it with
+        // no other note's annotations chosen.
+        return this.tabShowing(source, note);
+    }
+    /**
+     * A tab that shows this PDF or book in the reader, whose annotations are this note's (when one is given): none
+     * chosen for the tab, and no other note the source's own. Null when there is none.
+     */
+    private tabShowing(source: string, note?: string): WorkspaceLeaf | null {
+        const fold = isExternalKey(source) && this.foldOutsideCase(),
+            same = (path: string) => (fold ? path.toLowerCase() === source.toLowerCase() : path === source);
+        let found: WorkspaceLeaf | null = null;
+        this.app.workspace.iterateAllLeaves?.(leaf => {
+            const view = leaf.view as FileView | undefined;
+            if (found || !view?.file?.path || !same(view.file.path)) return;
+            const type = view.getViewType?.();
+            if (type !== 'pdf' && type !== EPUB_VIEW && !(view instanceof EpubView)) return;
+            const chosen = this.leafCollections.get(leaf),
+                own = this.associations[source];
+            if (note && (chosen ? chosen.note !== note : !!own && own !== note)) return;
+            found = leaf;
+        });
+        return found;
     }
     private chooseReadingCopy(url: string, copies: TFile[]): Promise<TFile | null> {
         return new Promise(resolve => {
@@ -8135,6 +8170,63 @@ export default class AnnotatorPlugin extends Plugin {
     forgetOpenFolders() {
         this.keepOpenDevice({ ...this.openDeviceState(), folders: [] });
     }
+    /** Whether a file handed over from outside is read where it is here (else it is copied in). */
+    opensInPlace(): boolean {
+        return this.readsInPlace();
+    }
+    /** Where "Open with Annotator" goes on this computer; null on a phone or tablet, or where that cannot be told. */
+    openWithPlace(): InstallPlace | null {
+        if (Platform.isMobile || !Platform.isDesktopApp) return null;
+        const host = (
+            globalThis as unknown as { process?: { platform?: string; env?: Record<string, string | undefined> } }
+        ).process;
+        return installPlace(host?.platform || '', host?.env || {});
+    }
+    /**
+     * What the Install and Uninstall buttons work with: the file system, and Node's `execFile` (no shell; a program by
+     * its path and a list of arguments). Loaded only when a button is pressed or the settings look. Replaceable (tests).
+     */
+    openWithTools(): InstallTools {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { execFile } = require('child_process') as typeof import('node:child_process');
+        return {
+            files: this.desktopFileSystem(),
+            run: (program, args) =>
+                new Promise((resolve, reject) => {
+                    execFile(
+                        program,
+                        args,
+                        { timeout: 60000, maxBuffer: 1024 * 1024, encoding: 'utf8', windowsHide: true },
+                        (error, stdout, stderr) => {
+                            if (!error) return resolve({ stdout: String(stdout), stderr: String(stderr) });
+                            const said = String(stderr || '').trim() || error.message,
+                                name = program.slice(Math.max(program.lastIndexOf('/'), program.lastIndexOf('\\')) + 1);
+                            reject(new Error(`${name}: ${said.slice(0, 600)}`));
+                        }
+                    );
+                })
+        };
+    }
+    /** Whether "Open with Annotator" is on this computer, and for this vault and key. Runs nothing. */
+    async openWithState(): Promise<InstallState | null> {
+        const place = this.openWithPlace(),
+            key = this.openDeviceState().key;
+        if (!place) return null;
+        return installState(place, { vault: this.openVaultName(), key: key || '' }, this.openWithTools());
+    }
+    /** Install: what the recipe for this computer does, for this vault and key (made first if there is none). */
+    async installOpenWith(): Promise<void> {
+        const place = this.openWithPlace();
+        if (!place) throw new Error('Open with Annotator cannot be installed here.');
+        const key = this.openDeviceState().key || this.newOpenKey();
+        await install(place, { vault: this.openVaultName(), key }, this.openWithTools());
+    }
+    /** Uninstall: takes away what Install made, and only that. The key stays. */
+    async uninstallOpenWith(): Promise<void> {
+        const place = this.openWithPlace();
+        if (!place) throw new Error('Open with Annotator cannot be installed here.');
+        await uninstall(place, this.openWithTools());
+    }
     /** The vault as an address names it: its ID where Obsidian finds vaults by ID (a computer), else its name. */
     openVaultName(): string {
         const id = (this.app as { appId?: unknown }).appId;
@@ -8201,8 +8293,17 @@ export default class AnnotatorPlugin extends Plugin {
             await this.openNoteTarget(note, undefined, destination ? false : 'reuse', destination);
             return;
         }
-        const leaf = destination || this.app.workspace.getLeaf('tab');
-        await leaf.openFile(file, { active: true });
+        // Where it is open already, that tab is shown: an address for the same file again opens no second tab.
+        const open = destination ? null : this.tabShowing(file.path),
+            leaf = destination || open || this.app.workspace.getLeaf('tab');
+        if (open) {
+            try {
+                this.app.workspace.setActiveLeaf?.(open, { focus: true });
+                await this.app.workspace.revealLeaf?.(open);
+            } catch {
+                /* It is there; the reader finds it. */
+            }
+        } else await this.openSourceFile(leaf, file);
         this.bindSources();
         if (leaf.view) this.lastSource = leaf.view;
         this.focusSource(file.path);
@@ -8214,8 +8315,7 @@ export default class AnnotatorPlugin extends Plugin {
             if (typeof (menu as { addItem?: unknown } | null)?.addItem !== 'function' || !Array.isArray(files)) return;
             const sources = files
                 .filter(
-                    (file): file is TFile =>
-                        file instanceof TFile && /^(?:pdf|epub)$/i.test(file.extension) && !this.outsideVault(file)
+                    (file): file is TFile => file instanceof TFile && readerFile(file.name) && !this.outsideVault(file)
                 )
                 .slice(0, 5);
             for (const file of sources)
@@ -8231,10 +8331,20 @@ export default class AnnotatorPlugin extends Plugin {
             console.error('Annotator could not add to the menu for shared files:', error);
         }
     }
-    /** A file outside the vault, named by an address that carried this device's key. Asked about once for each folder. */
+    /**
+     * A file outside the vault, named by an address that carried this device's key: one the reader handed over with
+     * this computer's Open with Annotator, a double-click away. Where Obsidian reads files where they are, it is read
+     * where it is at once, with no question: the key is the yes (only this computer's own app or a script the reader
+     * made carries it), as a press of Annotate where it is would be. Elsewhere it is copied in, asked about once for
+     * each folder.
+     */
     private async openOutside(request: Extract<OpenRequest, { kind: 'source' }>) {
         if (request.windows !== !!Platform.isWin)
             throw new Error('The path in the address is written for another kind of computer. Nothing was read.');
+        if (this.readsInPlace()) {
+            await this.importSource(request.path, undefined, false);
+            return;
+        }
         // A file copied in before was asked about then; its copy is shown, and nothing of the file outside is read.
         const kept = this.remoteSources[request.uri],
             known = !!kept && this.app.vault.getAbstractFileByPath(kept) instanceof TFile,
@@ -8269,7 +8379,9 @@ export default class AnnotatorPlugin extends Plugin {
         const local = this.local(path);
         if (!local) throw new Error('This is not the full path of a file on this computer.');
         if (!remoteKind(local.uri))
-            throw new Error('Only a PDF, an EPUB or a Kindle book can be copied into the vault this way.');
+            throw new Error(
+                'Only a PDF or a book (EPUB, FictionBook or Kindle) is read from outside the vault this way.'
+            );
         const inside =
             (local.vaultPath ? this.vaultFileAt(local.vaultPath) : null) || (await this.reachedInVault(local.path));
         if (inside) {
@@ -8286,10 +8398,13 @@ export default class AnnotatorPlugin extends Plugin {
             this.approvedSources.add(`copy:${local.uri}`);
             this.wantCopy.add(local.uri);
         } else if (this.readsInPlace()) {
-            const kept = this.placeDevice(),
-                key = externalKey(local.path);
-            if (!allowedHere(kept, key, this.foldOutsideCase()))
-                this.keepPlaceDevice({ ...kept, allowed: [...kept.allowed, key].slice(-2000) });
+            // The file as named, and the file it leads to if that is another (a link): this one file, and no other.
+            const key = externalKey(local.path),
+                real = await this.realKey(key),
+                kept = this.placeDevice(),
+                fold = this.foldOutsideCase(),
+                adding = [...new Set([key, real])].filter(each => !allowedHere(kept, each, fold));
+            if (adding.length) this.keepPlaceDevice({ ...kept, allowed: [...kept.allowed, ...adding].slice(-2000) });
         }
         try {
             await this.openNoteTarget(note, undefined, destination ? false : 'reuse', destination);
@@ -8428,14 +8543,7 @@ export default class AnnotatorPlugin extends Plugin {
                     () => loadPdfJs(),
                     () => !this.stopped
                 );
-            const path = origin
-                ? await copyName(
-                      origin,
-                      kind === 'mobi'
-                          ? /\.(mobi|prc|azw3)$/i.exec(new URL(url).pathname)?.[1].toLowerCase() || 'mobi'
-                          : kind
-                  )
-                : await remoteFilename(url, kind);
+            const path = origin ? await copyName(origin, sourceEnding(url, kind)) : await remoteFilename(url, kind);
             if (this.stopped) throw new Error('Plugin unloaded before downloading the source.');
             if (!(await this.app.vault.adapter.exists('Annotator sources')))
                 await this.vaultWrite.createFolder('Annotator sources');
@@ -10024,7 +10132,9 @@ class NativeSettings extends PluginSettingTab {
                 })
             );
     }
-    /** How a PDF or a book reaches the reader from outside Obsidian, on this device: its key and its recipe. */
+    /** What the last press of Install or Uninstall came to, shown once, when the settings are drawn again. */
+    private openWithSaid: { text: string; warning: boolean } | null = null;
+    /** How a PDF or a book reaches the reader from outside Obsidian, on this device: the app, its key and its recipe. */
     private openWith(root: HTMLElement) {
         const plugin = this.plugin,
             device = plugin.openDeviceState(),
@@ -10035,53 +10145,63 @@ class NativeSettings extends PluginSettingTab {
                 () => new Notice('Could not copy. Select the text and copy it by hand.')
             );
         };
-        const shown = (setting: Setting, words: string) => {
-            const box = setting.controlEl.createEl('textarea', { cls: 'annotator-open-with-recipe' });
+        // The text is shown across the whole row, under what it is for: an address is not cut off.
+        const shown = (setting: Setting, words: string, address = false) => {
+            setting.settingEl.addClass('annotator-open-with-block');
+            const box = setting.controlEl.createEl('textarea', {
+                cls: `annotator-open-with-recipe${address ? ' is-address' : ''}`
+            });
             box.value = words;
             box.readOnly = true;
-            box.rows = Math.min(8, words.split('\n').length);
+            box.rows = address ? 2 : Math.min(8, words.split('\n').length);
             box.spellcheck = false;
+            box.setAttribute('aria-label', setting.nameEl.textContent || 'Text to copy');
             setting.addButton(control => control.setButtonText('Copy').onClick(() => copy(words)));
         };
-        new Setting(root)
-            .setName('Open from outside Obsidian')
-            .setHeading()
-            .setDesc(
-                'A PDF or a book can be handed to Annotator from the file manager or a share sheet. The README says how for each system, under \u201cOpen a file from outside Obsidian\u201d.'
-            );
+        const heading = new Setting(root).setName('Open from outside Obsidian').setHeading();
         if (Platform.isMobile) {
+            heading.setDesc(
+                'On a phone or tablet, Annotator reads a PDF or a book from the vault only: it cannot be handed over from the file manager or a share sheet where it is, so it is copied into the vault first. Share a PDF to Obsidian and choose Import into vault, then Open in Annotator. A book is saved into the vault’s folder with the file manager. The README says how, under “Open a file from outside Obsidian”.'
+            );
             shown(
                 new Setting(root)
                     .setName('Address for a file in this vault')
                     .setDesc(
-                        'For a Shortcut or an automation: first save the PDF or book into this vault, then open this address with the file\u2019s path in the vault added to it, URL-encoded. Sharing a PDF to Obsidian needs none of this: choose Import, then Open in Annotator.'
+                        'For a Shortcut or an automation: first save the PDF or book into this vault, then open this address with the file’s path in the vault added to it, URL-encoded.'
                     ),
-                fileAddress({ vault, key: '' })
+                fileAddress({ vault, key: '' }),
+                true
             );
             return;
         }
+        heading.setDesc(
+            'A PDF or a book can be handed to Annotator from the file manager, with Open with. The README says how for each system, under “Open a file from outside Obsidian”.'
+        );
+        const place = plugin.openWithPlace(),
+            system = place?.system ?? (Platform.isMacOS ? 'mac' : Platform.isWin ? 'windows' : 'linux'),
+            manual = root.ownerDocument.createElement('details');
+        manual.className = 'annotator-open-with-manual';
+        if (place) this.openWithApp(root, system, manual);
         const key = new Setting(root)
-            .setName('This computer\u2019s key')
+            .setName('This computer’s key')
             .setDesc(
                 device.key
-                    ? 'A file outside the vault is copied in only when the request carries this key, which a web page cannot know. The key is kept on this computer only, and is written into the recipe below.'
-                    : 'A file outside the vault is copied in only when the request carries a key that this computer made, which a web page cannot know. Until a key is made, no request from outside is followed to a file outside the vault.'
+                    ? 'A file outside the vault is opened only when the request carries this key, which a web page cannot know. The key is kept on this computer only, and is written into Open with Annotator and the recipe.'
+                    : 'A file outside the vault is opened only when the request carries a key that this computer made, which a web page cannot know. Install makes one; until there is one, no request from outside is followed to a file outside the vault.'
             );
         if (!device.key)
-            key.addButton(control =>
-                control
-                    .setButtonText('Make a key')
-                    .setCta()
-                    .onClick(() => {
-                        plugin.newOpenKey();
-                        this.display();
-                    })
-            );
+            key.addButton(control => {
+                control.setButtonText('Make a key').onClick(() => {
+                    plugin.newOpenKey();
+                    this.display();
+                });
+                if (!place) control.setCta();
+            });
         else {
             key.addButton(control =>
                 control
                     .setButtonText('New key')
-                    .setTooltip('Recipes made with the old key stop being answered.')
+                    .setTooltip('Open with Annotator and recipes made with the old key stop being answered.')
                     .onClick(() => {
                         plugin.newOpenKey();
                         this.display();
@@ -10097,37 +10217,44 @@ class NativeSettings extends PluginSettingTab {
                     })
             );
         }
-        if (!device.key) return;
-        const values = { vault, key: device.key },
-            recipe = Platform.isMacOS
-                ? {
-                      words: macRecipe(values),
-                      how: 'Paste this into Terminal. It makes \u201cOpen with Annotator\u201d in the Applications folder of your home folder, from a script you can read; nothing is downloaded. Then select a PDF in Finder, choose File \u2192 Get Info, and under \u201cOpen with\u201d choose Other\u2026, that app, and Change All. The same for a book.'
-                  }
-                : Platform.isWin
-                  ? {
-                        words: windowsRecipe(values),
-                        how: 'Paste this into a PowerShell window. It adds \u201cOpen with Annotator\u201d for PDFs and books, for your account only. Then right-click a PDF, choose Open with \u2192 Choose another app, and pick it. The same for a book.'
-                    }
-                  : {
-                        words: linuxRecipe(values),
-                        how: 'Paste this into a terminal. It writes a small script and a desktop entry under your home folder. Then choose \u201cOpen with Annotator\u201d in your file manager\u2019s Open With for a PDF or a book.'
-                    };
-        shown(new Setting(root).setName('Recipe for this computer').setDesc(recipe.how), recipe.words);
-        shown(
-            new Setting(root)
-                .setName('The address itself')
-                .setDesc(
-                    'For a script of your own: this address, with the full path of the PDF or book added to it, URL-encoded.'
-                ),
-            sourceAddress(values)
-        );
+        if (device.key) {
+            root.append(manual);
+            manual.createEl('summary', { text: 'Do it yourself' });
+            const values = { vault, key: device.key },
+                recipe =
+                    system === 'mac'
+                        ? {
+                              words: macRecipe(values),
+                              how: 'What Install does, to paste into Terminal yourself. It makes “Open with Annotator” in the Applications folder of your home folder, from a script you can read; nothing is downloaded.'
+                          }
+                        : system === 'windows'
+                          ? {
+                                words: windowsRecipe(values),
+                                how: 'What Install does, to paste into a PowerShell window yourself. It adds “Open with Annotator” for PDFs and books, for your account only.'
+                            }
+                          : {
+                                words: linuxRecipe(values),
+                                how: 'What Install does, to paste into a terminal yourself. It writes a small script and a desktop entry under your home folder.'
+                            };
+            shown(new Setting(manual).setName('Recipe for this computer').setDesc(recipe.how), recipe.words);
+            shown(
+                new Setting(manual)
+                    .setName('The address itself')
+                    .setDesc(
+                        'For a script of your own: this address, with the full path of the PDF or book added to it, URL-encoded.'
+                    ),
+                sourceAddress(values),
+                true
+            );
+        }
+        // Where files are read where they are, no folder is asked about; the list matters only where they are copied in.
+        if (!device.key || (plugin.opensInPlace() && !device.folders.length)) return;
         const folders = new Setting(root)
             .setName('Folders files are copied from without a question')
             .setDesc(
                 device.folders.length
-                    ? device.folders.map(folder => shownPath(folder, 80)).join('  \u00b7  ')
-                    : 'None yet. The first file from a folder is asked about, and \u201cAlways from this folder\u201d adds the folder here.'
+                    ? `${device.folders.map(folder => shownPath(folder, 80)).join('  ·  ')}${plugin.opensInPlace() ? '. Files are read where they are here, so this list is used only where they are copied in.' : ''}`
+                    : 'None yet. The first file from a folder is asked about, and “Always from this folder” adds the folder here.'
             );
         if (device.folders.length)
             folders.addButton(control =>
@@ -10136,6 +10263,77 @@ class NativeSettings extends PluginSettingTab {
                     this.display();
                 })
             );
+    }
+    /** The row with Install and Uninstall, and what is there now. */
+    private openWithApp(root: HTMLElement, system: 'mac' | 'windows' | 'linux', manual: HTMLDetailsElement) {
+        const plugin = this.plugin,
+            row = new Setting(root).setName('Open with Annotator').setClass('annotator-open-with-app'),
+            about = row.descEl.createDiv(),
+            state = row.descEl.createDiv({ cls: 'annotator-open-with-state', attr: { role: 'status' } }),
+            outcome = this.openWithSaid;
+        this.openWithSaid = null;
+        about.setText(
+            `Adds “Open with Annotator” to ${system === 'mac' ? 'Finder’s' : system === 'windows' ? 'Explorer’s' : 'your file manager’s'} Open with, for PDFs and books, for this vault. ${plugin.opensInPlace() ? 'A file opened with it is read where it is, with a note made for it where new notes go.' : 'A file opened with it is copied into the vault, with a note made for it.'} Nothing is downloaded.`
+        );
+        const say = (text: string, warning = false) => {
+            state.textContent = text;
+            state.classList.toggle('mod-warning', warning);
+        };
+        const buttons: { setDisabled(off: boolean): unknown }[] = [];
+        const press = (installing: boolean) => {
+            for (const button of buttons) button.setDisabled(true);
+            say(installing ? 'Installing…' : 'Uninstalling…');
+            void (installing ? plugin.installOpenWith() : plugin.uninstallOpenWith()).then(
+                () => {
+                    this.openWithSaid = {
+                        text: installing
+                            ? `Installed. ${OPEN_WITH_DEFAULT[system]}`
+                            : `Uninstalled. ${OPEN_WITH_GONE[system]}`,
+                        warning: false
+                    };
+                    new Notice(
+                        installing ? '“Open with Annotator” is installed.' : '“Open with Annotator” is uninstalled.'
+                    );
+                    this.display();
+                },
+                error => {
+                    this.openWithSaid = {
+                        text: `${installing ? 'Could not install' : 'Could not uninstall'}: ${noticeText(error)} The recipe under “Do it yourself” does the same by hand.`,
+                        warning: true
+                    };
+                    this.display();
+                }
+            );
+        };
+        const draw = (now: InstallState | null) => {
+            if (outcome) say(outcome.text, outcome.warning);
+            else
+                say(
+                    now === 'here'
+                        ? `Installed on this computer, for this vault. ${OPEN_WITH_DEFAULT[system]}`
+                        : now === 'other'
+                          ? 'Installed on this computer, but made for another vault or an older key: files opened with it do not reach this vault. Install again to make it open them here.'
+                          : 'Not installed on this computer.'
+                );
+            if (outcome?.warning) manual.open = true;
+            row.addButton(control => {
+                buttons.push(control);
+                control
+                    .setButtonText(now === 'none' || now === null ? 'Install' : 'Install again')
+                    .onClick(() => press(true));
+                if (now !== 'here') control.setCta();
+            });
+            if (now === 'here' || now === 'other')
+                row.addButton(control => {
+                    buttons.push(control);
+                    control
+                        .setButtonText('Uninstall')
+                        .setWarning()
+                        .onClick(() => press(false));
+                });
+        };
+        say('Looking whether it is installed…');
+        void plugin.openWithState().then(draw, () => draw(null));
     }
 }
 

@@ -1455,3 +1455,70 @@ test('the command that moves a note\'s annotations under the heading: explained 
         await assert.rejects(h.plugin.moveUnderHeading(h.note), /damaged annotation block/); assert.equal(text(), damaged);
     } finally { h.dispose(); }
 });
+
+test('Open from outside Obsidian: Install first, with what is there now and what it came to; the recipe folded under Do it yourself; the address shown whole', async () => {
+    const { Platform } = await import('./.generated/plugin-boundary.mjs');
+    const settle = async () => { for (let i = 0; i < 8; i++) await new Promise(resolve => setTimeout(resolve, 0)); };
+    const h = host(), store = new Map();
+    h.app.loadLocalStorage = key => store.has(key) ? structuredClone(store.get(key)) : null; h.app.saveLocalStorage = (key, value) => store.set(key, structuredClone(value)); h.app.appId = 'aaaa000000000001';
+    try {
+        await h.plugin.onload();
+        Platform.isDesktopApp = true; Platform.isMacOS = true;
+        // What Install and Uninstall would do is stood in for: nothing on this computer is touched.
+        let state = 'none', fail = null; const pressed = [];
+        h.plugin.openWithPlace = () => ({ system: 'mac', app: '/Users/me/Applications/Open with Annotator.app' });
+        h.plugin.openWithState = async () => state;
+        h.plugin.installOpenWith = async () => { pressed.push('install'); if (fail) throw new Error(fail); if (!h.plugin.openDeviceState().key) h.plugin.newOpenKey(); state = 'here'; };
+        h.plugin.uninstallOpenWith = async () => { pressed.push('uninstall'); state = 'none'; };
+        const tab = h.plugin.settingTabs[0]; tab.display(); await settle();
+        const section = () => { const rows = [...tab.containerEl.querySelectorAll('.setting-item')], at = rows.findIndex(row => row.querySelector('.setting-item-name')?.textContent === 'Open from outside Obsidian'), next = rows.findIndex((row, i) => i > at && row.classList.contains('setting-item-heading')); return rows.slice(at, next < 0 ? undefined : next); };
+        const named = name => section().find(row => row.querySelector('.setting-item-name')?.textContent === name);
+        const buttons = row => [...row.querySelectorAll('button')].map(button => button.textContent);
+        const heading = section()[0].querySelector('.setting-item-description').textContent;
+        assert.match(heading, /from the file manager, with Open with/); assert.doesNotMatch(heading, /share sheet/);
+        // No key yet: Install comes first and makes one; nothing to copy is shown until there is a key.
+        assert.deepEqual(section().slice(1).map(row => row.querySelector('.setting-item-name').textContent), ['Open with Annotator', 'This computer’s key']);
+        const status = () => named('Open with Annotator').querySelector('.annotator-open-with-state');
+        assert.equal(status().getAttribute('role'), 'status'); assert.equal(status().textContent, 'Not installed on this computer.');
+        assert.match(named('Open with Annotator').querySelector('.setting-item-description').textContent, /Finder’s Open with, for PDFs and books, for this vault\. .*Nothing is downloaded\./);
+        assert.deepEqual(buttons(named('Open with Annotator')), ['Install']); assert.ok(named('Open with Annotator').querySelector('button').classList.contains('mod-cta'));
+        assert.deepEqual(buttons(named('This computer’s key')), ['Make a key']); assert.equal(named('This computer’s key').querySelector('button').classList.contains('mod-cta'), false);
+        assert.equal(tab.containerEl.querySelector('details.annotator-open-with-manual'), null);
+        // Install: it says it is at work, then what it came to, and how to make it the default.
+        named('Open with Annotator').querySelector('button').click(); assert.equal(status().textContent, 'Installing…'); assert.equal(named('Open with Annotator').querySelector('button').disabled, true);
+        await settle();
+        assert.deepEqual(pressed, ['install']); assert.ok(h.plugin.openDeviceState().key);
+        assert.match(status().textContent, /^Installed\. To open a kind of file with it by a double-click: .*Get Info.*Change All/); assert.equal(status().classList.contains('mod-warning'), false);
+        assert.deepEqual(buttons(named('Open with Annotator')), ['Install again', 'Uninstall']);
+        // The recipe and the address are folded under "Do it yourself", each across the whole row.
+        const manual = tab.containerEl.querySelector('details.annotator-open-with-manual');
+        assert.equal(manual.querySelector('summary').textContent, 'Do it yourself'); assert.equal(manual.open, false);
+        assert.deepEqual([...manual.querySelectorAll('.setting-item-name')].map(name => name.textContent), ['Recipe for this computer', 'The address itself']);
+        for (const row of manual.querySelectorAll('.setting-item')) { assert.ok(row.classList.contains('annotator-open-with-block')); assert.deepEqual(buttons(row), ['Copy']); }
+        const address = manual.querySelector('textarea.is-address'); assert.match(address.value, /^obsidian:\/\/annotator-open\?vault=aaaa000000000001&key=[A-Za-z0-9_-]{24}&source=$/); assert.equal(address.readOnly, true);
+        assert.match(manual.querySelector('textarea:not(.is-address)').value, /^APP="\$HOME\/Applications\/Open with Annotator\.app"/);
+        // Files are read where they are here: no list of folders for copies to show.
+        h.plugin.opensInPlace = () => true; tab.display(); await settle();
+        assert.equal(named('Folders files are copied from without a question'), undefined);
+        h.plugin.opensInPlace = () => false; tab.display(); await settle();
+        assert.ok(named('Folders files are copied from without a question'));
+        // Made for another vault or an older key: said, and Install again is the thing to press.
+        state = 'other'; tab.display(); await settle();
+        assert.match(status().textContent, /another vault or an older key/); assert.ok(named('Open with Annotator').querySelector('button').classList.contains('mod-cta'));
+        // A failure is said in the row, in the theme's colour for errors, and the recipe is unfolded as the way by hand.
+        fail = 'osacompile: an error'; named('Open with Annotator').querySelector('button').click(); await settle();
+        assert.match(status().textContent, /^Could not install: osacompile: an error.*The recipe under “Do it yourself” does the same by hand\.$/); assert.ok(status().classList.contains('mod-warning'));
+        assert.equal(tab.containerEl.querySelector('details.annotator-open-with-manual').open, true);
+        // Uninstall: said, with how to choose another app if it was the default.
+        fail = null; state = 'here'; tab.display(); await settle();
+        assert.match(status().textContent, /^Installed on this computer, for this vault\./);
+        [...named('Open with Annotator').querySelectorAll('button')].find(button => button.textContent === 'Uninstall').click(); await settle();
+        assert.match(status().textContent, /^Uninstalled\. If you had made it the default .*Change All\.$/); assert.deepEqual(buttons(named('Open with Annotator')), ['Install']);
+        // On a phone: no app, no key; the book has to be in the vault first, and Obsidian's button is named as it is.
+        Platform.isMobile = true; tab.display(); await settle();
+        const phone = section()[0].querySelector('.setting-item-description').textContent;
+        assert.match(phone, /cannot be handed over from the file manager or a share sheet where it is, so it is copied into the vault first/); assert.match(phone, /Import into vault/);
+        assert.deepEqual(section().slice(1).map(row => row.querySelector('.setting-item-name').textContent), ['Address for a file in this vault']);
+        assert.match(section()[1].querySelector('textarea.is-address').value, /&file=$/);
+    } finally { Platform.isDesktopApp = false; Platform.isMacOS = false; Platform.isMobile = false; h.dispose(); }
+});

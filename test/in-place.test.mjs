@@ -98,7 +98,7 @@ test('a copy in the vault is named by the note\'s target as written, so any devi
     assert.notEqual(await copyName('zotero://open-pdf/library/items/IKUUN4F7', 'pdf'), zotero);
     // A web address's copy has the name 0.3 gave it, so copies made before are found by name as well.
     assert.equal(await copyName(copyOrigin('https://example.org/a.pdf'), 'pdf'), await remoteFilename('https://example.org/a.pdf', 'pdf'));
-    assert.deepEqual(COPY_ENDINGS, ['pdf', 'epub', 'mobi', 'azw3', 'prc']);
+    assert.deepEqual(COPY_ENDINGS, ['pdf', 'epub', 'mobi', 'azw3', 'prc', 'fb2', 'fbz', 'fb3']);
     await assert.rejects(copyName('x', 'exe'));
 });
 

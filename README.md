@@ -953,42 +953,46 @@ download (or the copy in the vault) is read, offline.
 
 ### Open a file from outside Obsidian
 
-A PDF or a book in your Downloads, on the desktop or in a mail can be handed
-to Annotator from the file manager or a share sheet. A note named after it is
-made where your new notes go, and it opens in the reader: copied into
-`Annotator sources` (the recipes and addresses below always copy), or, from
-Obsidian's own "Open with", read where it is if you choose. The file itself
-is not changed. Opened again, the same file shows its note (and its copy);
-nothing is copied twice.
+A PDF or a book (EPUB, FB2, FB3, MOBI or AZW3) in your Downloads, on the
+desktop or in a mail can be opened in Annotator from the file manager on a
+computer. A note named after it is made where your new notes go, and it opens
+in the reader, read where it is: nothing is copied into the vault unless you
+choose **Annotate a copy in the vault** in its tab. The file itself is not
+changed. Opened again, the same file shows its note in the tab it is already
+open in.
 
-- **With Obsidian's own "Open with"** (a computer, Obsidian 1.14.4 or later,
-  installed from a current installer). Right-click the file, Open with,
-  Obsidian. Obsidian shows it as it is, outside the vault and without
-  annotations, with two buttons. **Annotate where it is** makes a note that
-  names the file, and the file is annotated where it lies, as any outside
-  source is. **Annotate a copy in the vault** copies it in, and the copy
-  takes its place in the same tab; the command *Annotate a copy of this file
-  in the vault* does the same. Obsidian opens such a file in the vault you
-  used last.
 - **With a double-click.** In Annotator's settings, under **Open from
-  outside Obsidian**, press **Make a key**. The settings then show a recipe
-  for your computer: a few lines to paste into Terminal (macOS), a terminal
-  (Linux) or PowerShell (Windows). It adds "Open with Annotator" to your
-  system for PDFs and books, for this vault, and you can make it the program
-  that opens them. The first file from a folder is asked about; **Always
-  from this folder** stops the question for that folder.
-  [OPEN_WITH.md](docs/OPEN_WITH.md) says what each recipe does and how to
-  take it away again.
-- **On Android**, share a PDF to Obsidian, choose **Import**, then **Open in
-  Annotator**. Obsidian does not take books from the share sheet: copy the
-  book into the vault's folder with your file manager (a vault kept in the
-  phone's storage, not in Obsidian's own) and open it from the file list.
-- **On an iPhone or iPad**, save the file into the vault from the share
-  sheet (Save to Files, then On My iPhone or iCloud Drive, Obsidian, your
-  vault) and open it in Obsidian. A Shortcut can do both in one step:
-  [OPEN_WITH.md](docs/OPEN_WITH.md) has the steps.
+  outside Obsidian**, press **Install**. It adds "Open with Annotator" to
+  Finder's, Explorer's or your file manager's Open with, for PDFs and books,
+  for this vault; nothing is downloaded. The settings then say how to make
+  it the program a double-click starts (on a Mac: Get Info, Open with,
+  Change All; on Windows: Open with, Choose another app, Always). A file
+  opened with it goes straight to the reader, with no question. **Uninstall**
+  takes it away. Where the button cannot work, **Do it yourself** has the
+  same steps to paste into Terminal (macOS), a terminal (Linux) or
+  PowerShell (Windows). [OPEN_WITH.md](docs/OPEN_WITH.md) says what each
+  does, line by line.
+- **With Obsidian's own "Open with"** (Obsidian 1.14.4 or later, installed
+  from a current installer). Right-click the file, Open with, Obsidian.
+  Obsidian shows it as it is, without annotations, with two buttons:
+  **Annotate where it is**, or **Annotate a copy in the vault**. Obsidian
+  opens such a file in the vault you used last.
+- **On an older Obsidian** (before 1.14.4), which cannot read a file outside
+  the vault, a file opened with "Open with Annotator" is copied into
+  `Annotator sources` after a question; **Always from this folder** stops
+  the question for that folder. So it is with **Copy outside sources into
+  the vault** on.
+- **On a phone or tablet** a file is read from the vault only, so it is
+  copied in first. On Android, share a PDF to Obsidian, choose **Import into
+  vault**, then **Open in Annotator**. Obsidian does not take books from the
+  share sheet: copy the book into the vault's folder with your file manager
+  (a vault kept in the phone's storage, not in Obsidian's own) and open it
+  from the file list. On an iPhone or iPad, save the file into the vault
+  from the share sheet (Save to Files, then On My iPhone or iCloud Drive,
+  Obsidian, your vault) and open it in Obsidian. A Shortcut can do both in
+  one step: [OPEN_WITH.md](docs/OPEN_WITH.md) has the steps.
 
-Behind the recipes is an address that any script or Shortcut can open:
+Behind "Open with Annotator" is an address that any script or Shortcut can open:
 
 | Address | Opens |
 | --- | --- |
@@ -996,9 +1000,11 @@ Behind the recipes is an address that any script or Shortcut can open:
 | `obsidian://annotator-open?vault=…&key=…&source=%2FUsers%2Fme%2FPaper.pdf` | One outside the vault, by its full path (a computer only) |
 
 An address can be opened by any web page, so a file outside the vault is
-read only when the address carries this computer's key. Without it nothing
+read only when the address carries this computer's key, which Install writes
+into "Open with Annotator" (and makes, if there is none). Without it nothing
 is looked at and nothing is asked. The key is kept on this computer, not in
-the settings that sync, and **New key** in the settings ends the old one.
+the settings that sync, and **New key** in the settings ends the old one
+(press **Install again** afterwards).
 
 ## With Zotero
 

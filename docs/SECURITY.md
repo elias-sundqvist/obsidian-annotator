@@ -97,24 +97,45 @@ assets…" (`readers.test.mjs`), "network CSS, dynamic selectors…"
   are never chosen, and an item it lends is refused.
 - **An address cannot make the reader read outside the vault without this
   computer's key.** `obsidian://annotator-open` can be opened by any web
-  page or program. With `file=` it opens a PDF or EPUB that is already in
+  page or program. With `file=` it opens a PDF or a book that is already in
   the vault, named by its path there; anything else is refused (another
   type, a hidden or configuration folder, an absolute or climbing path).
   That writes nothing and asks nothing, as Obsidian's own `obsidian://open`
   does for any file. With `source=` it names a file outside the vault, and
   is followed only when it carries the key this computer made; without it no
   file is looked at, nothing is asked, and one notice a minute at most says
-  so. With it, the first file from a folder is asked about (the dialog
-  starts on **Not now**, and its other answers work only after a moment);
-  **Always from this folder** allows that folder from then on. The key and
-  the allowed folders are kept in Obsidian's storage for this computer and
-  vault, not in the plugin's settings, so they do not sync. No address names
-  where anything is written, and nothing is sent back to whoever opened it.
-  At most twenty requests wait at once. What remains: a program on the same
-  computer can read the key from the recipe, and on macOS such a program
-  could then have Obsidian copy a PDF from a folder already allowed into the
-  vault, where that program may be able to read it. **New key** or
-  **Remove** in the settings ends a key, and **Forget them** the folders.
+  so. The key is 144 random bits, compared whole, kept in Obsidian's storage
+  for this computer and vault (not in the plugin's settings, so it does not
+  sync), and written only into what the reader installs or pastes on this
+  computer: "Open with Annotator" and the recipes.
+  - **The key is the yes.** Where Obsidian reads files where they are
+    (1.14.4 or later, on a computer), a file named by an address with the
+    key is read where it is at once, with no question, and allowed to be
+    read where it is on this computer, that file (and the file it leads to,
+    if it is a link) and no other, as a press of **Annotate where it is**
+    allows it. This is safe because only what the reader put on this
+    computer carries the key: a web page, a link in a mail or a note, or a
+    program on another computer cannot know it, so the address cannot have
+    come from anyone but the reader's own file manager (or a script the
+    reader made). What is done with the file is what the reader would do by
+    hand: it is read in the reader, which runs nothing from it (above), and
+    a note naming it is made where new notes go. Nothing is copied, nothing
+    outside the vault is written, and no address names where anything is
+    written or sends anything back. A program already running as the reader
+    could read the key from the app; it can read the file itself, and gains
+    nothing by having Obsidian show it. Earlier yeses are kept: a file
+    copied in before shows its copy, and files and libraries allowed to be
+    read where they are stay allowed.
+  - **Where files are copied in** (an older Obsidian, or **Copy outside
+    sources into the vault** on), the first file from a folder is asked
+    about (the dialog starts on **Not now**, and its other answers work only
+    after a moment); **Always from this folder** allows that folder from
+    then on, on this computer only. There, a program on the same computer
+    that read the key could, on macOS, have Obsidian copy a PDF from a
+    folder already allowed into the vault, where that program may be able
+    to read it. **New key** or **Remove** in the settings ends a key, and
+    **Forget them** the folders.
+  - At most twenty requests wait at once.
 - On a Mac, whether the vault's disk takes names that differ only in case
   for one name is asked of the disk, so that a path into the vault written
   in another case is not taken for a file outside it.
@@ -125,7 +146,8 @@ assets…" (`readers.test.mjs`), "network CSS, dynamic selectors…"
   http), sends them only to that address's origin, and keeps them in memory
   until the plugin is unloaded. It asks three times at most per download.
 - **Nothing outside the vault is written, changed or deleted, except the
-  plugin's own download cache.** Since 1.14.4 Obsidian can open a file that
+  plugin's own download cache** (and "Open with Annotator", which Install
+  writes and Uninstall deletes on the reader's press; below). Since 1.14.4 Obsidian can open a file that
   is not in the vault (a `TExternalFile`, whose path begins `file:`), and its
   file functions then write wherever that path says. Every write the reader
   makes to the vault goes through one check (`vaultWrite` in `main.ts`,
@@ -233,7 +255,8 @@ checked again.
 
 A DEVONthink item link names an item, not a file; where DEVONthink keeps
 the file is in its own database. To follow such a link the plugin runs a
-program, and this is the only program it runs.
+program. Besides this, programs are run only by Install and Uninstall for
+"Open with Annotator" (below), on the reader's press.
 
 - **What is run.** `/usr/bin/osascript -l JavaScript -e <script> <question>
   <UUID>`, through Node's `execFile`: no shell, and the arguments are a list.
@@ -263,6 +286,60 @@ program, and this is the only program it runs.
   settings, and is then asked about and copied in like any file outside the
   vault. osascript is stopped after three minutes.
 
+## Installing "Open with Annotator"
+
+The **Install** and **Uninstall** buttons under **Open from outside
+Obsidian** run programs on the reader's computer. This is the second place
+the plugin runs a program (the first is DEVONthink, above).
+
+- **What Obsidian's rules say.** Obsidian's developer policies for the
+  community plugin directory forbid obfuscated code, ads loaded from the
+  network and client-side telemetry, and ask a plugin to say in its README
+  when it uses the network or reaches files outside the vault. They do not
+  forbid running a program. Obsidian's plugin review now also checks each
+  release for malware, and security software watches Obsidian for starting
+  PowerShell or osascript, which is how malicious plugins have worked. So
+  the buttons run only fixed programs, by their full paths, with fixed
+  arguments, on the reader's press, and the README and this page say what
+  each does.
+- **When.** Only on a press of Install or Uninstall, on a computer. Nothing
+  is run at start, when the settings are shown (they read files to say
+  whether it is installed), or when a file is opened. The module that runs
+  programs (`child_process`) is loaded only then; on a phone or tablet it
+  never is.
+- **What is run.** Through Node's `execFile`: no shell, and the arguments
+  are a list, so no path, name or value is read as a command, and nothing
+  from a note, a file or an address is in them. Only the vault's ID, the key
+  (letters, digits, `-` and `_`, encoded for an address) and the home
+  folder's paths are.
+  - macOS: `/usr/bin/osacompile` (the app's AppleScript, a constant with the
+    address in a string, each line one `-e` argument), `/usr/bin/plutil`
+    three times (its identifier, its document types as JSON made by the
+    plugin, the digest of its address), `/usr/bin/codesign --force --sign -`
+    and `lsregister -f` by its full path; on Uninstall `lsregister -u`.
+  - Windows: `%SystemRoot%\System32\reg.exe` with `add` (and on Uninstall
+    `delete`) for the program's own key and its one entry in each
+    extension's list under `HKEY_CURRENT_USER\Software\Classes`, and `query`
+    to find Obsidian's icon. The PowerShell recipe was not used here: it
+    would be a script, and Obsidian starting PowerShell to change the
+    registry is what security software looks for.
+  - Linux: `/usr/bin/update-desktop-database` on the folder of desktop
+    entries, if it is there.
+- **What is written.** Only what the recipe writes: on macOS the app in the
+  Applications folder of the home folder; on Windows the script's folder in
+  `%LOCALAPPDATA%` and those registry values, for this user only; on Linux
+  the script and the desktop entry under `~/.local`. Nothing is downloaded;
+  nothing is written for other users or outside those places. An app of the
+  same name on a Mac that Annotator did not make (its identifier says) is
+  neither replaced nor deleted. Paths that cannot be written safely (a
+  Windows folder that is not on a drive or holds `"` or `%`; on Linux a home
+  folder with characters a desktop entry would read as its own) are refused,
+  and only the recipe is offered.
+- **What it makes.** A program that, for each file it is given, opens one
+  `obsidian://annotator-open` address with the file's path encoded, and
+  does nothing else; it is registered as a second choice for PDFs and books,
+  never as the default by itself. It carries the key (above).
+
 ## What is kept on the device outside the vault
 
 - **The text of PDFs you have opened**, so that their highlights can be placed
@@ -274,7 +351,8 @@ program, and this is the only program it runs.
   opening, and nothing is written into a note from remembered text.
 - **This computer's key and the folders files may be copied from** without
   a question (Open from outside Obsidian), in Obsidian's own storage for
-  this computer and vault. They are not in the vault and do not sync.
+  this computer and vault. They are not in the vault and do not sync. The
+  key is also in "Open with Annotator", where Install put it (below).
 - **The files and libraries allowed to be read where they are, and which
   download each web address means**, in the same storage
   (`annotator-in-place`). Not in the vault, not synced. The downloads
