@@ -1938,3 +1938,149 @@ test('an archive.org item link as a target is looked up once after one question 
   assert.deepEqual(Object.keys(later.plugin.archiveFiles),['https://archive.org/details/AlicesAdventuresInWonderland']);
  }finally{later.dispose();}
 });
+
+// Sources read where they are (docs/dev/EXTERNAL_SOURCES_DESIGN.md). Obsidian 1.14.4 and later hand out a file outside
+// the vault for a path that begins `file:`, as the stand-in below does from a real folder on disk.
+async function placeHost(){
+ const {externalFiles,ExternalFileStandIn}=await import('./.generated/plugin-boundary.mjs');
+ const fs=nodeRequire('fs'),os=nodeRequire('os'),path=nodeRequire('path'),root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'annotator-place-')));
+ const h=openHost();h.plugin.manifest={id:'obsidian-annotator'};externalFiles(true);Platform.isDesktopApp=true;
+ const lookups=[],inVault=h.app.vault.getAbstractFileByPath,read=h.app.vault.readBinary;
+ h.app.vault.getAbstractFileByPath=p=>{if(/^file:/.test(p)){lookups.push(p);const real=p.slice(5);return fs.existsSync(real)&&fs.statSync(real).isFile()?new ExternalFileStandIn(p):null;}return inVault(p);};
+ h.app.vault.readBinary=async file=>/^file:/.test(file.path)?new Uint8Array(fs.readFileSync(file.path.slice(5))).buffer:read(file);
+ globalThis.__annotatorTestPdfJs=async()=>({getDocument:()=>({promise:Promise.resolve({numPages:1,fingerprints:['x'],getPage:async()=>({getTextContent:async()=>({items:[{str:'Words'}]})})}),destroy:async()=>{}})});
+ const asked=[];h.answer='yes';h.plugin.sourceApproval=async(url,kind,how,library)=>{asked.push({url,kind,how,library:!!library});return h.answer;};
+ const put=(file,text='%PDF-1.7 in place')=>{const full=path.join(root,file);fs.mkdirSync(path.dirname(full),{recursive:true});fs.writeFileSync(full,text);return full;};
+ const copies=()=>[...h.files.keys()].filter(file=>file.startsWith('Annotator sources/')&&/\.\w+$/.test(file));
+ return Object.assign(h,{fs,path,root,put,asked,lookups,copies,done(){externalFiles(false);Platform.isDesktopApp=false;Platform.isMacOS=false;Platform.isMobile=false;h.dispose();fs.rmSync(root,{recursive:true,force:true});}});
+}
+test('a Zotero link is read where it is: asked once for the file or its library on this device, nothing put into the vault, the note unchanged',async()=>{
+ const h=await placeHost();try{
+  const paper=h.put('Zotero/storage/IKUUN4F6/Paper.pdf'),other=h.put('Zotero/storage/ABCD2345/Other.pdf');
+  const note=h.add('Z.md','Unchanged',{'annotation-target':'zotero://open-pdf/library/items/IKUUN4F6'}),second=h.add('O.md','',{'annotation-target':'zotero://open-pdf/library/items/ABCD2345'});
+  await h.plugin.onload();h.plugin.display={...h.plugin.display,zoteroFolder:h.path.join(h.root,'Zotero')};
+  h.answer='always';await h.plugin.openNoteTarget(note);
+  const key='file:'+paper;
+  assert.deepEqual(h.asked,[{url:key,kind:'pdf',how:'place',library:true}]);
+  assert.equal(h.opened.at(-1).file.path,key);assert.equal(h.plugin.targetKey(note),key);
+  assert.deepEqual(h.copies(),[]);assert.equal(h.contents.get(note.path),'Unchanged');assert.equal(h.fs.readFileSync(paper,'utf8'),'%PDF-1.7 in place');
+  // The library was allowed on this device, not in the settings that sync: another of its files is read without a question.
+  await h.plugin.openNoteTarget(second);assert.equal(h.asked.length,1);assert.equal(h.opened.at(-1).file.path,'file:'+other);
+  assert.deepEqual(h.store.get('annotator-in-place').allowed,[`folder:file:${h.path.join(h.root,'Zotero/storage')}/`]);
+  // Nothing in the settings that sync is kept under this computer's path of the file.
+  await h.plugin.persist();assert.ok(!JSON.stringify(h.plugin.data.associations).includes(h.root));assert.ok(!JSON.stringify(h.plugin.data.positions||{}).includes(h.root));assert.ok(!JSON.stringify(h.plugin.data.approvedSources).includes(h.root));
+  // A book's reading position is kept under the note's target as written, so it follows the vault to another computer.
+  h.plugin.positions[h.plugin.keptKey(key)]={chapter:2,offset:0.5};await h.plugin.persist();assert.deepEqual(h.plugin.data.positions['target:zotero://open-pdf/library/items/IKUUN4F6'],{chapter:2,offset:0.5});
+ }finally{h.done();}
+});
+test('read where it is, a file is bound to its note only once allowed here, as its disk matches names, and matching notes never asks the disk',async()=>{
+ const h=await placeHost();try{
+  const paper=h.put('Papers/Paper.pdf'),link=h.path.join(h.root,'Linked.pdf');h.fs.symlinkSync(paper,link);
+  const note=h.add('Paper.md','',{'annotation-target':link}),key='file:'+paper;
+  const leaves=[],leaf=file=>{const item=new WorkspaceLeaf();item.contentEl=h.dom.window.document.createElement('div');h.dom.window.document.body.append(item.contentEl);item.app=h.app;item.view=new FileView(item);item.view.leaf=item;item.view.file=file;item.view.getViewType=()=>'pdf';item.view.viewer={child:{pdfViewer:{pdfViewer:null}}};leaves.push(item);return item;};
+  h.app.workspace.getLeavesOfType=type=>type==='pdf'?leaves:type==='annotator-sidebar'?[{}]:[];
+  h.dom.window.ResizeObserver=class{observe(){}unobserve(){}disconnect(){}};
+  await h.plugin.onload();h.events.get('metadata:resolved')();
+  // Written as a link, it is the file the link leads to: that is the key it is opened and annotated under.
+  assert.equal(h.plugin.targetKey(note),'file:'+link);
+  const {ExternalFileStandIn}=await import('./.generated/plugin-boundary.mjs'),shown=leaf(new ExternalFileStandIn(key));
+  // Not allowed on this device yet: shown as Obsidian shows it.
+  assert.equal(h.plugin.sourceKey(shown.view),null);
+  await h.plugin.openNoteTarget(note);assert.equal(h.opened.at(-1).file.path,key);assert.equal(h.plugin.targetKey(note),key);
+  assert.equal(h.plugin.sourceKey(shown.view),key);
+  // On a Mac's disk a name in other letters' case is the same file.
+  Platform.isMacOS=true;const upper=leaf(new ExternalFileStandIn('file:'+paper.replace('Paper.pdf','PAPER.pdf')));assert.equal(h.plugin.sourceKey(upper.view),key);
+  Platform.isMacOS=false;assert.equal(h.plugin.sourceKey(upper.view),null);
+  // Matching notes to an outside key is done on the keys alone.
+  h.lookups.length=0;assert.equal(h.plugin.noteMatchesSource(note,key),true);assert.equal(h.plugin.noteMatchesSource(h.add('Else.md','',{'annotation-target':'Elsewhere.pdf'}),key),false);await h.plugin.loadNote(key);assert.deepEqual(h.lookups,[]);
+  // Its note is used; no note is ever made for an outside file no note names, and nothing is written outside the vault.
+  assert.equal(await h.plugin.ensureNote(key),note);await assert.rejects(h.plugin.ensureNote('file:'+h.path.join(h.root,'Unnamed.pdf')),/outside your vault/);
+  for(const write of [()=>h.plugin.vaultWrite.create('file:'+h.path.join(h.root,'x.md'),''),()=>h.plugin.vaultWrite.createBinary(h.path.join(h.root,'x.pdf'),new ArrayBuffer(1)),()=>h.plugin.vaultWrite.modifyBinary(new ExternalFileStandIn(key),new ArrayBuffer(1)),()=>h.plugin.vaultWrite.process(new ExternalFileStandIn(key),text=>text),()=>h.plugin.vaultWrite.trash(new ExternalFileStandIn(key),false),()=>h.plugin.vaultWrite.createFolder('../out')])assert.throws(write,/Nothing is written outside the vault/);
+  assert.deepEqual(h.fs.readdirSync(h.path.join(h.root,'Papers')),['Paper.pdf']);
+ }finally{h.done();}
+});
+test('a note for some pages of a PDF read where it is goes beside its note and names the PDF as that note does',async()=>{
+ const h=await placeHost();try{
+  const paper=h.put('Book.pdf'),key='file:'+paper,note=h.add('Reading/Book part 1.md','',{'annotation-target':paper,'annotation-pages':'1-2'});
+  await h.plugin.onload();await h.plugin.openNoteTarget(note);assert.equal(h.opened.at(-1).file.path,key);
+  const {ExternalFileStandIn}=await import('./.generated/plugin-boundary.mjs');
+  const made=await h.plugin.makeRangeNote(key,new ExternalFileStandIn(key),{first:3,last:4},'Book part 2');
+  assert.equal(made.path,'Reading/Book part 2.md');assert.ok(h.contents.get(made.path).includes(`annotation-target: ${JSON.stringify(paper)}`),h.contents.get(made.path));
+  assert.deepEqual(h.fs.readdirSync(h.root),['Book.pdf']);
+ }finally{h.done();}
+});
+test('Annotate a copy in the vault: chosen at the question or later, the copy is named by the note\'s target, wins everywhere, and a phone finds it by its name',async()=>{
+ const h=await placeHost();try{
+  const paper=h.put('Calibre/Jane Doe/A Book (7)/A Book.pdf','%PDF-1.7 the book');
+  const note=h.add('Book.md','Unchanged',{'annotation-target':paper}),later=h.add('Later.md','Unchanged',{'annotation-target':h.put('Later.pdf','%PDF-1.7 later')});
+  const {copyName}=await import('./.generated/readers/in-place.js');
+  await h.plugin.onload();
+  // At the question.
+  h.answer='copy';await h.plugin.openNoteTarget(note);
+  const copy=await copyName(paper,'pdf');assert.equal(h.opened.at(-1).file.path,copy);assert.deepEqual(h.copies(),[copy]);assert.equal(new TextDecoder().decode(h.binaries.get(copy)),'%PDF-1.7 the book');
+  assert.equal(h.plugin.targetKey(note),copy);assert.equal(h.plugin.data.targetCopies[paper],copy);assert.equal(h.contents.get(note.path),'Unchanged');assert.equal(h.fs.readFileSync(paper,'utf8'),'%PDF-1.7 the book');
+  // Later, on a source read where it is: from the very file being read.
+  h.answer='yes';await h.plugin.openNoteTarget(later);const laterKey=h.plugin.targetKey(later);assert.match(laterKey,/^file:.*Later\.pdf$/);
+  h.plugin.currentFile=laterKey;const command=h.plugin.commands.find(each=>each.id==='annotate-copy-in-vault');assert.equal(command.checkCallback(true),true);
+  await h.plugin.annotateCopy(laterKey);const laterCopy=await copyName(laterKey.slice(5),'pdf');assert.equal(h.plugin.targetKey(later),laterCopy);assert.equal(h.opened.at(-1).file.path,laterCopy);
+  h.plugin.currentFile=laterCopy;assert.equal(command.checkCallback(true),false);
+  // A phone whose settings did not sync knows nothing of either copy, and finds it by the name the note's target gives it.
+  h.plugin.targetCopies={};h.plugin.remoteSources={};Platform.isMobile=true;Platform.isDesktopApp=false;
+  await h.plugin.openNoteTarget(note);assert.equal(h.opened.at(-1).file.path,copy);
+  // A file on a computer with no copy: said why, and what to do on the computer.
+  await assert.rejects(h.plugin.openNoteTarget(h.add('None.md','',{'annotation-target':h.put('None.pdf')})),/phone or tablet cannot read it there\. On that computer, open the note and choose Annotate a copy in the vault/);
+ }finally{h.done();}
+});
+test('a web address read where it is is downloaded to this computer\'s cache under its own name, never into the vault, and each download is kept apart',async()=>{
+ const h=await placeHost();try{
+  const cache=h.path.join(h.root,'Cache');h.plugin.cacheFolder=()=>cache;
+  let bytes='%PDF-1.7 first',requests=0;globalThis.__annotatorTestRequest=async()=>{requests++;return {status:200,arrayBuffer:new TextEncoder().encode(bytes).buffer};};
+  const url='https://example.org/papers/Attention%20is%20all%20you%20need.pdf',note=h.add('Web.md','Unchanged',{'annotation-target':url});
+  await h.plugin.onload();assert.equal(h.plugin.targetKey(note),`remote:${url}`);
+  await h.plugin.openNoteTarget(note);
+  assert.deepEqual(h.asked,[{url,kind:'pdf',how:'place',library:false}]);assert.equal(requests,1);assert.deepEqual(h.copies(),[]);
+  const key=h.opened.at(-1).file.path;assert.match(key,/^file:.*\/Cache\/[0-9a-f]{64}\/[0-9a-f]{64}\/Attention is all you need\.pdf$/);assert.equal(h.fs.readFileSync(key.slice(5),'utf8'),'%PDF-1.7 first');
+  assert.equal(h.plugin.targetKey(note),key);assert.equal(h.store.get('annotator-in-place').downloads[url],key.slice(5));
+  // Opened again: read from the cache, nothing fetched, nothing asked.
+  await h.plugin.openNoteTarget(note);assert.equal(requests,1);assert.equal(h.asked.length,1);
+  // A new download of the same address goes beside the first, which stays as it was (a tab may show it).
+  bytes='%PDF-1.7 second';const next=await h.plugin.keepDownload(url,'pdf',url,new TextEncoder().encode(bytes).buffer);
+  assert.notEqual(next,key);assert.equal(h.fs.readFileSync(key.slice(5),'utf8'),'%PDF-1.7 first');assert.equal(h.plugin.targetKey(note),next);
+  // The cache emptied by the system: downloaded again on opening.
+  h.fs.rmSync(cache,{recursive:true,force:true});await h.plugin.openNoteTarget(note);assert.equal(requests,2);assert.ok(h.fs.existsSync(h.plugin.targetKey(note).slice(5)));
+  // Clear the download cache: nothing is shown in a tab here, so every download goes.
+  await h.plugin.clearDownloadCache();assert.deepEqual(h.fs.readdirSync(cache),[]);assert.deepEqual(h.store.get('annotator-in-place').downloads,{});
+  // An archive.org item is a web address too: its book is read where it is, not copied in.
+  const book='https://archive.org/download/AlicesAdventuresInWonderland/alice.epub',alice=h.add('Alice.md','',{'annotation-target':'https://archive.org/details/AlicesAdventuresInWonderland'});
+  h.plugin.archiveFiles['https://archive.org/details/AlicesAdventuresInWonderland']=book;bytes='PK\u0003\u0004 book';
+  await h.plugin.openNoteTarget(alice);assert.match(h.opened.at(-1).file.path,/^file:.*\/alice\.epub$/);assert.deepEqual(h.copies(),[]);
+ }finally{delete globalThis.__annotatorTestRequest;h.done();}
+});
+test('copies as 0.3 made them: with the setting, on an Obsidian without outside files, and on a phone, each asked as such',async()=>{
+ const h=await placeHost();try{
+  const {externalFiles}=await import('./.generated/plugin-boundary.mjs');
+  const paper=h.put('Paper.pdf'),note=h.add('P.md','',{'annotation-target':paper}),url='https://example.org/a.pdf',web=h.add('W.md','',{'annotation-target':url});
+  globalThis.__annotatorTestRequest=async()=>({status:200,arrayBuffer:new TextEncoder().encode('%PDF-1.7 web').buffer});
+  await h.plugin.onload();
+  h.plugin.display={...h.plugin.display,copySources:true};assert.match(h.plugin.targetKey(note),/^remote:file:/);await h.plugin.openNoteTarget(note);assert.equal(h.asked.at(-1).how,'copy');assert.ok(h.opened.at(-1).file.path.startsWith('Annotator sources/'));
+  h.plugin.display={...h.plugin.display,copySources:false};externalFiles(false);assert.match(h.plugin.targetKey(web),/^remote:/);
+  Platform.isMobile=true;Platform.isDesktopApp=false;await h.plugin.openNoteTarget(web);assert.equal(h.asked.at(-1).how,'phone');assert.ok(h.opened.at(-1).file.path.startsWith('Annotator sources/'));
+ }finally{delete globalThis.__annotatorTestRequest;h.done();}
+});
+test('a file Obsidian opened from outside the vault can be annotated where it is, or as a copy, from its notice',async()=>{
+ const {Notice}=await import('./.generated/plugin-boundary.mjs');
+ const h=await placeHost();try{
+  h.dom.window.ResizeObserver=class{observe(){}unobserve(){}disconnect(){}};
+  const real=h.put('Downloads/Opened.pdf'),{ExternalFileStandIn}=await import('./.generated/plugin-boundary.mjs');
+  const item=new WorkspaceLeaf();item.contentEl=h.dom.window.document.createElement('div');h.dom.window.document.body.append(item.contentEl);item.app=h.app;item.view=new FileView(item);item.view.leaf=item;item.view.file=new ExternalFileStandIn('file:'+real);item.view.getViewType=()=>'pdf';item.view.viewer={child:{pdfViewer:{pdfViewer:null}}};
+  const shownIn=[];item.openFile=async opened=>{shownIn.push(opened);item.view.file=opened;};
+  h.app.workspace.getLeavesOfType=type=>type==='pdf'?[item]:type==='annotator-sidebar'?[{}]:[];h.app.workspace.getMostRecentLeaf=()=>item;
+  const before=Notice.messages.length;await h.plugin.onload();h.events.get('metadata:resolved')();h.plugin.bindSources();
+  const said=Notice.messages.slice(before).filter(message=>/outside your vault/.test(message.textContent??''));assert.equal(said.length,1);
+  assert.deepEqual([...said[0].querySelectorAll('button')].map(button=>button.textContent),['Annotate where it is','Annotate a copy in the vault']);
+  said[0].querySelector('button').click();for(let turn=0;turn<200&&!shownIn.length;turn++)await later(5);
+  // A note names the file; the file is shown where it was, read where it is: no question (the press was the yes), no copy.
+  assert.deepEqual(h.made,['Opened.md']);assert.equal(shownIn[0].path,'file:'+real);assert.deepEqual(h.copies(),[]);assert.equal(h.asked.length,0);
+  assert.equal(h.plugin.baseSourceKey(item.view),'file:'+real);
+ }finally{h.done();}
+});
