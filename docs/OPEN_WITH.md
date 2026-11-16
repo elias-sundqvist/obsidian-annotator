@@ -43,12 +43,20 @@ unfold the recipe, to paste by hand.
 **Uninstall** takes away what Install made, and only that. The key stays;
 **Remove** next to it ends it.
 
+Neither button writes over or deletes anything this app did not make, nor
+follows a link: if what is where the app goes is a link, another program's
+file, or an app of that name with another identifier, the button says so
+and changes nothing. The app carries this computer's key, so what Install
+writes is readable by your account alone (below for each system).
+
 ### macOS
 
 Install:
 
-1. compiles the app's AppleScript into "Open with Annotator" in the
-   Applications folder of your home folder (`/usr/bin/osacompile`);
+1. compiles the app's AppleScript into "Open with Annotator"
+   (`/usr/bin/osacompile`), in a hidden folder of its own beside the
+   Applications folder of your home folder (made, if it is missing, for
+   your account alone);
 2. writes into its `Info.plist` (`/usr/bin/plutil`) its identifier,
    `sh.esh.annotator.open-with`; the types it opens, as a second choice and
    never by itself (`LSHandlerRank` Alternate): PDF and EPUB by the types
@@ -56,8 +64,12 @@ Install:
    FictionBook and Kindle books by extension, since macOS declares no type
    for them; and a digest of the address it opens, by which the settings
    tell which vault and key it was made for;
-3. signs it for this Mac only (`/usr/bin/codesign --sign -`) and registers
-   it with Launch Services (`lsregister -f`).
+3. signs it for this Mac only (`/usr/bin/codesign --sign -`), makes it
+   readable by your account alone (`/bin/chmod -R go-rwx`: a Mac's home
+   folder is open to the other accounts of the `staff` group, and the app's
+   script holds the key), moves it into place whole, and registers it with
+   Launch Services (`lsregister -f`). An Install that stops halfway leaves
+   the app that was there, or none.
 
 An app of that name that Annotator did not make is left alone: Install and
 Uninstall say so and change nothing.
@@ -105,7 +117,8 @@ key already, and keeps the names of those it makes in `made-keys.txt` beside
 the script. Uninstall asks `reg.exe` to delete the program's key and its one
 entry in each list; then, for each extension key Install made, it deletes
 the key if nothing but its emptied list is in it (another app's entry keeps
-it); and it deletes the script's folder. If you had made it the default
+it); and it deletes the two files it wrote, and the folder if nothing else
+is in it. If you had made it the default
 for a kind of file, Windows asks which app to use the next time you open
 one.
 
@@ -146,6 +159,8 @@ or a book. To make it the default for a type:
 xdg-mime default open-with-annotator.desktop application/epub+zip
 ```
 
+The script is written readable by your account alone (`0700`); one an
+older recipe wrote (`0755`) is closed before the key is written into it.
 Uninstall deletes the two files. If you had made it the default with
 `xdg-mime`, choose another default the same way.
 

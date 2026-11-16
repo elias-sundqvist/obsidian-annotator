@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,writeFile,readFile,rm,mkdir,chmod,realpath} from 'node:fs/promises';
+import {mkdtemp,writeFile,readFile,rm,mkdir,chmod,realpath,stat} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {existsSync} from 'node:fs';
@@ -164,7 +164,9 @@ test('the Linux recipe, run in a scratch home folder, makes a handler that hands
   for(const shell of shells){
    await rm(log,{force:true});await run(shell,['-c',linuxRecipe(values)],{env});
    const script=path.join(home,'.local/bin/open-with-annotator'),entry=await readFile(path.join(home,'.local/share/applications/open-with-annotator.desktop'),'utf8');
-   assert.match(entry,new RegExp('^Exec="'+script.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'" %f$','m'),shell);assert.match(entry,/^NoDisplay=true$/m);assert.match(entry,/^Terminal=false$/m);
+   assert.match(entry,new RegExp('^Exec="'+script.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'" %f$','m'),shell);
+   // The script holds the key: the recipe makes it this account's alone before writing the key into it.
+   assert.equal((await stat(script)).mode&0o777,0o700,shell);assert.match(entry,/^NoDisplay=true$/m);assert.match(entry,/^Terminal=false$/m);
    const files=names.map(name=>path.join(home,'Papers here',name));
    // Each run of the handler is how a file manager starts it; the last gives two files at once and a relative one.
    for(const file of files.slice(0,-2))await run(shell,[script,file],{env});
@@ -216,39 +218,56 @@ test('where the app goes, from the system and its environment, and nowhere a pat
  for(const [platform,env] of [['darwin',{}],['darwin',{HOME:'relative'}],['win32',{LOCALAPPDATA:'C:\\x'}],['win32',{LOCALAPPDATA:'\\\\server\\share',SystemRoot:'C:\\WINDOWS'}],['win32',{LOCALAPPDATA:'C:\\a"b',SystemRoot:'C:\\WINDOWS'}],['win32',{LOCALAPPDATA:'C:\\%TEMP%',SystemRoot:'C:\\WINDOWS'}],['linux',{HOME:'/home/$me'}],['linux',{HOME:'/home/a"b'}],['linux',{}]])
   assert.equal(installPlace(platform,env),null,JSON.stringify([platform,env]));
 });
-test('Install on a Mac runs the recipe\'s programs, by their full paths, with the recipe\'s arguments as lists, and replaces only its own app',async()=>{
+test('Install on a Mac runs the recipe\'s programs, by their full paths, with the recipe\'s arguments as lists, builds the app beside its place and moves it in whole, and replaces only its own app',async()=>{
  const home=await mkdtemp(path.join(os.tmpdir(),'annotator-install-mac-'));
  try{
-  const place=installPlace('darwin',{HOME:home}),values={vault:'aaaa000000000001',key:KEY},plist=path.join(place.app,'Contents/Info.plist');
+  const place=installPlace('darwin',{HOME:home}),values={vault:'aaaa000000000001',key:KEY},applications=path.join(home,'Applications');
   const fs=await import('node:fs/promises');
   // osacompile makes the app with its Info.plist; plutil writes the values into it, as the real ones do.
-  const written={};
+  const written={};let failAt=null;
   const {calls,tools}=standIn(fs,{
    '/usr/bin/osacompile':async args=>{await mkdir(path.join(args[1],'Contents'),{recursive:true});await writeFile(path.join(args[1],'Contents/Info.plist'),'<?xml version="1.0"?>\n<plist version="1.0">\n<dict>\n\t<key>CFBundleIdentifier</key>\n\t<string>com.apple.ScriptEditor.id.x</string>\n</dict>\n</plist>\n');return {stdout:'',stderr:''};},
-   '/usr/bin/plutil':async args=>{written[args[1]]=args[3];let text=await readFile(args[4],'utf8');text=text.replace(new RegExp(`\\t<key>${args[1]}</key>\\n\\t<string>[^<]*</string>\\n`),'');await writeFile(args[4],text.replace('</dict>',`\t<key>${args[1]}</key>\n\t<string>${args[2]==='-json'?'json':args[3]}</string>\n</dict>`));return {stdout:'',stderr:''};}
+   '/usr/bin/plutil':async args=>{if(failAt==='plutil')throw new Error('plutil: stopped');written[args[1]]=args[3];let text=await readFile(args[4],'utf8');text=text.replace(new RegExp(`\\t<key>${args[1]}</key>\\n\\t<string>[^<]*</string>\\n`),'');await writeFile(args[4],text.replace('</dict>',`\t<key>${args[1]}</key>\n\t<string>${args[2]==='-json'?'json':args[3]}</string>\n</dict>`));return {stdout:'',stderr:''};},
+   '/usr/bin/codesign':async()=>{if(failAt==='codesign')throw new Error('codesign: stopped');return {stdout:'',stderr:''};}
   });
-  assert.equal(await installState(place,values,tools),'none');
+  assert.equal(await installState(place,values,tools.files),'none');
   await install(place,values,tools);
-  assert.deepEqual(calls.map(([program])=>program),['/usr/bin/osacompile','/usr/bin/plutil','/usr/bin/plutil','/usr/bin/plutil','/usr/bin/codesign',LSREGISTER]);
-  assert.deepEqual(calls[0][1],['-o',place.app,...macScript(values).flatMap(line=>['-e',line])]);
+  assert.deepEqual(calls.map(([program])=>program),['/usr/bin/osacompile','/usr/bin/plutil','/usr/bin/plutil','/usr/bin/plutil','/usr/bin/codesign','/bin/chmod',LSREGISTER]);
+  // Built in a folder of its own beside where it goes, then moved into place; nothing of that folder is left.
+  const made=calls[0][1][1],plist=path.join(made,'Contents/Info.plist');
+  assert.equal(path.dirname(path.dirname(made)),applications);assert.match(path.basename(path.dirname(made)),/^\.Open with Annotator \w+$/);assert.equal(path.basename(made),'Open with Annotator.app');
+  assert.deepEqual(calls[0][1],['-o',made,...macScript(values).flatMap(line=>['-e',line])]);
   assert.deepEqual(calls[1][1],['-replace','CFBundleIdentifier','-string','sh.esh.annotator.open-with',plist]);
   assert.deepEqual(calls[2][1],['-replace','CFBundleDocumentTypes','-json',macDocumentTypes(),plist]);
   assert.deepEqual(calls[3][1],['-replace','AnnotatorOpenWith','-string',openWithMark(values),plist]);
-  assert.deepEqual(calls[4][1],['--force','--sign','-',place.app]);assert.deepEqual(calls[5][1],['-f',place.app]);
+  // Signed, then made this account's alone (the app holds the key), then registered where it is.
+  assert.deepEqual(calls[4][1],['--force','--sign','-',made]);assert.deepEqual(calls[5][1],['-R','go-rwx',made]);assert.deepEqual(calls[6][1],['-f',place.app]);
+  assert.deepEqual(await fs.readdir(applications),['Open with Annotator.app']);
+  // The Applications folder, missing before, was made for this account alone.
+  assert.equal((await fs.stat(applications)).mode&0o777,0o700);
   // Every program by its full path; the recipe runs the same steps.
-  for(const [program] of calls)assert.match(program,/^\/(?:usr\/bin|System\/Library)\//);
+  for(const [program] of calls)assert.match(program,/^\/(?:usr\/bin|bin|System\/Library)\//);
   for(const line of macScript(values))assert.ok(macRecipe(values).includes(line));
+  assert.match(macRecipe(values),/^mkdir -p -m 700 "\$HOME\/Applications" /m);assert.match(macRecipe(values),/codesign --force --sign - "\$APP" && chmod -R go-rwx "\$APP" && /);
   assert.equal(written.CFBundleIdentifier,'sh.esh.annotator.open-with');
   // It knows it is there, and for which vault and key, without running anything.
-  const before=calls.length;assert.equal(await installState(place,values,tools),'here');assert.equal(await installState(place,{...values,key:KEY.toUpperCase()},tools),'other');assert.equal(calls.length,before);
+  const before=calls.length;assert.equal(await installState(place,values,tools.files),'here');assert.equal(await installState(place,{...values,key:KEY.toUpperCase()},tools.files),'other');assert.equal(calls.length,before);
   // Installed again: its own app is replaced.
-  await install(place,values,tools);assert.equal(calls.length,before+6);
+  await install(place,values,tools);assert.equal(calls.length,before+7);assert.deepEqual(await fs.readdir(applications),['Open with Annotator.app']);
+  // An Install that stops halfway leaves the app that was there as it was, and nothing half made: here, an older key's.
+  const older={...values,key:KEY.toUpperCase()};await install(place,older,tools);
+  for(const step of ['plutil','codesign']){failAt=step;await assert.rejects(install(place,values,tools),new RegExp(step));assert.deepEqual(await fs.readdir(applications),['Open with Annotator.app'],step);assert.equal(await installState(place,older,tools.files),'here',step);}
+  failAt=null;
+  // And with none there before, none after.
+  await uninstall(place,tools);failAt='codesign';await assert.rejects(install(place,values,tools));assert.deepEqual(await fs.readdir(applications),[]);failAt=null;
   // Uninstall: macOS forgets it, and it is gone.
-  await uninstall(place,tools);assert.deepEqual(calls.at(-1),[LSREGISTER,['-u',place.app]]);assert.equal(existsSync(place.app),false);assert.equal(await installState(place,values,tools),'none');
+  await install(place,values,tools);await uninstall(place,tools);assert.deepEqual(calls.at(-1),[LSREGISTER,['-u',place.app]]);assert.equal(existsSync(place.app),false);assert.equal(await installState(place,values,tools.files),'none');
   await uninstall(place,tools);
-  // An app of that name that Annotator did not make is left as it is, by both buttons.
-  await mkdir(path.join(place.app,'Contents'),{recursive:true});await writeFile(plist,'<plist><dict><key>CFBundleIdentifier</key><string>com.example.other</string></dict></plist>');
-  const count=calls.length;await assert.rejects(install(place,values,tools),InstallError);await assert.rejects(uninstall(place,tools),InstallError);assert.equal(calls.length,count);assert.equal(existsSync(plist),true);assert.equal(await installState(place,values,tools),'none');
+  // An app of that name that Annotator did not make is left as it is, by both buttons; so is a link of that name.
+  const theirs=path.join(place.app,'Contents/Info.plist');await mkdir(path.dirname(theirs),{recursive:true});await writeFile(theirs,'<plist><dict><key>CFBundleIdentifier</key><string>com.example.other</string></dict></plist>');
+  let count=calls.length;await assert.rejects(install(place,values,tools),InstallError);await assert.rejects(uninstall(place,tools),InstallError);assert.equal(calls.length,count);assert.equal(existsSync(theirs),true);assert.equal(await installState(place,values,tools.files),'none');
+  await rm(place.app,{recursive:true});const elsewhere=path.join(home,'Elsewhere.app');await mkdir(path.join(elsewhere,'Contents'),{recursive:true});await writeFile(path.join(elsewhere,'Contents/Info.plist'),'<plist><dict><key>CFBundleIdentifier</key><string>sh.esh.annotator.open-with</string></dict></plist>');await fs.symlink(elsewhere,place.app);
+  count=calls.length;await assert.rejects(install(place,values,tools),/is not one Annotator made, or it is a link/);await assert.rejects(uninstall(place,tools),InstallError);assert.equal(calls.length,count);assert.equal(existsSync(path.join(elsewhere,'Contents/Info.plist')),true);assert.equal(await installState(place,values,tools.files),'none');
  }finally{await rm(home,{recursive:true,force:true});}
 });
 test('Install on Windows writes the script and asks reg.exe for exactly what the recipe writes, adding to an extension\'s list without emptying it, and Uninstall takes back only that',async()=>{
@@ -267,7 +286,8 @@ test('Install on Windows writes the script and asks reg.exe for exactly what the
     return {stdout:`\r\n${key}\r\n${key}\\OpenWithProgids\r\n${args[1].endsWith('.mobi')?'    Other.App    REG_SZ    \r\n':''}\r\n`,stderr:''};}
    return {stdout:'',stderr:''};
   };
-  const {calls,tools}=standIn({...fs,stat:async file=>file==='C:\\Program Files\\Obsidian\\Obsidian.exe'?{isFile:()=>true,isDirectory:()=>false}:fs.stat(file)},{[place.reg]:reg});
+  const files={...fs,stat:async file=>file==='C:\\Program Files\\Obsidian\\Obsidian.exe'?{isFile:()=>true,isDirectory:()=>false}:fs.stat(file)};
+  const {calls,tools}=standIn(files,{[place.reg]:reg});
   await install(place,values,tools);
   assert.equal(await readFile(place.folder+'\\open.ps1','utf8'),windowsScript(values)+'\r\n');
   const runs=calls.map(([program,args])=>{assert.equal(program,place.reg);return args;});
@@ -286,36 +306,45 @@ test('Install on Windows writes the script and asks reg.exe for exactly what the
   for(const args of windowsWrites(place)){assert.equal(args[0],'add');assert.match(args[1],/^HKCU\\Software\\Classes\\(?:Annotator\.OpenWith(?:\\|$)|\.[a-z0-9]+\\OpenWithProgids$)/);assert.equal(args.at(-1),'/f');}
   const lists=windowsWrites(place).filter(args=>args[1].endsWith('\\OpenWithProgids'));assert.deepEqual(lists.map(args=>args[1].split('\\')[3]),WINDOWS_EXTENSIONS);
   for(const args of lists)assert.deepEqual(args.slice(2),['/v','Annotator.OpenWith','/t','REG_SZ','/d','','/f']);
-  assert.equal(await installState(place,values,tools),'here');assert.equal(await installState(place,{...values,vault:'other'},tools),'other');
+  assert.equal(await installState(place,values,tools.files),'here');assert.equal(await installState(place,{...values,vault:'other'},tools.files),'other');
   // Installed again, the keys it made are still known as its own, though they are there now.
   for(const ending of WINDOWS_EXTENSIONS)there.add(ending);await install(place,values,tools);assert.equal(await readFile(place.folder+'\\made-keys.txt','utf8'),'.fb2\r\n.fbz\r\n.fb3\r\n.mobi\r\n.prc\r\n.azw3\r\n');
   // No Obsidian registered: no icon, nothing else changes.
   calls.length=0;const plain=tools.run;tools.run=async(program,args)=>{if(args[1]==='HKCR\\obsidian\\shell\\open\\command'){calls.push([program,args]);throw new Error('reg: ERROR: The system was unable to find the specified registry key or value.');}return plain(program,args);};
   await install(place,values,tools);assert.equal(calls.length,8+windowsWrites(place).length+1);tools.run=plain;
+  // A script there that is not this app's, or a list that is not, stops both buttons before anything is run or written.
+  for(const [name,foreign] of [['open.ps1','Write-Host "someone else\'s"\r\n'],['made-keys.txt','.exe\r\n']]){
+   const file=place.folder+'\\'+name,kept=await readFile(file,'utf8');await writeFile(file,foreign);calls.length=0;
+   await assert.rejects(install(place,values,tools),/is not one Annotator made/);await assert.rejects(uninstall(place,tools),/is not one Annotator made/);assert.equal(calls.length,0,name);assert.equal(await readFile(file,'utf8'),foreign);
+   await writeFile(file,kept);
+  }
   // Uninstall: the program's key, its entry in each list (and only that), the keys it made that hold nothing else now,
-  // and the script's folder. What is not there is no failure.
-  calls.length=0;const removed=[];tools.files={...fs,rm:async(file,options)=>{removed.push([file,options]);for(const name of ['open.ps1','made-keys.txt'])await fs.rm(file+'\\'+name,{force:true});}};
+  // then the two files it wrote, and the folder only if nothing else is in it. What is not there is no failure.
+  calls.length=0;const removed=[],gone=[];let left=['other.txt'];tools.files={...files,rm:async(file,options)=>{removed.push([file,options]);return fs.rm(file,options);},readdir:async()=>left,rmdir:async folder=>{gone.push(folder);}};
   await uninstall(place,tools);const undone=calls.map(([,args])=>args);
   assert.deepEqual(undone.slice(0,windowsRemovals().length),windowsRemovals());
   assert.deepEqual(undone.slice(windowsRemovals().length),['.fb2','.fbz','.fb3','.mobi','.prc','.azw3'].flatMap(ending=>[['query',classes+ending,'/s'],...(ending==='.mobi'?[]:[['delete',classes+ending,'/f']])]));
-  assert.deepEqual(removed,[[place.folder,{recursive:true,force:true}]]);
+  assert.deepEqual(removed,[[place.folder+'\\open.ps1',{force:true}],[place.folder+'\\made-keys.txt',{force:true}]]);assert.deepEqual(gone,[]);
   assert.deepEqual(windowsRemovals()[0],['delete','HKCU\\Software\\Classes\\Annotator.OpenWith','/f']);for(const args of windowsRemovals().slice(1))assert.deepEqual(args.slice(2),['/v','Annotator.OpenWith','/f']);
-  assert.equal(existsSync(place.folder+'\\open.ps1'),false);assert.equal(await installState(place,values,tools),'none');
-  // Made by the recipe (no list of keys made): only the entries go, as the recipe's removal steps take them.
-  calls.length=0;await uninstall(place,tools);assert.deepEqual(calls.map(([,args])=>args),windowsRemovals());
+  assert.equal(existsSync(place.folder+'\\open.ps1'),false);assert.equal(await installState(place,values,tools.files),'none');
+  // Made by the recipe (no list of keys made): only the entries go, as the recipe's removal steps take them; an empty folder goes too.
+  calls.length=0;left=[];await uninstall(place,tools);assert.deepEqual(calls.map(([,args])=>args),windowsRemovals());assert.deepEqual(gone,[place.folder]);
+  // A link where the folder should be is not followed, by either button.
+  const linked=path.join(local,'linked'),target=path.join(local,'target');await mkdir(target);await fs.symlink(target,linked);calls.length=0;
+  const via={...place,folder:linked};await assert.rejects(install(via,values,{...tools,files}),/is not one Annotator made, or it is a link/);await assert.rejects(uninstall(via,{...tools,files}),InstallError);assert.equal(calls.length,0);assert.deepEqual(await fs.readdir(target),[]);
   // What reg query shows is read strictly: a value or another key keeps the extension's key.
   const key=classes+'.fb2',full='HKEY_CURRENT_USER\\Software\\Classes\\.fb2';
   assert.equal(onlyEmptyList(`\r\n${full}\r\n${full}\\OpenWithProgids\r\n\r\n`,key),true);assert.equal(onlyEmptyList(`\r\n${full}\r\n`,key),true);
   for(const shown of [`${full}\r\n    (Default)    REG_SZ    fb2file\r\n`,`${full}\r\n${full}\\OpenWithProgids\r\n    Other    REG_SZ    \r\n`,`${full}\r\n${full}\\shell\r\n`])assert.equal(onlyEmptyList(shown,key),false,shown);
  }finally{await rm(local,{recursive:true,force:true});}
 });
-test('Install on Linux writes the recipe\'s two files and nothing else, and the handler it makes hands over every book type',{skip:process.platform==='win32'},async()=>{
+test('Install on Linux writes the recipe\'s two files and nothing else, the script readable by this account alone, never through a link or over another program\'s file, and the handler hands over every book type',{skip:process.platform==='win32'},async()=>{
  const home=await mkdtemp(path.join(os.tmpdir(),'annotator-install-linux-'));
  try{
   const place=installPlace('linux',{HOME:home}),values={vault:'aaaa000000000001',key:KEY},fs=await import('node:fs/promises');
   const {calls,tools}=standIn(fs);
   await install(place,values,tools);
-  assert.equal(await readFile(place.script,'utf8'),linuxScript(values));assert.equal((await fs.stat(place.script)).mode&0o777,0o755);
+  assert.equal(await readFile(place.script,'utf8'),linuxScript(values));assert.equal((await fs.stat(place.script)).mode&0o777,0o700);
   assert.equal(await readFile(place.entry,'utf8'),linuxDesktopEntry(place.script));
   assert.match(await readFile(place.entry,'utf8'),new RegExp(`^Exec="${place.script.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}" %f$`,'m'));
   // update-desktop-database is run only where it is, by its full path, on the one folder.
@@ -327,23 +356,42 @@ test('Install on Linux writes the recipe\'s two files and nothing else, and the 
   await run('/bin/sh',[place.script,...books],{env:{HOME:home,PATH:bin+':/usr/bin:/bin',OPEN_LOG:log}});
   const lines=(await readFile(log,'utf8')).trim().split('\n');assert.equal(lines.length,books.length);
   for(const [index,line] of lines.entries())assert.equal(openRequest({source:decodeURIComponent(line.slice(sourceAddress(values).length)),key:KEY},desk).request.path,books[index]);
-  assert.equal(await installState(place,values,tools),'here');
+  assert.equal(await installState(place,values,tools.files),'here');
   await rm(bin,{recursive:true});await rm(log);
-  await uninstall(place,tools);assert.deepEqual((await fs.readdir(home,{recursive:true})).sort(),['.local','.local/bin','.local/share','.local/share/applications']);assert.equal(await installState(place,values,tools),'none');
+  // A script an older recipe wrote (readable by all) is taken for this app's own, and closed to other accounts.
+  await writeFile(place.script,linuxScript(values).replace('a PDF or a book','a PDF or EPUB'));await chmod(place.script,0o755);
+  await install(place,values,tools);assert.equal((await fs.stat(place.script)).mode&0o777,0o700);assert.equal(await readFile(place.script,'utf8'),linuxScript(values));
+  await uninstall(place,tools);assert.deepEqual((await fs.readdir(home,{recursive:true})).sort(),['.local','.local/bin','.local/share','.local/share/applications']);assert.equal(await installState(place,values,tools.files),'none');
+  // A link where the script goes is not written through; another program's script or desktop entry is not written over
+  // or deleted. Each refuses both buttons, and nothing is changed.
+  const target=path.join(home,'target.sh');await writeFile(target,linuxScript(values));
+  const cases=[['link',async()=>fs.symlink(target,place.script)],['script',async()=>writeFile(place.script,'#!/bin/sh\necho another program\n')],['entry',async()=>{await writeFile(place.script,linuxScript(values));await writeFile(place.entry,'[Desktop Entry]\nName=Another\nExec=/usr/bin/another %f\n');}]];
+  for(const [label,make] of cases){
+   await make();const before=JSON.stringify(await Promise.all([place.script,place.entry,target].map(async file=>{try{return [file,await readFile(file,'utf8'),(await fs.lstat(file)).mode];}catch{return [file,null];}})));
+   await assert.rejects(install(place,values,tools),/is not one Annotator made, or it is a link/,label);await assert.rejects(uninstall(place,tools),InstallError,label);
+   assert.equal(JSON.stringify(await Promise.all([place.script,place.entry,target].map(async file=>{try{return [file,await readFile(file,'utf8'),(await fs.lstat(file)).mode];}catch{return [file,null];}}))),before,label);
+   await rm(place.script,{force:true});await rm(place.entry,{force:true});
+  }
+  assert.equal(await readFile(target,'utf8'),linuxScript(values));
  }finally{await rm(home,{recursive:true,force:true});}
 });
-test('Install on a Mac, with the real osacompile and plutil into a scratch home folder, makes an app that offers itself for every book type as a second choice',{skip:process.platform!=='darwin'},async()=>{
+test('Install on a Mac, with the real osacompile, plutil, codesign and chmod into a scratch home folder, makes an app for every book type, signed, that other accounts cannot read',{skip:process.platform!=='darwin'},async()=>{
  const home=await realpath(await mkdtemp(path.join(os.tmpdir(),'annotator-install-real-')));
  try{
   const place=installPlace('darwin',{HOME:home}),values={vault:'aaaa000000000001',key:KEY},fs=await import('node:fs/promises');
-  // osacompile and plutil are run; signing and registering with LaunchServices are only written down.
-  const later=[],tools={files:fs,run:async(program,args)=>{if(program==='/usr/bin/codesign'||program===LSREGISTER){later.push(program);return {stdout:'',stderr:''};}const {stdout,stderr}=await run(program,args);return {stdout,stderr};}};
-  await install(place,values,tools);assert.deepEqual(later,['/usr/bin/codesign',LSREGISTER]);
+  // Everything is run but registering with Launch Services, which is only written down.
+  const later=[],tools={files:fs,run:async(program,args)=>{if(program===LSREGISTER){later.push(program);return {stdout:'',stderr:''};}const {stdout,stderr}=await run(program,args);return {stdout,stderr};}};
+  await install(place,values,tools);assert.deepEqual(later,[LSREGISTER]);
   const {stdout}=await run('/usr/bin/plutil',['-convert','json','-o','-',path.join(place.app,'Contents/Info.plist')]),info=JSON.parse(stdout);
   assert.equal(info.CFBundleIdentifier,'sh.esh.annotator.open-with');assert.equal(info.AnnotatorOpenWith,openWithMark(values));assert.deepEqual(info.CFBundleDocumentTypes,JSON.parse(macDocumentTypes()));
-  assert.equal(await installState(place,values,tools),'here');
-  // The compiled script holds the address it opens.
-  const {stdout:script}=await run('/usr/bin/osadecompile',[path.join(place.app,'Contents/Resources/Scripts/main.scpt')]);assert.ok(script.includes(sourceAddress(values)));
+  assert.equal(await installState(place,values,fs),'here');
+  // The compiled script holds the address it opens, and the key with it: no file of the app is open to other accounts.
+  const scpt=path.join(place.app,'Contents/Resources/Scripts/main.scpt'),{stdout:script}=await run('/usr/bin/osadecompile',[scpt]);assert.ok(script.includes(sourceAddress(values)));
+  const all=[place.app,...(await fs.readdir(place.app,{recursive:true})).map(name=>path.join(place.app,name))];
+  for(const file of all)assert.equal((await fs.lstat(file)).mode&0o077,0,file);
+  assert.equal((await fs.stat(path.join(home,'Applications'))).mode&0o777,0o700);assert.deepEqual(await fs.readdir(path.join(home,'Applications')),['Open with Annotator.app']);
+  // The signature still holds after the permissions are narrowed.
+  await run('/usr/bin/codesign',['--verify','--strict',place.app]);
   await uninstall(place,tools);assert.equal(existsSync(place.app),false);
  }finally{await rm(home,{recursive:true,force:true});}
 });

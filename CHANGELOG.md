@@ -11,8 +11,11 @@ What changed for someone using Annotator. How to use each thing is in
   key (made if there is none), with nothing downloaded and nothing pasted
   into a terminal, and then says how to make it the app a double-click
   starts. The settings say whether it is installed on this computer, and
-  for this vault; **Uninstall** takes it away. The recipe is still there,
-  under **Do it yourself**, for where the button cannot work.
+  for this vault; **Uninstall** takes it away. What it writes holds this
+  computer's key and is readable by your account alone, and neither button
+  writes over or deletes anything it did not make. The recipe is still
+  there, under **Do it yourself**, for where the button cannot work, and
+  now also keeps the app or script from other accounts.
 - A file opened with "Open with Annotator" is annotated where it is, at
   once: no question, nothing copied into the vault. A note named after it
   is made where your new notes go, and **Annotate a copy in the vault** is

@@ -2400,3 +2400,16 @@ test('an address for a file of the vault shows the tab it is open in, and opens 
   await h.fire({file:'Books/Book.azw3'});assert.equal(h.opened.at(-1).file,kindle);await h.fire({file:'Books/Book.azw3'});assert.equal(tabs.length,3);
  }finally{h.dispose();}
 });
+test('the settings say whether Open with Annotator is installed by reading files alone: the module that runs programs is not loaded for it',async()=>{
+ const fs=nodeRequire('fs'),os=nodeRequire('os'),path=nodeRequire('path'),home=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'annotator-state-'))),h=openHost();
+ try{h.plugin.manifest={id:'obsidian-annotator'};await h.plugin.onload();
+  const place={system:'linux',bin:path.join(home,'bin'),applications:path.join(home,'apps'),script:path.join(home,'bin/open-with-annotator'),entry:path.join(home,'apps/open-with-annotator.desktop')};
+  let loaded=0;h.plugin.openWithPlace=()=>place;h.plugin.openWithFiles=()=>fs.promises;h.plugin.openWithTools=()=>{loaded++;throw new Error('child_process was loaded');};
+  assert.equal(await h.plugin.openWithState(),'none');
+  const {linuxScript}=await import('./.generated/readers/open-with.js');fs.mkdirSync(place.bin);fs.writeFileSync(place.script,linuxScript({vault:h.plugin.openVaultName(),key:h.plugin.newOpenKey()}));
+  assert.equal(await h.plugin.openWithState(),'here');h.plugin.newOpenKey();assert.equal(await h.plugin.openWithState(),'other');
+  assert.equal(loaded,0);
+  // A press is what loads it.
+  await assert.rejects(h.plugin.installOpenWith(),/child_process was loaded/);assert.equal(loaded,1);
+ }finally{h.dispose();fs.rmSync(home,{recursive:true,force:true});}
+});

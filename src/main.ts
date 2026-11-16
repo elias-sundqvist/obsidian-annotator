@@ -74,6 +74,7 @@ import {
     installPlace,
     installState,
     uninstall,
+    type InstallFiles,
     type InstallPlace,
     type InstallState,
     type InstallTools
@@ -8199,15 +8200,19 @@ export default class AnnotatorPlugin extends Plugin {
         ).process;
         return installPlace(host?.platform || '', host?.env || {});
     }
+    /** The file system, as the settings look at whether the app is there. Replaceable (tests). */
+    openWithFiles(): InstallFiles {
+        return this.desktopFileSystem();
+    }
     /**
      * What the Install and Uninstall buttons work with: the file system, and Node's `execFile` (no shell; a program by
-     * its path and a list of arguments). Loaded only when a button is pressed or the settings look. Replaceable (tests).
+     * its path and a list of arguments), loaded only when a button is pressed. Replaceable (tests).
      */
     openWithTools(): InstallTools {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const { execFile } = require('child_process') as typeof import('node:child_process');
         return {
-            files: this.desktopFileSystem(),
+            files: this.openWithFiles(),
             run: (program, args) =>
                 new Promise((resolve, reject) => {
                     execFile(
@@ -8229,7 +8234,7 @@ export default class AnnotatorPlugin extends Plugin {
         const place = this.openWithPlace(),
             key = this.openDeviceState().key;
         if (!place) return null;
-        return installState(place, { vault: this.openVaultName(), key: key || '' }, this.openWithTools());
+        return installState(place, { vault: this.openVaultName(), key: key || '' }, this.openWithFiles());
     }
     /** Install: what the recipe for this computer does, for this vault and key (made first if there is none). */
     async installOpenWith(): Promise<void> {

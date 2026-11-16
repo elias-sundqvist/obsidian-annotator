@@ -320,14 +320,15 @@ export const LSREGISTER =
 export function macRecipe(values: RecipeValues): string {
     return [
         `APP="$HOME/Applications/${OPEN_WITH_NAME}.app"`,
-        'mkdir -p "$HOME/Applications" && rm -rf "$APP" && osacompile -o "$APP" <<\'ANNOTATOR\'',
+        'mkdir -p -m 700 "$HOME/Applications" && rm -rf "$APP" && osacompile -o "$APP" <<\'ANNOTATOR\'',
         ...macScript(values),
         'ANNOTATOR',
         'P="$APP/Contents/Info.plist"',
         `plutil -replace CFBundleIdentifier -string ${MAC_BUNDLE_ID} "$P"`,
         `plutil -replace CFBundleDocumentTypes -json '${macDocumentTypes()}' "$P"`,
         `plutil -replace ${MAC_MARK_KEY} -string ${openWithMark(values)} "$P"`,
-        `codesign --force --sign - "$APP" && ${LSREGISTER} -f "$APP"`,
+        // The app holds this computer's key: no other account on the Mac may read it.
+        `codesign --force --sign - "$APP" && chmod -R go-rwx "$APP" && ${LSREGISTER} -f "$APP"`,
         ''
     ].join('\n');
 }
@@ -345,11 +346,13 @@ export const SHELL_ENCODER = [
     '}'
 ].join('\n');
 
+/** The words of the Linux script's second line, by which a script there is known to be one Install or a recipe wrote. */
+export const LINUX_SCRIPT_MARK = 'to Annotator in Obsidian. It makes one address for each file and does nothing else.';
 /** Linux: the script the desktop entry runs. It makes one address for each file and does nothing else. */
 export function linuxScript(values: RecipeValues): string {
     return [
         '#!/bin/sh',
-        '# Hands a PDF or a book to Annotator in Obsidian. It makes one address for each file and does nothing else.',
+        `# Hands a PDF or a book ${LINUX_SCRIPT_MARK}`,
         SHELL_ENCODER,
         'for f in "$@"; do',
         '\tcase "$f" in /*) ;; *) f="$PWD/$f" ;; esac',
@@ -380,9 +383,10 @@ export function linuxDesktopEntry(script: string): string {
 export function linuxRecipe(values: RecipeValues): string {
     return [
         'mkdir -p "$HOME/.local/bin" "$HOME/.local/share/applications"',
+        // The script holds this computer's key: it is made this account's alone before the key is written into it.
+        ': > "$HOME/.local/bin/open-with-annotator" && chmod 700 "$HOME/.local/bin/open-with-annotator"',
         'cat > "$HOME/.local/bin/open-with-annotator" <<\'ANNOTATOR\'',
         linuxScript(values) + 'ANNOTATOR',
-        'chmod +x "$HOME/.local/bin/open-with-annotator"',
         'cat > "$HOME/.local/share/applications/open-with-annotator.desktop" <<ANNOTATOR',
         linuxDesktopEntry('$HOME/.local/bin/open-with-annotator') + 'ANNOTATOR',
         'update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true',

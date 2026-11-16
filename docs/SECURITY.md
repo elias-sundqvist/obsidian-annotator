@@ -274,9 +274,10 @@ program. Besides this, programs are run only by Install and Uninstall for
   followed yet (or the file it was followed to is gone), and only after a
   dialog that says so. The dialog says when DEVONthink is not running and
   asking will start it. A yes holds until Obsidian is closed and is not
-  stored. The module that runs programs is loaded only then; on a phone, a
-  tablet, Windows or Linux it is never loaded, and such a link says it is
-  followed on a Mac only.
+  stored. For DEVONthink the module that runs programs is loaded only then
+  (the only other time is a press of Install or Uninstall, below); on a
+  phone or a tablet it is never loaded, and on Windows or Linux such a link
+  says it is followed on a Mac only.
 - **What macOS asks.** The first time, macOS asks whether Obsidian may
   control DEVONthink. Refused (error -1743), the reader says where to allow
   it (System Settings, Privacy & Security, Automation). The plugin does not
@@ -303,10 +304,11 @@ the plugin runs a program (the first is DEVONthink, above).
   arguments, on the reader's press, and the README and this page say what
   each does.
 - **When.** Only on a press of Install or Uninstall, on a computer. Nothing
-  is run at start, when the settings are shown (they read files to say
-  whether it is installed), or when a file is opened. The module that runs
-  programs (`child_process`) is loaded only then; on a phone or tablet it
-  never is.
+  is run at start, when the settings are shown, or when a file is opened.
+  To say whether the app is installed, the settings read its files through
+  the file system alone (`openWithFiles`); the module that runs programs
+  (`child_process`) is loaded only by the press (`openWithTools`). On a
+  phone or tablet it never is.
 - **What is run.** Through Node's `execFile`: no shell, and the arguments
   are a list, so no path, name or value is read as a command, and nothing
   from a note, a file or an address is in them. Only the vault's ID, the key
@@ -315,8 +317,9 @@ the plugin runs a program (the first is DEVONthink, above).
   - macOS: `/usr/bin/osacompile` (the app's AppleScript, a constant with the
     address in a string, each line one `-e` argument), `/usr/bin/plutil`
     three times (its identifier, its document types as JSON made by the
-    plugin, the digest of its address), `/usr/bin/codesign --force --sign -`
-    and `lsregister -f` by its full path; on Uninstall `lsregister -u`.
+    plugin, the digest of its address), `/usr/bin/codesign --force --sign -`,
+    `/bin/chmod -R go-rwx` on the app, and `lsregister -f` by its full path;
+    on Uninstall `lsregister -u`.
   - Windows: `%SystemRoot%\System32\reg.exe` with `add` (and on Uninstall
     `delete`) for the program's own key and its one entry in each
     extension's list under `HKEY_CURRENT_USER\Software\Classes`, and `query`
@@ -338,6 +341,31 @@ the plugin runs a program (the first is DEVONthink, above).
   Windows folder that is not on a drive or holds `"` or `%`; on Linux a home
   folder with characters a desktop entry would read as its own) are refused,
   and only the recipe is offered.
+- **Nothing is written over or deleted that this app did not make.** Before
+  either button writes or deletes, it looks at what is there without
+  following a link: on a Mac the app must be a folder (not a link) with this
+  app's identifier; on Linux the script must hold the line that says what it
+  does and the desktop entry its `Exec=` line for that script; on Windows
+  the folder must not be a link, `open.ps1` must be this app's one line and
+  `made-keys.txt` a list of its extensions. Anything else (a link, a folder,
+  another program's file) stops the button with a message, and nothing is
+  changed. Uninstall on Windows deletes only those two files, then the
+  folder if nothing else is in it.
+- **Built whole, then moved into place (macOS).** The app is made in a
+  hidden folder of its own beside where it goes, and renamed into place
+  only once it is signed; the app it replaces is put back if that fails. An
+  Install that stops halfway leaves the app that was there, or none, never
+  one without its identifier, which later presses would refuse.
+- **Other accounts on the computer cannot read the key.** The app and the
+  script carry the key. On a Mac the app is made readable by this account
+  alone (`chmod -R go-rwx`, after signing; the signature does not cover who
+  may read the files, and still verifies), and the Applications folder of
+  the home folder, when Install makes it, is made `0700`: a Mac's home
+  folder is open to the `staff` group, so other accounts could otherwise
+  read the app's script. On Linux the script is written `0700` (a script an
+  older recipe wrote `0755` is closed before the key is written into it).
+  The recipes do the same. On Windows the script is in `%LOCALAPPDATA%`,
+  which only the account can read.
 - **What it makes.** A program that, for each file it is given, opens one
   `obsidian://annotator-open` address with the file's path encoded, and
   does nothing else; it is registered as a second choice for PDFs and books,
