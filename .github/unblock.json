@@ -1585,11 +1585,11 @@
     {
       "id": "editable-embeds",
       "title": "Embedded PDFs: more editable",
-      "status": "doing",
+      "status": "done",
       "parent": "community",
       "dependsOn": [],
       "estimate": 3,
-      "notes": "Owner, 2026-11-16 (issue 92): embeds show highlights and open them on click; make embeds more editable (making highlights, areas, notes in an embedded PDF)."
+      "notes": "Owner, 2026-11-16 (issue 92): embeds show highlights and open them on click; make embeds more editable (making highlights, areas, notes in an embedded PDF).\n\nDone 2026-11-16: On next: Annotate in embedded PDFs (selection bar, highlight menu, area commands in embeds and on Canvas); tried live"
     }
   ]
 }
