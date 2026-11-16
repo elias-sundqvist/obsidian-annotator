@@ -1630,6 +1630,14 @@
       "parent": "community",
       "dependsOn": [],
       "notes": "next has, since 0.3.3: the saved notice, the Kindle footer, the footer counting only seen chapters, and approvedSources keeping 0.3.2's meaning (place: for read-in-place yeses, so 0.3.2 devices never take them as a yes to download into the vault). Publishing needs the owner's go."
+    },
+    {
+      "id": "scroll-layout-reading-down-a-lon",
+      "title": "Scroll layout: reading down a long chapter jumped back to its start",
+      "status": "done",
+      "parent": "community",
+      "dependsOn": [],
+      "notes": "Found 2026-11-16 by the live check of 0.3.4; present since 0.3.0. Fixed on next (keepPlace/placeOf in src/epub.ts), checked live with real wheel, flicks, scrollbar drags, vertical-rl and resize.\n\nDone 2026-11-16: Fixed on next, goes out with 0.3.4"
     }
   ]
 }
