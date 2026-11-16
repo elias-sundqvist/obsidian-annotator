@@ -1545,6 +1545,51 @@
       "dependsOn": [],
       "estimate": 5,
       "notes": "Owner's decision 2026-11-15: MOBI is to be supported. MOBI/AZW3 are PalmDB containers with (often compressed) HTML; DRM-protected files cannot be read. Calibre links already choose an EPUB or PDF over MOBI.\n\nDone 2026-11-16: Built 2026-11-15/16 by a subagent on feature/mobi-books, fast-forwarded into next (not released). MOBI 6, AZW3/KF8 and combined files without DRM open in the book reader (PalmDOC and HUFF/CDIC, KF8 skeleton/fragments, fonts, pictures, contents); DRM refused. Checked against real Calibre 9.18 conversions (Alice, three forms; 4 small fixtures in the repo) and in Obsidian 1.15.1: cover shown, chapters walked in order, contents and links land, find, highlight saved and restored. Limits: very short chapters in scroll mode (as EPUB), Calibre's CSS partly omitted."
+    },
+    {
+      "id": "zotero-calibre-in-place",
+      "title": "Zotero and Calibre as the reference library: read in place, no copy",
+      "status": "todo",
+      "parent": "community",
+      "dependsOn": [],
+      "estimate": 8,
+      "notes": "Owner, 2026-11-16 (replies to issues 22 and 78): Zotero must be able to be the reference library for people who want it, without copying the file into the vault; the same for Calibre links. Part of reading external sources in place (issue 417's question too). The held replies for 22 and 78 wait on this."
+    },
+    {
+      "id": "archive-org-links",
+      "title": "archive.org item links just work as a target",
+      "status": "todo",
+      "parent": "community",
+      "dependsOn": [],
+      "estimate": 2,
+      "notes": "Owner, 2026-11-16 (issue 62): an archive.org link (the item page, archive.org/details/ID) as annotation-target should just work: find the item's freely downloadable PDF or EPUB through archive.org's metadata, say clearly when a book is lending-only. The reply to 62 waits on this."
+    },
+    {
+      "id": "visible-pdf-export",
+      "title": "PDF export with the annotations drawn into the pages",
+      "status": "todo",
+      "parent": "community",
+      "dependsOn": [],
+      "estimate": 3,
+      "notes": "Owner, 2026-11-16 (issue 157): a PDF export that makes the annotations visible in the page itself (flattened), so a published website showing the PDF shows them; then the reply offers two routes (summary note, or this PDF). The reply to 157 waits on this."
+    },
+    {
+      "id": "default-target-property",
+      "title": "Choose the property new notes are written with",
+      "status": "todo",
+      "parent": "community",
+      "dependsOn": [],
+      "estimate": 2,
+      "notes": "Owner, 2026-11-16 (issue 299): besides reading a second property, let the reader choose the property new annotation notes are written with, so people who name it differently don't have to rename by hand. The reply to 299 waits on this."
+    },
+    {
+      "id": "editable-embeds",
+      "title": "Embedded PDFs: more editable",
+      "status": "todo",
+      "parent": "community",
+      "dependsOn": [],
+      "estimate": 3,
+      "notes": "Owner, 2026-11-16 (issue 92): embeds show highlights and open them on click; make embeds more editable (making highlights, areas, notes in an embedded PDF)."
     }
   ]
 }
