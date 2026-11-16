@@ -16,6 +16,10 @@ What changed for someone using Annotator. How to use each thing is in
   are not shown on screen, and are no longer counted. When something that
   changes how a chapter looks is left out, the status line now says "Some of
   the book's styling is not shown".
+- A book's status line says that content or styling is left out only for a
+  chapter you can see. It said so on an ordinary chapter while a Project
+  Gutenberg header or licence, kept ready just above or below, was out of
+  view; it now changes as you scroll one into view or out of it.
 
 ## 0.3.3 (2026-11-16)
 

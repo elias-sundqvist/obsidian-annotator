@@ -177,6 +177,31 @@ test('the status line says some of the book\'s styling is not shown only for sty
  await h.view.showChapter(3);assert.ok(h.view.mounts.get(3).styles.omitted>0);assert.equal(status(),`4 / 6 · c3.xhtml · ${STYLING_NOT_SHOWN}`);
  }finally{h.dispose();}
 });
+test('the status line counts only the chapters that can be seen: not those kept mounted above or below the view, scrolling or paged',async()=>{
+ const h=await host(1);
+ try{
+ const status=()=>h.view.statusEl.textContent,style=(index,css)=>{const doc=h.view.resolver.sections[index].root.ownerDocument,el=doc.createElement('style');el.textContent=css;doc.head.append(el);},frame=()=>new Promise(resolve=>h.w.requestAnimationFrame(resolve));
+ // Like the Project Gutenberg header and licence around an ordinary chapter.
+ style(0,'p{all:inherit}');style(2,'p{all:inherit}');
+ await h.view.showChapter(1);for(let i=0;i<3;i++)await frame();await h.view.windowing;
+ assert.deepEqual([...h.view.mounts.keys()],[0,1,2]);assert.ok(h.view.mounts.get(0).styles.omitted>0&&h.view.mounts.get(2).styles.omitted>0);assert.equal(h.view.mounts.get(1).styles.omitted,0);
+ assert.equal(h.root(0).getBoundingClientRect().bottom,0);assert.equal(h.root(2).getBoundingClientRect().top,250);
+ assert.equal(status(),'2 / 6 · c1.xhtml');
+ let updates=0;const update=h.view.updateStatus.bind(h.view);h.view.updateStatus=()=>{updates++;update();};
+ const scroll=to=>{h.viewport.scrollTop=to;h.view.updateCurrentChapter();};
+ scroll(260);scroll(270);assert.equal(updates,0,'a scroll that brings nothing into view or out of it does not rewrite the status line');
+ scroll(420);assert.equal(h.view.chapter,1);assert.equal(status(),`2 / 6 · c1.xhtml · ${STYLING_NOT_SHOWN}`,'the next chapter has come into view below, though it is not yet named');assert.equal(updates,1);
+ scroll(430);assert.equal(updates,1);
+ scroll(250);assert.equal(status(),'2 / 6 · c1.xhtml');
+ scroll(190);assert.equal(h.view.chapter,0);assert.equal(status(),`1 / 6 · c0.xhtml · ${STYLING_NOT_SHOWN}`,'the end of the chapter above is in view');
+ scroll(250);assert.equal(h.view.chapter,1);assert.equal(status(),'2 / 6 · c1.xhtml');
+ h.view.updateStatus=update;
+ h.preferences.readingMode='pagination';h.view.applyPreferences();for(let i=0;i<3;i++)await frame();
+ assert.equal(h.view.renderedMode,'pagination');assert.equal(h.view.chapter,1);assert.equal(status(),'2 / 6 · c1.xhtml');
+ await h.view.showChapter(2);assert.equal(status(),`3 / 6 · c2.xhtml · ${STYLING_NOT_SHOWN}`);
+ await h.view.showChapter(3);assert.equal(status(),'4 / 6 · c3.xhtml');
+ }finally{h.dispose();}
+});
 
 test('pane resize refreshes conditional publisher styles without replacing selection or original capture identity',async()=>{
  const h=await host(0);try{

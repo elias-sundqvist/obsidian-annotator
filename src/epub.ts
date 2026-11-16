@@ -1080,18 +1080,20 @@ export class EpubView extends FileView {
             if (control.parentElement) control.parentElement.hidden = !titles.length;
             control.value = this.publisherStyle && titles.includes(this.publisherStyle) ? this.publisherStyle : '';
         }
-        const omitted = [...this.mounts.values()].some(mount => mount.projection.removed);
-        const stylesOmitted = [...this.mounts.values()].some(mount => mount.styles?.omitted);
+        const view = this.inView(),
+            shown = view.shown;
         this.updateProgress();
-        const shown = this.shownChapter();
         this.shownIndex = shown;
+        this.shownNotes = view.notes;
         this.select.value = String(shown);
         this.statusEl.setText(
-            `${shown + 1} / ${this.book.chapters.length} · ${this.book.chapters[shown].title}${omitted ? ' · Active/unsupported book content omitted' : ''}${stylesOmitted ? ` · ${STYLING_NOT_SHOWN}` : ''}`
+            `${shown + 1} / ${this.book.chapters.length} · ${this.book.chapters[shown].title}${view.omitted ? ' · Active/unsupported book content omitted' : ''}${view.stylesOmitted ? ` · ${STYLING_NOT_SHOWN}` : ''}`
         );
     }
     /** The chapter last named in the header and the status line. */
     private shownIndex = -1;
+    /** What the status line last said was left out of the chapters in view (see inView). */
+    private shownNotes = '';
     /**
      * The chapter the reader is in, as the header, the status line and the contents name it. Scrolling, it is the
      * chapter that has begun by a third of the way down the view, so that a chapter that fills the view is named
@@ -1099,31 +1101,51 @@ export class EpubView extends FileView {
      * view, which may be that end: `this.chapter`.)
      */
     private shownChapter(): number {
-        if (this.renderedMode !== 'scroll' || this.restoring || !this.hasVisibleLayout()) return this.chapter;
-        const bounds = this.scrollport(),
-            axis = this.readingAxis(),
-            line = axis.start(bounds) + axis.size(this.viewport) / 3;
-        let shown = this.chapter;
-        for (const [index, mount] of [...this.mounts].sort(([a], [b]) => a - b)) {
-            const rect = mount.root.getBoundingClientRect();
-            if (index > this.chapter && axis.start(rect) <= line && axis.end(rect) > axis.start(bounds) + 1)
-                shown = index;
+        return this.inView().shown;
+    }
+    /**
+     * What the reading area shows, measured once: the first chapter any of which is in view, the chapter it names
+     * (see shownChapter), and whether a chapter that can be seen has book content or styling left out. Scrolling,
+     * chapters are kept mounted a screen or two beyond the view, ready; those are not in view and do not count. Until
+     * the layout can be measured (a hidden pane, a chapter being opened) only the reading position's chapter counts.
+     * Paged, only the page or spread shown is mounted, so every mounted chapter counts.
+     */
+    private inView() {
+        const mounts = [...this.mounts].sort(([a], [b]) => a - b);
+        let first: number | undefined,
+            shown = this.chapter,
+            seen = mounts;
+        if (this.renderedMode === 'scroll') {
+            if (this.restoring || !this.hasVisibleLayout()) seen = mounts.filter(([index]) => index === this.chapter);
+            else {
+                const bounds = this.scrollport(),
+                    axis = this.readingAxis(),
+                    line = axis.start(bounds) + axis.size(this.viewport) / 3;
+                seen = [];
+                for (const entry of mounts) {
+                    const [index, mount] = entry,
+                        rect = mount.root.getBoundingClientRect();
+                    if (axis.end(rect) > axis.start(bounds) + 1 && axis.start(rect) < axis.end(bounds)) {
+                        seen.push(entry);
+                        if (first === undefined) first = index;
+                    }
+                    if (index > this.chapter && axis.start(rect) <= line && axis.end(rect) > axis.start(bounds) + 1)
+                        shown = index;
+                }
+            }
         }
-        return shown;
+        const omitted = seen.some(([, mount]) => mount.projection.removed),
+            stylesOmitted = seen.some(([, mount]) => mount.styles?.omitted);
+        return { first, shown, omitted, stylesOmitted, notes: `${omitted}/${stylesOmitted}` };
     }
     private updateCurrentChapter() {
         if (this.renderedMode !== 'scroll' || !this.hasVisibleLayout() || this.restoring) return;
-        const bounds = this.scrollport(),
-            axis = this.readingAxis();
-        const visible = [...this.mounts]
-            .sort(([a], [b]) => a - b)
-            .find(([, mount]) => {
-                const rect = mount.root.getBoundingClientRect();
-                return axis.end(rect) > axis.start(bounds) + 1 && axis.start(rect) < axis.end(bounds);
-            });
-        if (visible && visible[0] !== this.chapter) {
-            this.chapter = visible[0];
-            this.projection = visible[1].projection;
+        const view = this.inView(),
+            first = view.first,
+            visible = first === undefined ? undefined : this.mounts.get(first);
+        if (first !== undefined && visible && first !== this.chapter) {
+            this.chapter = first;
+            this.projection = visible.projection;
             if (this.chapterWritingMode() !== this.renderedWritingMode) {
                 const offset = this.visibleOffset();
                 this.layout();
@@ -1131,10 +1153,13 @@ export class EpubView extends FileView {
             }
             this.updateStatus();
             this.callbacks.changed();
-        } else if (this.book && this.shownChapter() !== this.shownIndex) {
+        } else if (this.book && view.shown !== this.shownIndex) {
             // The next chapter has come to fill the view: named, though the reading position is still in this one.
             this.updateStatus();
             this.callbacks.changed();
+        } else if (this.book && view.notes !== this.shownNotes) {
+            // A chapter with something left out has come into view, or the last one has gone out of it.
+            this.updateStatus();
         }
     }
     private queueWindow() {
