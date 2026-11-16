@@ -1,0 +1,90 @@
+name: Something doesn't work
+description: A source that won't open, an annotation that is lost or misplaced, or anything else that goes wrong.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. Many problems go away after updating Obsidian (**Settings → General → Check for updates**) and Annotator (**Settings → Community plugins → Check for updates**). If it still happens, the questions below save a round of asking back and forth.
+
+        Please don't paste anything private: your notes, file paths with your name in them, or a sign-in to a site.
+  - type: input
+    id: annotator-version
+    attributes:
+      label: Annotator version
+      description: Settings → Community plugins, next to Annotator.
+      placeholder: "0.3.3"
+    validations:
+      required: true
+  - type: input
+    id: obsidian-version
+    attributes:
+      label: Obsidian version and installer version
+      description: Settings → General shows both, for example "1.15.1 (installer 1.13.7)".
+      placeholder: "1.15.1 (installer 1.13.7)"
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Device
+      options:
+        - macOS
+        - Windows
+        - Linux
+        - Android phone or tablet
+        - iPhone or iPad
+        - ChromeOS
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: source
+    attributes:
+      label: What were you reading?
+      multiple: true
+      options:
+        - A PDF in the vault
+        - A PDF outside the vault (a path, Zotero, Calibre, DEVONthink)
+        - A PDF on the web
+        - An EPUB, FB2/FB3 or Kindle book
+        - A web page
+        - A video
+        - A PDF embedded in a note or on a Canvas
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to make it happen
+      description: Starting from opening the note or the file. A small PDF or book that shows it (one you're free to share) helps a lot.
+      placeholder: |
+        1.
+        2.
+        3.
+  - type: textarea
+    id: note
+    attributes:
+      label: The note's properties
+      description: The lines between the `---` at the top of the annotation note (`annotation-target` and the others). Leave out anything private.
+      render: yaml
+  - type: textarea
+    id: console
+    attributes:
+      label: Errors in the console (optional)
+      description: On a computer, **View → Toggle Developer Tools → Console** shows errors in red. Copy the ones that mention Annotator.
+      render: text
+  - type: checkboxes
+    id: updated
+    attributes:
+      label: Checked
+      options:
+        - label: I'm on the latest Obsidian and the latest Annotator.
+          required: false

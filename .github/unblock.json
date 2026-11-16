@@ -1606,6 +1606,14 @@
       "parent": "community",
       "dependsOn": [],
       "notes": "Seen while recording 0.3.3: a Calibre-made AZW3 shows 'Unsupported publisher styling omitted' in its footer throughout. Find what is omitted; show it less, or support it."
+    },
+    {
+      "id": "issue-templates-a-bug-form-and-a",
+      "title": "Issue templates: a bug form and an idea form",
+      "status": "done",
+      "parent": "community",
+      "dependsOn": [],
+      "notes": "GitHub issue 209 (2022): the bug form asks for the Annotator, Obsidian and installer versions, the device, the kind of source, steps, the note's properties and console errors; an idea form; and a link to the README. Templates are files in .github/ISSUE_TEMPLATE, not a setting.\n\nDone 2026-11-16: Built 2026-11-16: bug_report.yml, feature_request.yml, config.yml; take effect when on master"
     }
   ]
 }

@@ -1,0 +1,22 @@
+name: An idea or a request
+description: Something Annotator could do, or do better.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What would you like to do?
+      description: Describe what you're trying to get done, not only the feature you have in mind. There may be a way already, or a better one.
+    validations:
+      required: true
+  - type: textarea
+    id: now
+    attributes:
+      label: How do you do it today?
+      description: A workaround, another app, or not at all.
+  - type: input
+    id: annotator-version
+    attributes:
+      label: Annotator version
+      description: Settings → Community plugins, next to Annotator.
+      placeholder: "0.3.3"

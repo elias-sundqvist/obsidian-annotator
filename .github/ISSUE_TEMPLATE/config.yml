@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: How to use Annotator
+    url: https://github.com/elias-sundqvist/obsidian-annotator#readme
+    about: The README explains every feature, and its "Limits to know about" section lists what doesn't work yet.
