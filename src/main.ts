@@ -10107,7 +10107,7 @@ class NativeSettings extends PluginSettingTab {
                 : Platform.isWin
                   ? {
                         words: windowsRecipe(values),
-                        how: 'Paste this into a PowerShell window. It adds \u201cOpen with Annotator\u201d for PDFs and books, for your account only. Then right-click a PDF, choose Open with \u2192 Choose another app, and pick it. A window flashes each time; Obsidian\u2019s own \u201cOpen with\u201d entry is the quieter way.'
+                        how: 'Paste this into a PowerShell window. It adds \u201cOpen with Annotator\u201d for PDFs and books, for your account only. Then right-click a PDF, choose Open with \u2192 Choose another app, and pick it. The same for a book.'
                     }
                   : {
                         words: linuxRecipe(values),

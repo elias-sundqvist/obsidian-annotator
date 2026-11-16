@@ -289,20 +289,44 @@ export function linuxRecipe(values: RecipeValues): string {
     ].join('\n');
 }
 
+/** The name Windows shows for the Windows recipe's program under "Open with". */
+export const WINDOWS_NAME = 'Open with Annotator';
+
 /**
  * Windows: pasted into a PowerShell window, this writes a one-line script and tells Windows, for this user only, that
  * "Open with Annotator" opens PDFs and EPUBs.
+ *
+ * The script runs in a console that has no window (`conhost.exe --headless`, in Windows 10 since 1809 and in Windows 11).
+ * PowerShell's own `-WindowStyle Hidden` hides nothing where Windows Terminal is the default terminal, as it is on
+ * Windows 11: the console is handed to a Terminal window, which stays open as long as PowerShell runs. A Windows Script
+ * Host launcher (a .vbs or .js) was not chosen: App Control, which Smart App Control is, blocks such a script outright
+ * where it lets a PowerShell script run in constrained language (the script's one line works there), VBScript is being
+ * withdrawn from Windows, and a script host starting a hidden PowerShell is what security software looks for.
  */
 export function windowsRecipe(values: RecipeValues): string {
     return [
         '$dir = "$env:LOCALAPPDATA\\OpenWithAnnotator"',
         'New-Item -ItemType Directory -Force $dir | Out-Null',
         `Set-Content "$dir\\open.ps1" 'param([string]$f) Start-Process ("${sourceAddress(values)}" + [uri]::EscapeDataString($f))'`,
-        '$cmd = \'powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "\' + "$dir\\open.ps1" + \'" "%1"\'',
+        '$sys = "$env:SystemRoot\\System32"',
+        '$cmd = \'"\' + "$sys\\conhost.exe" + \'" --headless "\' + "$sys\\WindowsPowerShell\\v1.0\\powershell.exe" + \'" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "\' + "$dir\\open.ps1" + \'" "%1"\'',
         '$id = "HKCU:\\Software\\Classes\\Annotator.OpenWith"',
         'New-Item -Force "$id\\shell\\open\\command" | Out-Null',
-        'Set-ItemProperty $id "(default)" "Open with Annotator"',
+        'New-Item -Force "$id\\Application" | Out-Null',
+        `Set-ItemProperty $id "(default)" "${WINDOWS_NAME}"`,
+        // Explorer names a program by FriendlyAppName; without it, by the program the command starts.
+        `Set-ItemProperty "$id\\shell\\open" "FriendlyAppName" "${WINDOWS_NAME}"`,
+        `Set-ItemProperty "$id\\Application" "ApplicationName" "${WINDOWS_NAME}"`,
         'Set-ItemProperty "$id\\shell\\open\\command" "(default)" $cmd',
+        // Obsidian's icon, from where Windows finds Obsidian for its addresses: ApplicationIcon in the list under "Open
+        // with", DefaultIcon on the files it opens. Without it, the console's.
+        '$o = (Get-ItemProperty "Registry::HKEY_CLASSES_ROOT\\obsidian\\shell\\open\\command" -ErrorAction SilentlyContinue)."(default)"',
+        'if ($o -match \'^"([^"]+\\.exe)"\' -and (Test-Path -LiteralPath $Matches[1])) {',
+        "    $icon = '\"' + $Matches[1] + '\",0'",
+        '    Set-ItemProperty "$id\\Application" "ApplicationIcon" $icon',
+        '    New-Item -Force "$id\\DefaultIcon" | Out-Null',
+        '    Set-ItemProperty "$id\\DefaultIcon" "(default)" $icon',
+        '}',
         // An extension's list of programs is shared with every other app: it is made only when missing (in Windows
         // PowerShell, New-Item -Force on a key that exists empties it), and only our one entry is added to it.
         'foreach ($e in ".pdf", ".epub") {',

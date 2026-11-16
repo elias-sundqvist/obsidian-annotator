@@ -83,13 +83,28 @@ Paste the recipe into a PowerShell window. It:
 1. writes a one-line script, `open.ps1`, into
    `%LOCALAPPDATA%\OpenWithAnnotator`;
 2. adds, for your account only (`HKEY_CURRENT_USER\Software\Classes`), a
-   program "Open with Annotator" that runs that script, and offers it under
-   "Open with" for `.pdf` and `.epub`.
+   program "Open with Annotator", `Annotator.OpenWith`, that runs that
+   script, with Obsidian's icon if Windows knows where Obsidian is;
+3. offers it under "Open with" for `.pdf` and `.epub`, beside the programs
+   already there. It does not change the default (but if the app chosen for
+   a type has since been uninstalled, Windows may put it first).
 
 Then right-click a PDF, choose Open with → Choose another app, and pick
-"Open with Annotator" (it may show as Windows PowerShell). A window flashes
-each time it runs, and Smart App Control, where it is on, may stop scripts;
-Obsidian's own "Open with" is the quieter way on Windows.
+"Open with Annotator". Do the same for a book.
+
+The script runs in a console with no window (`conhost.exe --headless`, part
+of Windows 10 since version 1809 and of Windows 11), so no window opens.
+PowerShell's own `-WindowStyle Hidden` is not enough: where Windows Terminal
+is the default terminal, as it is on Windows 11, a Terminal window would
+stay open while PowerShell runs. PowerShell can take several seconds to
+start, so Obsidian may take a moment to show the file.
+
+Smart App Control, where it is on, is a policy of Windows' App Control. App
+Control lets a PowerShell script it does not know run in PowerShell's
+constrained language, and the script's one line works there; but this has
+not been tried with Smart App Control on. A VBScript or JScript it does not
+know, App Control blocks outright, which is one reason the recipe has no such
+launcher. Obsidian's own "Open with" needs no script at all.
 
 To take it away, in PowerShell:
 
@@ -98,6 +113,11 @@ Remove-Item -Recurse "HKCU:\Software\Classes\Annotator.OpenWith"
 foreach ($e in ".pdf", ".epub") { Remove-ItemProperty "HKCU:\Software\Classes\$e\OpenWithProgids" -Name "Annotator.OpenWith" }
 Remove-Item -Recurse "$env:LOCALAPPDATA\OpenWithAnnotator"
 ```
+
+The first line takes the program away with its name and icon; the second
+takes its entry, and only its entry, out of the lists of programs for
+`.pdf` and `.epub`; the third deletes the script. If a list was made by the
+recipe, it stays, empty, which changes nothing.
 
 ### Linux
 
@@ -189,16 +209,40 @@ A Shortcut can do both in one step. It has not been tried on a device yet:
 - Linux: the recipe and its script were run on macOS under `sh`, `dash` and
   `bash`, with names holding quotes, `&`, `#`, `%` and accented letters. Not
   yet on a Linux desktop.
-- Windows: the recipe was run in Windows PowerShell 5.1 on Windows 11 Home,
-  with the file list of `.pdf` already holding another app's entry. It adds
-  "Open with Annotator" beside that entry and leaves it as it was, and the
-  removal steps above give the list back exactly. (An earlier recipe made
-  the list with `New-Item -Force`, which in Windows PowerShell empties a key
-  that exists: it would have taken the other app's entry away.) The address
-  it makes for a path with spaces, `&`, `#`, `%`, accents or Chinese is the
-  one the reader decodes. Not yet tried: choosing it in Explorer's Open with
-  (it needs someone at the screen), Smart App Control, and Obsidian's own
-  Open with on Windows, which needs an installer from 1.14.4.
+- Windows: the recipe was run in Windows PowerShell 5.1 on a Windows 11
+  Home laptop, with the file list of `.pdf` already holding another app's
+  entry. It adds "Open with Annotator" beside that entry and leaves it as it
+  was, and the removal steps above give the lists back exactly. (An earlier
+  recipe made the list with `New-Item -Force`, which in Windows PowerShell
+  empties a key that exists: it would have taken the other app's entry
+  away.)
+  - With Annotator 0.3.4 and Obsidian 1.13.6, someone at the screen chose
+    the recipe of 0.3.4 in Explorer's Open with: Explorer offered it for PDFs
+    and books, as recommended and not as the default; the address arrived
+    whole with `&` in the file's name, and the reader opened the copy, with
+    Obsidian running and with Obsidian closed. But Explorer listed it as
+    "Windows PowerShell", with PowerShell's icon, and a Windows Terminal
+    window stayed open 15 to over 60 seconds each time: `-WindowStyle
+    Hidden` hides nothing where Windows Terminal is the default terminal.
+  - The recipe now names the program (`FriendlyAppName`), gives it
+    Obsidian's icon (`ApplicationIcon`; `DefaultIcon` alone does not reach
+    the list), and runs the script in a console with no window. Run again on
+    the same laptop (Windows 11 25H2, Windows Terminal 1.25 as the default
+    terminal), Windows' own list of programs for `.pdf` and `.epub`, the one
+    Explorer's Open with shows, names it "Open with Annotator" with
+    Obsidian's icon, as recommended, and the defaults are unchanged. The
+    command it registers was started as Explorer starts it, for three files
+    with spaces, `&`, `#`, `%`, `'`, `$`, brackets, accents and Chinese in
+    their names and folder: no window appeared in the 23 seconds until the
+    last of them ended, where the old command, started the same way, opened
+    a Terminal window. Its script, made to write its address to a file
+    instead of opening it, wrote for each file the address the reader
+    decodes to that file. Obsidian was not started.
+  - Not yet tried: choosing the new recipe in Explorer's dialog itself
+    (Explorer's own dialog cannot be read from a remote shell), Smart App
+    Control (it was off; the script's line was run in PowerShell's
+    constrained language, where it works), Windows 10, and Obsidian's own
+    Open with on Windows, which needs an installer from 1.14.4.
 - Android: tried on the Android 16 emulator with Obsidian 1.14.4. A PDF
   shared from the Files app to Obsidian, then **Import into vault**, shows
   **Open in Annotator** in Obsidian's menu after the import, and it opens

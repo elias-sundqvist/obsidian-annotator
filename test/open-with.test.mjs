@@ -6,7 +6,7 @@ import {promisify} from 'node:util';
 import {existsSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {OPEN_ACTION,OPEN_QUEUE,KEYLESS,openRequest,vaultFile,sameKey,newKey,openDevice,folderOf,noteTitle,shownPath,OpenQueue,addressValue,fileAddress,sourceAddress,macRecipe,linuxRecipe,windowsRecipe} from './.generated/readers/open-with.js';
+import {OPEN_ACTION,OPEN_QUEUE,KEYLESS,openRequest,vaultFile,sameKey,newKey,openDevice,folderOf,noteTitle,shownPath,OpenQueue,addressValue,fileAddress,sourceAddress,macRecipe,linuxRecipe,windowsRecipe,WINDOWS_NAME} from './.generated/readers/open-with.js';
 const run=promisify(execFile);
 const KEY='abcdefghijklmnopqrstuvwx',desk={mobile:false,key:KEY},phone={mobile:true,key:KEY};
 const char=code=>String.fromCharCode(code);
@@ -115,6 +115,36 @@ test('recipes carry the vault and the key as text no script reads as its own',()
  // (seen on Windows 11), so the list is made only when it is missing, and the recipe never forces a key it does not own.
  {const lines=windowsRecipe(values).split('\n');assert.ok(lines.some(line=>/if \(-not \(Test-Path \$k\)\) \{ New-Item -Force \$k/.test(line)));
   for(const line of lines.filter(line=>/New-Item -Force/.test(line)))assert.ok(/\$id\\|\$dir|Test-Path/.test(line),line);}assert.doesNotMatch(windowsRecipe(values),/HKLM|HKEY_LOCAL_MACHINE/);
+});
+
+test('the Windows recipe starts its script with no window, names itself, and writes only where its removal steps reach',()=>{
+ const values={vault:'aaaa000000000001',key:KEY},recipe=windowsRecipe(values),lines=recipe.split('\n');
+ // PowerShell's -WindowStyle Hidden hides nothing where Windows Terminal is the default terminal (Windows 11): the script
+ // runs in a console with no window. Both programs by their full path, so no other program of the same name is started.
+ const command=lines.find(line=>line.startsWith('$cmd = '));assert.ok(command);
+ assert.equal(command,'$cmd = \'"\' + "$sys\\conhost.exe" + \'" --headless "\' + "$sys\\WindowsPowerShell\\v1.0\\powershell.exe" + \'" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "\' + "$dir\\open.ps1" + \'" "%1"\'');
+ assert.ok(lines.includes('$sys = "$env:SystemRoot\\System32"'));
+ // What PowerShell makes of it, for a Windows folder and a home folder: every path quoted, and the file last, as one argument.
+ const sys='C:\\WINDOWS\\System32',dir='C:\\Users\\A B & C\\AppData\\Local\\OpenWithAnnotator';
+ const evaluated=command.slice('$cmd = '.length).split(' + ').map(part=>part.startsWith('\'')?part.slice(1,-1):part.slice(1,-1).replace('$sys',sys).replace('$dir',dir)).join('');
+ assert.equal(evaluated,`"${sys}\\conhost.exe" --headless "${sys}\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "${dir}\\open.ps1" "%1"`);
+ // No Windows Script Host, HTML application or helper program: Smart App Control blocks scripts those run, and
+ // VBScript is being withdrawn from Windows.
+ assert.doesNotMatch(recipe,/wscript|cscript|mshta|\.vbs|\.js\b|rundll32|Add-Type/i);
+ // The script stays one line that opens one address.
+ const script=lines.find(line=>line.startsWith('Set-Content "$dir\\open.ps1" '));
+ assert.equal(script,`Set-Content "$dir\\open.ps1" 'param([string]$f) Start-Process ("${sourceAddress(values)}" + [uri]::EscapeDataString($f))'`);
+ // Explorer showed "Windows PowerShell" until FriendlyAppName was set; the list's icon comes from ApplicationIcon.
+ assert.equal(WINDOWS_NAME,'Open with Annotator');
+ for(const line of ['Set-ItemProperty $id "(default)" "Open with Annotator"','Set-ItemProperty "$id\\shell\\open" "FriendlyAppName" "Open with Annotator"','Set-ItemProperty "$id\\Application" "ApplicationName" "Open with Annotator"','    Set-ItemProperty "$id\\Application" "ApplicationIcon" $icon','    Set-ItemProperty "$id\\DefaultIcon" "(default)" $icon'])assert.ok(lines.includes(line),line);
+ // Obsidian's icon is taken from where Windows finds Obsidian for obsidian:// addresses, and only if that program is there.
+ assert.ok(lines.includes('if ($o -match \'^"([^"]+\\.exe)"\' -and (Test-Path -LiteralPath $Matches[1])) {'));
+ // Everything written is under the recipe's own folder, its own key, or an extension's list of programs; reading is all
+ // it does elsewhere. The removal steps in docs/OPEN_WITH.md take away $dir, $id and the one entry in each list.
+ const writes=lines.filter(line=>/\b(Set-Content|New-Item|Set-ItemProperty|New-ItemProperty|Remove-Item|Copy-Item|Move-Item|Out-File)\b/.test(line));
+ assert.equal(writes.length,13);
+ for(const line of writes)assert.match(line,/^\s*(?:if \(-not \(Test-Path \$k\)\) \{ )?(?:Set-Content "\$dir\\|New-Item -ItemType Directory -Force \$dir |New-Item -Force "\$id\\|Set-ItemProperty \$id |Set-ItemProperty "\$id\\|New-Item -Force \$k |New-ItemProperty -Force \$k -Name "Annotator\.OpenWith" )/,line);
+ assert.ok(lines.includes('$dir = "$env:LOCALAPPDATA\\OpenWithAnnotator"'));assert.ok(lines.includes('$id = "HKCU:\\Software\\Classes\\Annotator.OpenWith"'));assert.ok(lines.includes('    $k = "HKCU:\\Software\\Classes\\$e\\OpenWithProgids"'));
 });
 
 test('the Linux recipe, run in a scratch home folder, makes a handler that hands over each file as one address',{skip:process.platform==='win32'},async()=>{

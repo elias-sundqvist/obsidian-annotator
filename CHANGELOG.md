@@ -3,6 +3,17 @@
 What changed for someone using Annotator. How to use each thing is in
 [README.md](README.md).
 
+## Unreleased
+
+- The Windows recipe for "Open with Annotator" no longer leaves a window
+  open. On Windows 11, where Windows Terminal is the default terminal, a
+  Terminal window stayed open for up to a minute each time a file was
+  opened with it; the script now runs in a console with no window. Explorer
+  also lists it by its name, "Open with Annotator", with Obsidian's icon,
+  where it said "Windows PowerShell". Copy the recipe from the settings
+  again and paste it into PowerShell to have both; the steps to take it
+  away are the same.
+
 ## 0.3.4 (2026-11-16)
 
 - Reading a book in the Scroll layout, a long chapter after another long
