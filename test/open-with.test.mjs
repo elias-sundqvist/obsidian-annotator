@@ -7,7 +7,7 @@ import {existsSync} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {OPEN_ACTION,OPEN_QUEUE,KEYLESS,OPEN_ENDINGS,readerFile,openRequest,vaultFile,sameKey,newKey,openDevice,folderOf,noteTitle,shownPath,OpenQueue,addressValue,fileAddress,sourceAddress,macRecipe,macScript,macDocumentTypes,openWithMark,linuxRecipe,linuxScript,linuxDesktopEntry,windowsRecipe,windowsScript,windowsCommand,WINDOWS_NAME,WINDOWS_EXTENSIONS,MAC_CONTENT_TYPES,MAC_EXTENSIONS,LINUX_TYPES,LSREGISTER,OPEN_WITH_DEFAULT,OPEN_WITH_GONE} from './.generated/readers/open-with.js';
-import {installPlace,installState,install,uninstall,windowsWrites,windowsRemovals,InstallError} from './.generated/readers/open-with-install.js';
+import {installPlace,installState,install,uninstall,windowsWrites,windowsRemovals,onlyEmptyList,InstallError} from './.generated/readers/open-with-install.js';
 const run=promisify(execFile);
 const KEY='abcdefghijklmnopqrstuvwx',desk={mobile:false,key:KEY},phone={mobile:true,key:KEY};
 const char=code=>String.fromCharCode(code);
@@ -251,19 +251,31 @@ test('Install on a Mac runs the recipe\'s programs, by their full paths, with th
   const count=calls.length;await assert.rejects(install(place,values,tools),InstallError);await assert.rejects(uninstall(place,tools),InstallError);assert.equal(calls.length,count);assert.equal(existsSync(plist),true);assert.equal(await installState(place,values,tools),'none');
  }finally{await rm(home,{recursive:true,force:true});}
 });
-test('Install on Windows writes the script and asks reg.exe for exactly what the recipe writes, adding to an extension\'s list without emptying it',async()=>{
+test('Install on Windows writes the script and asks reg.exe for exactly what the recipe writes, adding to an extension\'s list without emptying it, and Uninstall takes back only that',async()=>{
  const local=await mkdtemp(path.join(os.tmpdir(),'annotator-install-win-'));
  try{
   // A Windows path is not a folder here: Node takes the joined name as one file name, which is enough to read back what was written.
   const place={system:'windows',folder:local+'\\OpenWithAnnotator',reg:'C:\\WINDOWS\\System32\\reg.exe',sys:'C:\\WINDOWS\\System32'},values={vault:'aaaa000000000001',key:KEY};
-  const fs=await import('node:fs/promises'),obsidian=path.join(local,'Obsidian.exe');await writeFile(obsidian,'');
-  const {calls,tools}=standIn(fs,{[place.reg]:async args=>args[0]==='query'?{stdout:`\r\nHKEY_CLASSES_ROOT\\obsidian\\shell\\open\\command\r\n    (Standard)    REG_SZ    "${obsidian}" "%1"\r\n`,stderr:''}:{stdout:'',stderr:''}});
-  // Obsidian's program must be a Windows path to be taken: here it is a scratch file named as one would be.
+  const fs=await import('node:fs/promises'),classes='HKCU\\Software\\Classes\\';
+  // Windows as found: keys for .pdf and .epub (other apps' lists in them), none for the book types; Obsidian registered.
+  const there=new Set(['.pdf','.epub']);
+  const reg=async args=>{
+   if(args[0]==='query'&&args[1]==='HKCR\\obsidian\\shell\\open\\command')return {stdout:'\r\nHKEY_CLASSES_ROOT\\obsidian\\shell\\open\\command\r\n    (Standard)    REG_SZ    "C:\\Program Files\\Obsidian\\Obsidian.exe" "%1"\r\n',stderr:''};
+   if(args[0]==='query'&&args.length===2){if(there.has(args[1].slice(classes.length)))return {stdout:'',stderr:''};throw new Error('reg: ERROR: The system was unable to find the specified registry key or value.');}
+   if(args[0]==='query'&&args[2]==='/s'){const key=args[1].replace('HKCU\\','HKEY_CURRENT_USER\\');
+    // Another app has since put its own entry under .mobi: that key is left.
+    return {stdout:`\r\n${key}\r\n${key}\\OpenWithProgids\r\n${args[1].endsWith('.mobi')?'    Other.App    REG_SZ    \r\n':''}\r\n`,stderr:''};}
+   return {stdout:'',stderr:''};
+  };
+  const {calls,tools}=standIn({...fs,stat:async file=>file==='C:\\Program Files\\Obsidian\\Obsidian.exe'?{isFile:()=>true,isDirectory:()=>false}:fs.stat(file)},{[place.reg]:reg});
   await install(place,values,tools);
   assert.equal(await readFile(place.folder+'\\open.ps1','utf8'),windowsScript(values)+'\r\n');
-  const writes=calls.map(([program,args])=>{assert.equal(program,place.reg);return args;});
-  assert.deepEqual(writes.slice(0,windowsWrites(place).length),windowsWrites(place));
-  assert.deepEqual(writes.at(-1),['query','HKCR\\obsidian\\shell\\open\\command','/ve']);
+  const runs=calls.map(([program,args])=>{assert.equal(program,place.reg);return args;});
+  // First: which extensions have a key already (asked, nothing written). Those without are written down beside the script.
+  assert.deepEqual(runs.slice(0,8),WINDOWS_EXTENSIONS.map(ending=>['query',classes+ending]));
+  assert.equal(await readFile(place.folder+'\\made-keys.txt','utf8'),'.fb2\r\n.fbz\r\n.fb3\r\n.mobi\r\n.prc\r\n.azw3\r\n');
+  assert.deepEqual(runs.slice(8,8+windowsWrites(place).length),windowsWrites(place));
+  assert.deepEqual(runs.slice(8+windowsWrites(place).length),[['query','HKCR\\obsidian\\shell\\open\\command','/ve'],['add',classes+'Annotator.OpenWith\\Application','/v','ApplicationIcon','/t','REG_SZ','/d','"C:\\Program Files\\Obsidian\\Obsidian.exe",0','/f'],['add',classes+'Annotator.OpenWith\\DefaultIcon','/ve','/t','REG_SZ','/d','"C:\\Program Files\\Obsidian\\Obsidian.exe",0','/f']]);
   // The command is the recipe's, with Windows' and the script's folders filled in, and the program is named as the recipe names it.
   const command=windowsWrites(place).find(args=>args[1].endsWith('\\shell\\open\\command'))[6];
   assert.equal(command,`"C:\\WINDOWS\\System32\\conhost.exe" --headless "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "${place.folder}\\open.ps1" "%1"`);
@@ -275,20 +287,26 @@ test('Install on Windows writes the script and asks reg.exe for exactly what the
   const lists=windowsWrites(place).filter(args=>args[1].endsWith('\\OpenWithProgids'));assert.deepEqual(lists.map(args=>args[1].split('\\')[3]),WINDOWS_EXTENSIONS);
   for(const args of lists)assert.deepEqual(args.slice(2),['/v','Annotator.OpenWith','/t','REG_SZ','/d','','/f']);
   assert.equal(await installState(place,values,tools),'here');assert.equal(await installState(place,{...values,vault:'other'},tools),'other');
-  // Obsidian found where Windows starts it for its addresses: its icon is given to the program.
-  const drive={...place};calls.length=0;tools.run=async(program,args)=>{calls.push([program,args]);return args[0]==='query'?{stdout:'    (Default)    REG_SZ    "C:\\Program Files\\Obsidian\\Obsidian.exe" "%1"\r\n',stderr:''}:{stdout:'',stderr:''};};
-  const stat=fs.stat;tools.files={...fs,stat:async file=>file==='C:\\Program Files\\Obsidian\\Obsidian.exe'?{isFile:()=>true,isDirectory:()=>false}:stat(file)};
-  await install(drive,values,tools);
-  assert.deepEqual(calls.slice(-2).map(([,args])=>args),[['add','HKCU\\Software\\Classes\\Annotator.OpenWith\\Application','/v','ApplicationIcon','/t','REG_SZ','/d','"C:\\Program Files\\Obsidian\\Obsidian.exe",0','/f'],['add','HKCU\\Software\\Classes\\Annotator.OpenWith\\DefaultIcon','/ve','/t','REG_SZ','/d','"C:\\Program Files\\Obsidian\\Obsidian.exe",0','/f']]);
+  // Installed again, the keys it made are still known as its own, though they are there now.
+  for(const ending of WINDOWS_EXTENSIONS)there.add(ending);await install(place,values,tools);assert.equal(await readFile(place.folder+'\\made-keys.txt','utf8'),'.fb2\r\n.fbz\r\n.fb3\r\n.mobi\r\n.prc\r\n.azw3\r\n');
   // No Obsidian registered: no icon, nothing else changes.
-  tools.files=fs;calls.length=0;tools.run=async(program,args)=>{calls.push([program,args]);if(args[0]==='query')throw new Error('reg: ERROR: The system was unable to find the specified registry key or value.');return {stdout:'',stderr:''};};
-  await install(place,values,tools);assert.equal(calls.length,windowsWrites(place).length+1);
-  // Uninstall: the program's key, its entry in each list (and only that), and the script's folder. What is not there is no failure.
-  calls.length=0;tools.run=async(program,args)=>{calls.push([program,args]);if(args.includes('HKCU\\Software\\Classes\\.fb3\\OpenWithProgids'))throw new Error('missing');return {stdout:'',stderr:''};};
-  const removed=[];tools.files={...fs,rm:async(file,options)=>{removed.push([file,options]);await fs.rm(file+'\\open.ps1',{force:true});}};
-  await uninstall(place,tools);assert.deepEqual(calls.map(([,args])=>args),windowsRemovals());assert.deepEqual(removed,[[place.folder,{recursive:true,force:true}]]);
+  calls.length=0;const plain=tools.run;tools.run=async(program,args)=>{if(args[1]==='HKCR\\obsidian\\shell\\open\\command'){calls.push([program,args]);throw new Error('reg: ERROR: The system was unable to find the specified registry key or value.');}return plain(program,args);};
+  await install(place,values,tools);assert.equal(calls.length,8+windowsWrites(place).length+1);tools.run=plain;
+  // Uninstall: the program's key, its entry in each list (and only that), the keys it made that hold nothing else now,
+  // and the script's folder. What is not there is no failure.
+  calls.length=0;const removed=[];tools.files={...fs,rm:async(file,options)=>{removed.push([file,options]);for(const name of ['open.ps1','made-keys.txt'])await fs.rm(file+'\\'+name,{force:true});}};
+  await uninstall(place,tools);const undone=calls.map(([,args])=>args);
+  assert.deepEqual(undone.slice(0,windowsRemovals().length),windowsRemovals());
+  assert.deepEqual(undone.slice(windowsRemovals().length),['.fb2','.fbz','.fb3','.mobi','.prc','.azw3'].flatMap(ending=>[['query',classes+ending,'/s'],...(ending==='.mobi'?[]:[['delete',classes+ending,'/f']])]));
+  assert.deepEqual(removed,[[place.folder,{recursive:true,force:true}]]);
   assert.deepEqual(windowsRemovals()[0],['delete','HKCU\\Software\\Classes\\Annotator.OpenWith','/f']);for(const args of windowsRemovals().slice(1))assert.deepEqual(args.slice(2),['/v','Annotator.OpenWith','/f']);
   assert.equal(existsSync(place.folder+'\\open.ps1'),false);assert.equal(await installState(place,values,tools),'none');
+  // Made by the recipe (no list of keys made): only the entries go, as the recipe's removal steps take them.
+  calls.length=0;await uninstall(place,tools);assert.deepEqual(calls.map(([,args])=>args),windowsRemovals());
+  // What reg query shows is read strictly: a value or another key keeps the extension's key.
+  const key=classes+'.fb2',full='HKEY_CURRENT_USER\\Software\\Classes\\.fb2';
+  assert.equal(onlyEmptyList(`\r\n${full}\r\n${full}\\OpenWithProgids\r\n\r\n`,key),true);assert.equal(onlyEmptyList(`\r\n${full}\r\n`,key),true);
+  for(const shown of [`${full}\r\n    (Default)    REG_SZ    fb2file\r\n`,`${full}\r\n${full}\\OpenWithProgids\r\n    Other    REG_SZ    \r\n`,`${full}\r\n${full}\\shell\r\n`])assert.equal(onlyEmptyList(shown,key),false,shown);
  }finally{await rm(local,{recursive:true,force:true});}
 });
 test('Install on Linux writes the recipe\'s two files and nothing else, and the handler it makes hands over every book type',{skip:process.platform==='win32'},async()=>{

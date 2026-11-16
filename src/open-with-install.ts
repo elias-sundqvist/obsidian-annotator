@@ -153,8 +153,24 @@ export async function install(place: InstallPlace, values: RecipeValues, tools: 
         return;
     }
     if (place.system === 'windows') {
+        // The extensions Windows had no key for yet: their keys are made here, and taken away again by Uninstall when
+        // nothing else has been put in them since. Kept with the script, beside those made by an earlier Install.
+        const made = new Set(await madeKeys(place, tools));
+        for (const ending of WINDOWS_EXTENSIONS)
+            try {
+                await tools.run(place.reg, ['query', `${CLASSES}\\${ending}`]);
+            } catch {
+                made.add(ending);
+            }
         await tools.files.mkdir(place.folder, { recursive: true });
         await tools.files.writeFile(`${place.folder}\\open.ps1`, `${windowsScript(values)}\r\n`, { encoding: 'utf8' });
+        await tools.files.writeFile(
+            `${place.folder}\\${MADE_KEYS}`,
+            [...made].map(ending => `${ending}\r\n`).join(''),
+            {
+                encoding: 'utf8'
+            }
+        );
         for (const args of windowsWrites(place)) await tools.run(place.reg, args);
         // Obsidian's icon, from where Windows finds Obsidian for its addresses, if that program is there.
         const icon = await obsidianIcon(place, tools);
@@ -186,6 +202,33 @@ export async function install(place: InstallPlace, values: RecipeValues, tools: 
 
 export const PROGID = 'Annotator.OpenWith';
 const CLASSES = 'HKCU\\Software\\Classes';
+/** Windows: the file, beside the script, that names the extensions whose keys Install made. */
+const MADE_KEYS = 'made-keys.txt';
+async function madeKeys(place: Extract<InstallPlace, { system: 'windows' }>, tools: InstallTools): Promise<string[]> {
+    try {
+        const text = await tools.files.readFile(`${place.folder}\\${MADE_KEYS}`, 'utf8');
+        return text
+            .split(/\r?\n/)
+            .map(line => line.trim())
+            .filter(line => WINDOWS_EXTENSIONS.includes(line));
+    } catch {
+        return [];
+    }
+}
+/**
+ * Whether `reg query <key> /s` shows nothing in an extension's key but its list of programs, empty: no value (a line
+ * that begins with white space) and no other key.
+ */
+export function onlyEmptyList(output: string, key: string): boolean {
+    const full = key.replace(/^HKCU\\/i, 'HKEY_CURRENT_USER\\').toLowerCase();
+    for (const line of output.split(/\r?\n/)) {
+        if (!line.trim()) continue;
+        if (/^\s/.test(line)) return false;
+        const named = line.trim().toLowerCase();
+        if (named !== full && named !== `${full}\\openwithprogids`) return false;
+    }
+    return true;
+}
 /**
  * Windows: what `reg.exe` is asked to write, as the recipe writes it. `reg add` makes a key that is missing and adds a
  * value to one that is there, leaving its other values as they are: an extension's list of programs is other apps'
@@ -268,12 +311,23 @@ export async function uninstall(place: InstallPlace, tools: InstallTools): Promi
         return;
     }
     if (place.system === 'windows') {
+        const made = await madeKeys(place, tools);
         for (const args of windowsRemovals())
             try {
                 await tools.run(place.reg, args);
             } catch {
                 // Not there (taken away by hand, or never made): nothing to take away.
             }
+        // An extension's key Install made is taken away if nothing but its emptied list of programs is in it.
+        for (const ending of made) {
+            const key = `${CLASSES}\\${ending}`;
+            try {
+                const { stdout } = await tools.run(place.reg, ['query', key, '/s']);
+                if (onlyEmptyList(stdout, key)) await tools.run(place.reg, ['delete', key, '/f']);
+            } catch {
+                // Gone already, or not readable: it is left as it is.
+            }
+        }
         await tools.files.rm(place.folder, { recursive: true, force: true });
         return;
     }

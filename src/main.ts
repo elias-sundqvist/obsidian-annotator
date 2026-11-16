@@ -8123,7 +8123,10 @@ export default class AnnotatorPlugin extends Plugin {
                 // Without the key nothing was looked at, and it is said at most once a minute: it cannot be used to pester.
                 else if (Date.now() - this.keylessSaid >= 60000) {
                     this.keylessSaid = Date.now();
-                    new Notice(`${answer.refused} A recipe made in Annotator's settings carries the key.`, 12000);
+                    new Notice(
+                        `${answer.refused} "Open with Annotator", installed from Annotator's settings, carries the key.`,
+                        12000
+                    );
                 }
                 return;
             }
@@ -10316,6 +10319,8 @@ class NativeSettings extends PluginSettingTab {
                           : 'Not installed on this computer.'
                 );
             if (outcome?.warning) manual.open = true;
+            // Drawn again after a press, the settings start at the top: what the press came to is brought into view.
+            if (outcome) row.settingEl.scrollIntoView?.({ block: 'center' });
             row.addButton(control => {
                 buttons.push(control);
                 control

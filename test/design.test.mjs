@@ -1485,8 +1485,11 @@ test('Open from outside Obsidian: Install first, with what is there now and what
         assert.deepEqual(buttons(named('This computer’s key')), ['Make a key']); assert.equal(named('This computer’s key').querySelector('button').classList.contains('mod-cta'), false);
         assert.equal(tab.containerEl.querySelector('details.annotator-open-with-manual'), null);
         // Install: it says it is at work, then what it came to, and how to make it the default.
+        const scrolled = []; h.dom.window.HTMLElement.prototype.scrollIntoView = function () { scrolled.push(this); };
         named('Open with Annotator').querySelector('button').click(); assert.equal(status().textContent, 'Installing…'); assert.equal(named('Open with Annotator').querySelector('button').disabled, true);
         await settle();
+        // The settings are drawn again from the top: what the press came to is brought into view.
+        assert.deepEqual(scrolled, [named('Open with Annotator')]);
         assert.deepEqual(pressed, ['install']); assert.ok(h.plugin.openDeviceState().key);
         assert.match(status().textContent, /^Installed\. To open a kind of file with it by a double-click: .*Get Info.*Change All/); assert.equal(status().classList.contains('mod-warning'), false);
         assert.deepEqual(buttons(named('Open with Annotator')), ['Install again', 'Uninstall']);

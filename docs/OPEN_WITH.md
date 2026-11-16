@@ -100,8 +100,12 @@ To open a kind of file with it by a double-click: right-click one in
 Explorer, choose Open with → Choose another app, pick "Open with Annotator"
 and press **Always**. Do the same for each kind of book.
 
-Uninstall asks `reg.exe` to delete the program's key and its one entry in
-each list, and deletes the script's folder. If you had made it the default
+Before it writes, Install asks `reg.exe` which of those extensions have a
+key already, and keeps the names of those it makes in `made-keys.txt` beside
+the script. Uninstall asks `reg.exe` to delete the program's key and its one
+entry in each list; then, for each extension key Install made, it deletes
+the key if nothing but its emptied list is in it (another app's entry keeps
+it); and it deletes the script's folder. If you had made it the default
 for a kind of file, Windows asks which app to use the next time you open
 one.
 
@@ -265,6 +269,46 @@ A Shortcut can do both in one step. It has not been tried on a device yet:
 
 ## What was tried, and where
 
+- **The Install button, macOS 26, Obsidian 1.15.1** (a test profile and
+  vault; the owner's Obsidian was not touched). An "Open with Annotator"
+  made earlier by the recipe, for another vault, was there: the settings
+  said so ("made for another vault or an older key"), and **Install again**
+  replaced it. The app it made has the identifier, the two document types
+  (PDF and EPUB by type, FictionBook and Kindle books by extension, both
+  Alternate) and the digest of its address; it is signed for this Mac, and
+  its compiled script opens the test vault's address. macOS then listed it
+  under Open With for a PDF, an EPUB, an FB2 and a MOBI (and for nothing
+  before Install). The defaults stayed Preview, Books and Calibre in three
+  installs, one of them over the recipe's app again. Once, the first time,
+  macOS answered right after Install that it was the default for the FB2
+  and the MOBI, over Calibre; that did not come back, and Launch Services'
+  saved choices (`com.apple.launchservices.secure.plist`) were byte for byte
+  the same before and after. **Uninstall** took the app away, and macOS
+  listed only what it had before. The recipe's app was put back as it was.
+- **A double-click, as the address it makes**, called through the plugin's
+  own handler in that Obsidian (an address sent through macOS goes to the
+  Obsidian started first): a PDF named `A paper #1 & more.pdf`, an FB2, a
+  MOBI and an EPUB in a folder `Downloads & more` outside the vault each
+  opened at once in the reader, read where they are, with no question, no
+  copy, a note named after each at the vault's root (where new notes go
+  there), and **Annotate a copy in the vault** in the tab's header. The PDF
+  asked for three times (once as a `file://` address) and the FB2 twice
+  kept one tab each. A file of the vault asked for three times by `file=`
+  kept one tab. Another type, and an outside file without the key, were
+  refused with their notices. The files outside were not changed.
+- **Windows 11 Home, the owner's laptop, over SSH** (Obsidian not started,
+  no vault opened; no Node there): `reg.exe` was run with exactly the
+  command lines Node's `execFile` gives it for Install's and Uninstall's
+  argument lists. The command it stored is the one written (quotes, `%1`
+  and the folder with spaces all as meant); the name is "Open with
+  Annotator"; `.pdf`'s list kept another app's entry beside the new one;
+  `.fb2`, `.fbz`, `.fb3`, `.mobi`, `.prc` and `.azw3` got keys of their own.
+  After Uninstall, the exported keys of `.pdf` and `.epub` were identical
+  to before, the program's key and the book types' keys were gone again,
+  and the script's folder was gone. A first run, before Uninstall took back
+  the keys Install made, left those six keys empty; they were deleted, and
+  the check run again from a clean state. Explorer's dialog itself was not
+  seen (it cannot be from a remote shell).
 - macOS, Obsidian 1.15.0: a PDF and a book of the vault opened by address,
   with Obsidian running and when the address started it; the address
   without the key; the question and its answers; a file copied in through

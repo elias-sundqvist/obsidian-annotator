@@ -320,14 +320,17 @@ the plugin runs a program (the first is DEVONthink, above).
   - Windows: `%SystemRoot%\System32\reg.exe` with `add` (and on Uninstall
     `delete`) for the program's own key and its one entry in each
     extension's list under `HKEY_CURRENT_USER\Software\Classes`, and `query`
-    to find Obsidian's icon. The PowerShell recipe was not used here: it
+    to find Obsidian's icon and which extensions have a key already; an
+    extension key Install made is deleted by Uninstall only when nothing but
+    its emptied list is in it. The PowerShell recipe was not used here: it
     would be a script, and Obsidian starting PowerShell to change the
     registry is what security software looks for.
   - Linux: `/usr/bin/update-desktop-database` on the folder of desktop
     entries, if it is there.
 - **What is written.** Only what the recipe writes: on macOS the app in the
   Applications folder of the home folder; on Windows the script's folder in
-  `%LOCALAPPDATA%` and those registry values, for this user only; on Linux
+  `%LOCALAPPDATA%` (the script, and the list of extension keys it made) and
+  those registry values, for this user only; on Linux
   the script and the desktop entry under `~/.local`. Nothing is downloaded;
   nothing is written for other users or outside those places. An app of the
   same name on a Mac that Annotator did not make (its identifier says) is
