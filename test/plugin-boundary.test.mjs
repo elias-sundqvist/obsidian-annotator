@@ -300,7 +300,10 @@ test('initial source association failure retains verified bytes for retry withou
  const url='https://example.org/retry.pdf',note=h.add('Retry.md','Unchanged',{'annotation-target':url});globalThis.__annotatorTestRequest=async()=>({status:200,arrayBuffer:new TextEncoder().encode('%PDF-1.7 retained').buffer});await h.plugin.onload();
  const save=h.plugin.saveData.bind(h.plugin);let attempts=0;h.plugin.saveData=async value=>{if(++attempts===1)throw new Error('Storage failed');return save(value);};await assert.rejects(()=>h.plugin.openNoteTarget(note),/association/);assert.equal(h.plugin.remoteSources[url],undefined);assert.equal(h.plugin.data.remoteSources[url],undefined);
  const cached=[...h.binaries.keys()][0],bytes=h.binaries.get(cached).slice(0);await h.plugin.openNoteTarget(note);assert.equal(h.plugin.targetKey(note),cached);assert.deepEqual(h.binaries.get(cached),bytes);assert.equal(h.contents.get(note.path),'Unchanged');
- delete h.plugin.remoteSources[url];h.binaries.set(cached,new TextEncoder().encode('Different retained file').buffer);await assert.rejects(()=>h.plugin.openNoteTarget(note),/different bytes/);assert.equal(new TextDecoder().decode(h.binaries.get(cached)),'Different retained file');
+ // Settings that lost the copy (not synced here): the copy is found by its name, which follows from the note's target, and is read as it is.
+ delete h.plugin.remoteSources[url];delete h.plugin.targetCopies[url];await h.plugin.openNoteTarget(note);assert.equal(h.opened.at(-1).file.path,cached);assert.equal(h.plugin.targetCopies[url],cached);
+ // A different file where a new copy would go is never overwritten.
+ delete h.plugin.remoteSources[url];delete h.plugin.targetCopies[url];h.plugin.copyByName=async()=>null;h.binaries.set(cached,new TextEncoder().encode('Different retained file').buffer);await assert.rejects(()=>h.plugin.openNoteTarget(note),/different bytes/);assert.equal(new TextDecoder().decode(h.binaries.get(cached)),'Different retained file');
  }finally{h.dispose();}
 });
 
@@ -928,13 +931,16 @@ test('a file Obsidian opened from outside the vault is shown without annotations
   const before=Notice.messages.length;await h.plugin.onload();
   // Every way the plugin writes a file is watched from here on.
   const write=h.app.vault.adapter.write,binary=h.app.vault.createBinary;h.app.vault.create=async(path,text)=>{created.push(path);return h.add(path,text);};h.app.vault.createBinary=async(path,bytes)=>{created.push(path);return binary(path,bytes);};h.app.vault.adapter.write=async(path,raw)=>{created.push(path);return write(path,raw);};
+  // While Obsidian is still reading the notes' properties (a restored tab), nothing is said: no note may be known yet.
+  h.plugin.bindSources();assert.equal(Notice.messages.slice(before).filter(message=>/outside your vault/.test(message.textContent??String(message))).length,0);
+  h.events.get('metadata:resolved')();
   h.plugin.bindSources();h.plugin.bindSources();for(let turn=0;turn<20;turn++)await new Promise(resolve=>setTimeout(resolve,0));
   // The file in the vault is annotated as ever; the one outside gets no painter and no note is looked for.
   assert.ok(h.plugin.bindings.has(here.view));assert.ok(!h.plugin.bindings.has(there.view));assert.equal(h.plugin.sourceKey(there.view),null);assert.equal(h.plugin.sourceKey(here.view),'Papers/Inside.pdf');
   // Said once, however often the tabs are looked over.
   const said=Notice.messages.slice(before).filter(message=>/outside your vault/.test(message.textContent??String(message)));assert.equal(said.length,1);assert.match(said[0].textContent,/shown without annotations/);
   // With it, the way to have them: one press copies the file in (what the press does is tested with the address).
-  assert.equal(said[0].querySelector('button').textContent,'Copy into the vault and annotate');
+  assert.equal(said[0].querySelector('button').textContent,'Annotate a copy in the vault');
   // Whatever asks for its note is refused, in every form such a path takes, and nothing was written anywhere.
   for(const key of ['file:/Users/someone/Downloads/Paper.pdf','file:///C:/Users/someone/Paper.pdf','/Users/someone/Downloads/Paper.pdf','C:\\Users\\someone\\Paper.pdf'])await assert.rejects(h.plugin.ensureNote(key),/outside your vault/,key);
   assert.deepEqual(created.filter(path=>/Downloads|someone|^file:|^\//.test(path)),[]);
@@ -1021,7 +1027,7 @@ test('a Zotero or Calibre link as a target is followed once to its file, remembe
   await assert.rejects(h.plugin.followAppLink('zotero://select/library/items/Y2KGGJ99'),/copy the PDF's own link in Zotero/);assert.equal(h.plugin.targetKey(item),'applink:zotero://select/library/items/Y2KGGJ99');assert.equal(saves,2);
   await assert.rejects(h.plugin.followAppLink('https://example.org/a.pdf'),/not a Zotero, Calibre or DEVONthink link/);
   // On a phone there is no folder to look in: it says to open the note on a computer first.
-  Platform.isMobile=true;try{await assert.rejects(h.plugin.followAppLink('calibre://show-book/Books/7'),/on a computer first/);}finally{Platform.isMobile=false;}
+  Platform.isMobile=true;try{await assert.rejects(h.plugin.followAppLink('calibre://show-book/Books/7'),/a phone or tablet cannot read it there\. On that computer, open the note and choose Annotate a copy in the vault/);}finally{Platform.isMobile=false;}
  }finally{h.dispose();fs.rmSync(root,{recursive:true,force:true});}
 });
 test('a DEVONthink link is followed on a Mac by asking DEVONthink, after one yes a session, and its file is then asked about and copied in',async()=>{
@@ -1059,7 +1065,7 @@ test('a DEVONthink link is followed on a Mac by asking DEVONthink, after one yes
   refuse='execution error: Error: Error: Not authorized to send Apple events to DEVONthink. (-1743)';await assert.rejects(h.plugin.followAppLink(`x-devonthink-item://${A}`),/Privacy & Security → Automation: under Obsidian, turn on DEVONthink/);refuse=null;
   // Not on a Mac, and not on a phone: said, with what to do instead, and nothing is run.
   const before=runs.length;Platform.isMacOS=false;await assert.rejects(h.plugin.followAppLink(`x-devonthink-item://${A}`),/on a Mac only\. On this computer, point annotation-target at the file's path/);
-  Platform.isMobile=true;Platform.isMacOS=true;Platform.isDesktopApp=false;await assert.rejects(h.plugin.followAppLink(`x-devonthink-item://${A}`),/on a Mac only\. Open this note in Obsidian on the Mac/);assert.equal(runs.length,before);
+  Platform.isMobile=true;Platform.isMacOS=true;Platform.isDesktopApp=false;await assert.rejects(h.plugin.followAppLink(`x-devonthink-item://${A}`),/on a Mac only\. On the Mac that has the database, open this note and choose Annotate a copy in the vault/);assert.equal(runs.length,before);
  }finally{Platform.isMobile=false;Platform.isMacOS=false;Platform.isDesktopApp=false;h.dispose();fs.rmSync(root,{recursive:true,force:true});}
 });
 test('a note may name its source under a second property of the reader\'s choosing; annotation-target wins where both are there',async()=>{
@@ -1569,7 +1575,7 @@ test('a file Obsidian opened from outside the vault is copied in by one press, o
   const there=leaf(outside),here=leaf(inside),leaves=[there,here];h.app.workspace.getLeavesOfType=type=>type==='pdf'?leaves:type==='annotator-sidebar'?[{}]:[];let recent=there;h.app.workspace.getMostRecentLeaf=()=>recent;
   // No key is needed and no question is asked here: the reader opened the file, and presses the button.
   let asked=0;h.plugin.openApproval=async()=>{asked++;return 'no';};h.plugin.sourceApproval=async()=>{asked++;return 'no';};
-  const before=Notice.messages.length;await h.plugin.onload();h.plugin.bindSources();
+  const before=Notice.messages.length;await h.plugin.onload();h.events.get('metadata:resolved')();h.plugin.bindSources();
   const said=Notice.messages.slice(before).filter(message=>/outside your vault/.test(message.textContent??String(message)));assert.equal(said.length,1);
   said[0].querySelector('button').click();for(let turn=0;turn<200&&!shownIn.length;turn++)await later(5);
   // A note for it was made in the vault, the file was copied in, and the copy is shown in the tab the file was in.

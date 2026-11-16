@@ -399,7 +399,7 @@ test('the settings are grouped under headings that say what they are about, in s
         assert.deepEqual(under('Annotation notes'), ['New annotation notes start with', 'Template for new annotation notes', 'Write new annotations under this heading', 'Give each annotation a heading', 'Level of annotation headings', 'Highlight quotes in the note', 'Keep text before the quote', 'Keep text after the quote', 'Keep reading progress in the note', 'Fold annotation data in Live Preview']);
         assert.deepEqual(under('Copying and exporting'), ['Copied link', 'Export style', 'Link exports back to the passage']);
         assert.deepEqual(under('Opening'), ['Open annotation notes in the reader', 'Default target folders', 'Also read the source from this property']);
-        assert.deepEqual(under('Sources outside the vault'), ['Zotero data folder', 'Calibre library folders']);
+        assert.deepEqual(under('Sources outside the vault'), ['Copy outside sources into the vault', 'Zotero data folder', 'Calibre library folders']);
         assert.ok(under('Reading').includes('Show highlights in embedded PDFs') && under('Reading').includes('Folder for reference notes'));
         // Obsidian's guidelines for headings: sentence case, and no "settings" in them.
         for (const [heading] of groups) { assert.doesNotMatch(heading, /setting/i, heading); assert.equal(heading.slice(1), heading.slice(1).replace(/\b[A-Z][a-z]/g, word => (['Annotator', 'Obsidian'].some(name => heading.includes(name)) ? word : word.toLowerCase())), heading); }

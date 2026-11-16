@@ -25,6 +25,10 @@ export class TFile {
     stat={mtime:1,size:0}; extension:string; basename:string; name:string;
     constructor(public path:string){this.extension=path.split('.').at(-1)||'';this.name=path.split('/').at(-1)!;this.basename=this.name.replace(/\.[^.]+$/,'');}
 }
+/** Obsidian 1.14.4's file outside the vault; undefined (an older Obsidian) unless a test turns it on with `externalFiles`. */
+export class ExternalFileStandIn extends TFile { getRealPath(){return this.path.slice(5);} }
+export let TExternalFile: typeof ExternalFileStandIn | undefined = undefined;
+export function externalFiles(on:boolean){TExternalFile=on?ExternalFileStandIn:undefined;}
 export class Menu { items:any[]=[]; shown=0; native=true; setUseNativeMenu(on:boolean){this.native=on;return this;} addItem(build:(item:any)=>void){const item:any={title:'',checked:false,warning:false,run:()=>{}};for(const key of ['setIcon','setDisabled','setSection'])item[key]=()=>item;item.setTitle=(title:string)=>{item.title=title;return item;};item.setChecked=(on:boolean)=>{item.checked=!!on;return item;};item.setWarning=(on:boolean)=>{item.warning=!!on;return item;};item.onClick=(run:()=>void)=>{item.run=run;return item;};build(item);this.items.push(item);return this;} addSeparator(){return this;} showAtMouseEvent(_event:unknown){this.shown++;return this;} showAtPosition(_position:unknown){this.shown++;return this;} }
 export class Notice { static messages:any[]=[];static shown:Notice[]=[];hidden=false;constructor(public message:any,public duration?:number){Notice.messages.push(message);Notice.shown.push(this);} hide(){this.hidden=true;} }
 export class Modal {contentEl!:HTMLElement;modalEl!:HTMLElement;constructor(public app:any){}open(){}close(){} }

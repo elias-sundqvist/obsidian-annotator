@@ -85,6 +85,25 @@ import {
     WorkspaceLeaf,
     setIcon
 } from 'obsidian';
+import * as obsidianApi from 'obsidian';
+import {
+    COPY_ENDINGS,
+    allowedHere,
+    cacheFileName,
+    cachePath,
+    cacheRoot,
+    copyName,
+    copyOrigin,
+    externalKey,
+    externalPath,
+    inCache,
+    isExternalKey,
+    libraryOf,
+    placeDevice,
+    sameExternal,
+    vaultWritable,
+    type PlaceDevice
+} from './in-place';
 import type { Annotation, NoteProblem } from './codec';
 import { rewrite } from './rewrite';
 import { startsWithBytes } from './bytes';
@@ -224,11 +243,27 @@ import {
 } from './preferences';
 import { parseDrafts, draftChanged, type DraftSession } from './drafts';
 import { reviewRemote, type RevisionReview } from './remote-review';
+import { otherCopy } from './pdf-annotation';
 const VIEW = 'annotator-sidebar';
 /** How long a notice with something to do in it (Undo, Open the copy) stays, unless its button is pressed. */
 const ACTION_NOTICE_MS = 15000;
 /** Where a device keeps its own key and allowed folders, in Obsidian's storage for this device and vault. */
 const OPEN_DEVICE = 'annotator-open-with';
+/** Where a device keeps the outside files it allowed to be read where they are, and its downloads (in-place.ts). */
+const PLACE_DEVICE = 'annotator-in-place';
+/** Why text recognition cannot run on a PDF read where it is. */
+const PHONE_FILE =
+    "This note's source is a file on a computer, and a phone or tablet cannot read it there. On that computer, open the note and choose Annotate a copy in the vault: the copy then syncs here.";
+const SEARCHABLE_NEEDS_COPY =
+    'Recognised text is kept in a searchable copy of the PDF, beside it in the vault, and this PDF is read where it is, outside the vault, which is never written to.';
+/** A file outside the vault that a note names, read where it is. */
+interface InPlaceSource {
+    /** The target as the note writes it: what a copy is named by, and what is kept for it in the settings. */
+    origin: string;
+    /** The address it is read from: `file:///…` for a file on this computer, the web address for a download. */
+    uri: string;
+    kind: RemoteKind;
+}
 interface NoteState {
     note: TFile | null;
     records: Annotation[];
@@ -332,21 +367,53 @@ export default class AnnotatorPlugin extends Plugin {
     private remoteSources: Record<string, string> = {};
     /** Targets outside the vault the user has allowed: exact addresses, and `origin:https://host` for a whole site. */
     private approvedSources = new Set<string>();
-    /** Asks before a note's target is fetched from the network or read from this computer. Replaceable (tests). */
-    sourceApproval: (url: string, kind: string) => Promise<'yes' | 'always' | 'no'> = (url, kind) =>
+    /**
+     * Copies made since sources are read where they are, by the target as the note writes it (`copyOrigin`): a copy is
+     * named by that target, so any device finds it from the note alone.
+     */
+    private targetCopies: Record<string, string> = {};
+    /** Files outside the vault that a note names and that are read where they are: the key, and what the note wrote. */
+    private inPlace = new Map<string, InPlaceSource>();
+    /** Paths as notes write them, and the files they turned out to be (links and case resolved), this session. */
+    private resolvedPaths = new Map<string, string>();
+    /** Whether Obsidian has read every note's properties since it started: until then an outside view is left alone. */
+    private notesIndexed = false;
+    /** Whether the notes must be looked at again to know which outside files they name. */
+    private inPlaceStale = true;
+    /** What this device keeps for sources read where they are (in-place.ts `PlaceDevice`). */
+    private placeKept: PlaceDevice | null = null;
+    /**
+     * Asks before a note's target is fetched from the network or read from this computer. `how` is how it would be
+     * read: where it is (`place`), copied into the vault (`copy`), or copied because this is a phone (`phone`). The
+     * answer `copy` asks for a copy in the vault instead; `always` is for the whole site or, for a file in a library
+     * folder (`library`), for that library on this device. Replaceable (tests).
+     */
+    sourceApproval: (
+        url: string,
+        kind: string,
+        how?: 'place' | 'copy' | 'phone',
+        library?: boolean
+    ) => Promise<'yes' | 'always' | 'copy' | 'no'> = (url, kind, how = 'copy', library = false) =>
         new Promise(resolve => {
+            const trust = 'Only allow this for notes you trust: a note from someone else can point anywhere.',
+                copy = 'Annotate a copy in the vault';
             if (kind === 'archive.org')
                 return new ConfirmModal(
                     this.app,
-                    'Download this book from archive.org?',
+                    how === 'place' ? 'Read this book from archive.org?' : 'Download this book from archive.org?',
                     [
-                        'This note points to an item on archive.org. To read and annotate it, the reader asks archive.org which files the item has, and downloads its PDF or EPUB once into “Annotator sources” in your vault.',
+                        how === 'place'
+                            ? 'This note points to an item on archive.org. To read it, the reader asks archive.org which files the item has and downloads its PDF or EPUB to a cache on this computer, outside your vault. Your annotations go into this note.'
+                            : how === 'phone'
+                              ? 'This note points to an item on archive.org. A phone or tablet reads books from the vault: the reader asks archive.org which files the item has, and downloads its PDF or EPUB once into “Annotator sources” in your vault.'
+                              : 'This note points to an item on archive.org. To read and annotate it, the reader asks archive.org which files the item has, and downloads its PDF or EPUB once into “Annotator sources” in your vault.',
                         url,
-                        'Only allow this for notes you trust: a note from someone else can point anywhere.'
+                        trust
                     ],
-                    'Download',
+                    how === 'place' ? 'Read where it is' : how === 'phone' ? 'Download a copy' : 'Download',
                     resolve,
-                    'Always from archive.org'
+                    'Always from archive.org',
+                    how === 'place' ? copy : undefined
                 ).open();
             const web = /^https?:/i.test(url);
             let host = '';
@@ -355,17 +422,46 @@ export default class AnnotatorPlugin extends Plugin {
             } catch {
                 host = '';
             }
+            const shown = web
+                ? url
+                : isExternalKey(url)
+                  ? externalPath(url)
+                  : decodeURIComponent(url.replace(/^file:\/\//i, ''));
+            if (how === 'place')
+                return new ConfirmModal(
+                    this.app,
+                    web ? 'Read this file from the web?' : 'Read this file where it is?',
+                    [
+                        web
+                            ? 'This note points to a file on the internet. To read it, it is downloaded to a cache on this computer, outside your vault. Your annotations go into this note.'
+                            : 'This note points to a file on this computer, outside the vault. It is read where it is and never changed. Your annotations go into this note.',
+                        shown,
+                        trust
+                    ],
+                    'Read where it is',
+                    resolve,
+                    web && host ? `Always from ${host}` : library ? 'Always from this library' : undefined,
+                    copy
+                ).open();
             new ConfirmModal(
                 this.app,
-                web ? 'Download this source?' : 'Copy this file into the vault?',
+                how === 'phone' ? `${copy}?` : web ? 'Download this source?' : 'Copy this file into the vault?',
                 [
-                    web
-                        ? 'This note points to a file on the internet. To read and annotate it, it is downloaded once into “Annotator sources” in your vault.'
-                        : 'This note points to a file on this computer, outside the vault. To read and annotate it, it is copied once into “Annotator sources” in your vault.',
-                    web ? url : decodeURIComponent(url.replace(/^file:\/\//i, '')),
-                    'Only allow this for notes you trust: a note from someone else can point anywhere.'
+                    how === 'phone'
+                        ? 'A phone or tablet reads PDFs and books from the vault. To read and annotate this one here, it is downloaded once into “Annotator sources” in your vault.'
+                        : web
+                          ? 'This note points to a file on the internet. To read and annotate it, it is downloaded once into “Annotator sources” in your vault.'
+                          : 'This note points to a file on this computer, outside the vault. To read and annotate it, it is copied once into “Annotator sources” in your vault.',
+                    shown,
+                    trust,
+                    ...(Platform.isDesktopApp &&
+                    !Platform.isMobile &&
+                    !this.canReadInPlace() &&
+                    !this.display.copySources
+                        ? ['Obsidian 1.14.4 or later reads such a file where it is, without a copy.']
+                        : [])
                 ],
-                web ? 'Download' : 'Copy into vault',
+                how === 'phone' ? 'Download a copy' : web ? 'Download' : 'Copy into vault',
                 resolve,
                 web && host ? `Always from ${host}` : undefined
             ).open();
@@ -384,25 +480,107 @@ export default class AnnotatorPlugin extends Plugin {
                         : 'DEVONthink is not running: asking opens it. macOS may then ask whether Obsidian may control DEVONthink. Allow it, or the file cannot be found.'
                 ],
                 running ? 'Ask DEVONthink' : 'Open DEVONthink and ask',
-                resolve
+                choice => resolve(choice === 'copy' ? 'no' : choice)
             ).open();
         });
     /** Whether DEVONthink may be asked (and started) this session: yes once, until Obsidian is closed. */
     private devonthinkAllowed = false;
-    private async approveSource(url: string, kind: string) {
+    /**
+     * Asks, unless already allowed, before an address is fetched or a file on this computer is copied in. Says how the
+     * reader chose to go on: as asked (`yes`), or with a copy in the vault instead (`copy`).
+     */
+    private async approveSource(
+        url: string,
+        kind: string,
+        how: 'place' | 'copy' | 'phone' = 'copy'
+    ): Promise<'yes' | 'copy'> {
         let origin: string | null = null;
         try {
             origin = /^https?:/i.test(url) ? `origin:${new URL(url).origin}` : null;
         } catch {
             origin = null;
         }
-        if (this.approvedSources.has(url) || (origin && this.approvedSources.has(origin))) return;
-        const choice = await this.sourceApproval(url, kind);
+        if (this.approvedSources.has(url) || (origin && this.approvedSources.has(origin))) return 'yes';
+        const choice = await this.sourceApproval(url, kind, how);
         if (choice === 'no') throw new Error('Not opened: this source is outside the vault and was not allowed.');
         // A yes for an internet address is kept: the address means the same file everywhere. A yes for a file on this
         // computer is for the one copy now made, and is not kept: the same path may hold another file later, or on
         // another computer the settings sync to.
         this.approvedSources.add(choice === 'always' && origin ? origin : url);
+        return choice === 'copy' ? 'copy' : 'yes';
+    }
+    /**
+     * Asks, unless this device allowed it before, before a file outside the vault is read where it is. A yes is kept on
+     * this device (never in the settings that sync), for the file or, when asked for, for the library folder it is in:
+     * read where it is, the file is read at every opening, and a question each time would be noise. A note that names
+     * another file is still asked about.
+     */
+    private async approvePlace(key: string, kind: RemoteKind): Promise<'yes' | 'copy'> {
+        const fold = this.foldOutsideCase();
+        if (allowedHere(this.placeDevice(), key, fold)) return 'yes';
+        const library = libraryOf(key, this.libraryFolders(), fold),
+            choice = await this.sourceApproval(key, kind, 'place', !!library);
+        if (choice === 'no') throw new Error('Not opened: this file is outside the vault and was not allowed.');
+        if (choice === 'copy') return 'copy';
+        const allowed = choice === 'always' && library ? `folder:${library}` : key,
+            kept = this.placeDevice();
+        this.keepPlaceDevice({ ...kept, allowed: [...kept.allowed, allowed].slice(-2000) });
+        return 'yes';
+    }
+    /** The folders of the libraries the settings name: Zotero's attachments and each Calibre library. */
+    private libraryFolders(): string[] {
+        const folders = this.display.calibreLibraries
+            .split(/\r?\n/)
+            .map(line => line.trim())
+            .filter(Boolean);
+        try {
+            folders.push(
+                `${(this.display.zoteroFolder || `${this.homeFolder()}/Zotero`).replace(/[\\/]+$/, '')}/storage`
+            );
+        } catch {
+            // No home folder known: only a Zotero folder the settings name is a library.
+        }
+        return folders;
+    }
+    /** Whether outside files' names are told apart without regard to case: a Mac's usual disk, and Windows. */
+    private foldOutsideCase(): boolean {
+        return !!Platform.isWin || !!Platform.isMacOS;
+    }
+    private placeDevice(): PlaceDevice {
+        if (!this.placeKept)
+            try {
+                this.placeKept = placeDevice(
+                    (this.app as { loadLocalStorage?: (key: string) => unknown }).loadLocalStorage?.(PLACE_DEVICE)
+                );
+            } catch {
+                this.placeKept = placeDevice(null);
+            }
+        return this.placeKept;
+    }
+    private keepPlaceDevice(next: PlaceDevice) {
+        this.placeKept = next;
+        try {
+            (this.app as { saveLocalStorage?: (key: string, value: unknown) => void }).saveLocalStorage?.(
+                PLACE_DEVICE,
+                next
+            );
+        } catch {
+            // It holds for this session; the next start asks again.
+        }
+    }
+    /**
+     * Whether outside sources are read where they are here: a computer whose Obsidian opens files outside the vault
+     * (1.14.4 or later), unless the settings ask for copies as 0.3 made them.
+     */
+    private readsInPlace(): boolean {
+        return !this.display.copySources && this.canReadInPlace();
+    }
+    private canReadInPlace(): boolean {
+        return (
+            !Platform.isMobile &&
+            !!Platform.isDesktopApp &&
+            typeof (obsidianApi as unknown as Record<string, unknown>).TExternalFile === 'function'
+        );
     }
     /** Addresses (`obsidian://annotator-open`) wait here until the plugin has loaded, and are served one at a time. */
     private openQueue = new OpenQueue<Record<string, unknown>>(params => this.answerOpen(params));
@@ -469,6 +647,7 @@ export default class AnnotatorPlugin extends Plugin {
         /** A note whose text a new annotation note starts as; empty for none. */ noteTemplate: string;
         /** Whether a tablet's drawer has been docked beside the page for the annotations once; after that the reader's own choice stands. */ tabletDocked: boolean;
         /** The folder notes for cited works are made in; empty for where Obsidian puts new notes. */ referenceFolder: string;
+        /** Whether a source outside the vault is copied into it, as 0.3 did, instead of read where it is. */ copySources: boolean;
     } = {
         compact: false,
         alwaysActions: false,
@@ -487,7 +666,8 @@ export default class AnnotatorPlugin extends Plugin {
         progressProperty: false,
         noteTemplate: '',
         tabletDocked: false,
-        referenceFolder: ''
+        referenceFolder: '',
+        copySources: false
     };
     /** The composer floating beside the passage, when notes are written on the page. */
     private floating: FloatingComposer | null = null;
@@ -589,7 +769,7 @@ export default class AnnotatorPlugin extends Plugin {
     /** Change a note by a computation made off this thread; written only if the note is still the text it was computed from. */
     private rewrite(note: TFile, compute: (source: string) => Promise<string>) {
         return rewrite(
-            { read: () => this.app.vault.read(note), process: change => this.app.vault.process(note, change) },
+            { read: () => this.app.vault.read(note), process: change => this.vaultWrite.process(note, change) },
             compute,
             () => {
                 if (this.stopped) throw new Error('The plugin was unloaded before the note was written.');
@@ -709,7 +889,8 @@ export default class AnnotatorPlugin extends Plugin {
             progressProperty: shown.progressProperty === true,
             noteTemplate: typeof shown.noteTemplate === 'string' ? shown.noteTemplate.slice(0, 400) : '',
             tabletDocked: shown.tabletDocked === true,
-            referenceFolder: typeof shown.referenceFolder === 'string' ? shown.referenceFolder.slice(0, 400) : ''
+            referenceFolder: typeof shown.referenceFolder === 'string' ? shown.referenceFolder.slice(0, 400) : '',
+            copySources: shown.copySources === true
         };
         this.register(() => {
             this.floating?.close();
@@ -728,6 +909,9 @@ export default class AnnotatorPlugin extends Plugin {
         this.localVaultTargets = localVaultAliases(this.savedData.localVaultTargets);
         this.appLinkPaths = followedLinks(this.savedData.appLinkPaths);
         this.archiveFiles = foundArchiveFiles(this.savedData.archiveFiles);
+        for (const [origin, path] of Object.entries(settingsObject(this.savedData.targetCopies)))
+            if (typeof path === 'string' && origin.length < 4000 && vaultWritable(path))
+                this.targetCopies[origin] = path;
         for (const [path, value] of Object.entries(settingsObject(this.savedData.nativeProgress)))
             if (typeof value === 'string' && value.length < 40) this.progressSeen[path] = value;
         const positions = this.savedData.positions;
@@ -745,9 +929,32 @@ export default class AnnotatorPlugin extends Plugin {
                     this.approvedSources.add(item);
         this.addSettingTab(new NativeSettings(this.app, this));
         if (Platform.isDesktopApp && Platform.isMacOS) void this.readVaultCase();
+        this.register(() => {
+            for (const action of this.copyActions.values()) action.remove();
+            this.copyActions.clear();
+        });
+        this.addCommand({
+            id: 'annotate-copy-in-vault',
+            name: 'Annotate a copy in the vault',
+            checkCallback: checking => {
+                const key = this.currentFile;
+                if (!key || !this.inPlaceKey(collectionSource(key))) return false;
+                if (!checking) void this.annotateCopy(key).catch(error => this.fail(error));
+                return true;
+            }
+        });
+        this.addCommand({
+            id: 'clear-download-cache',
+            name: 'Clear the download cache (web sources read where they are)',
+            checkCallback: checking => {
+                if (!this.canReadInPlace()) return false;
+                if (!checking) void this.clearDownloadCache().catch(error => this.fail(error));
+                return true;
+            }
+        });
         this.addCommand({
             id: 'copy-outside-file',
-            name: 'Copy this file into the vault and annotate it',
+            name: 'Annotate a copy of this file in the vault',
             checkCallback: checking => {
                 const view = this.app.workspace.getMostRecentLeaf()?.view,
                     file = view instanceof FileView ? view.file : null,
@@ -795,9 +1002,9 @@ export default class AnnotatorPlugin extends Plugin {
             // eslint-disable-next-line prefer-const
             view = new EpubView(leaf, {
                 preferences: () => this.reader,
-                progress: path => this.positions[path] || null,
+                progress: path => this.positions[this.keptKey(path)] || null,
                 saveProgress: (path, position) => {
-                    this.positions[path] = position;
+                    this.positions[this.keptKey(path)] = position;
                     void this.persist().catch(error => this.fail(error));
                 },
                 setPreferences: value => this.setReader(value),
@@ -1539,6 +1746,13 @@ export default class AnnotatorPlugin extends Plugin {
         );
         this.registerEvent(
             this.app.vault.on('rename', (file, oldPath) => {
+                // An outside file read where it is, renamed from its tab: the note still names the old path.
+                const renamed = this.inPlaceKey(oldPath);
+                if (renamed)
+                    new Notice(
+                        `This file was renamed outside the vault, and its annotation note still names it as ${this.inPlace.get(renamed)?.origin || externalPath(oldPath)}. To read it with its annotations again, point the note's annotation-target at ${externalPath(file.path)}.`,
+                        15000
+                    );
                 this.associations = Object.fromEntries(
                     Object.entries(this.associations).map(([key, note]) => [
                         renamedCollection(key, oldPath, file.path),
@@ -1554,6 +1768,8 @@ export default class AnnotatorPlugin extends Plugin {
                     if (path === oldPath) this.localVaultTargets[uri] = file.path;
                 for (const [url, path] of Object.entries(this.remoteSources))
                     if (path === oldPath) this.remoteSources[url] = file.path;
+                for (const [origin, path] of Object.entries(this.targetCopies))
+                    if (path === oldPath) this.targetCopies[origin] = file.path;
                 for (const revisions of Object.values(this.remoteHistory))
                     for (const revision of revisions) if (revision.path === oldPath) revision.path = file.path;
                 if (oldPath in this.positions) {
@@ -1587,6 +1803,8 @@ export default class AnnotatorPlugin extends Plugin {
         );
         this.registerEvent(
             this.app.metadataCache.on('changed', file => {
+                // A note's target may have changed: which outside files notes name is looked at again when needed.
+                this.inPlaceStale = true;
                 this.retryPendingMarkdown(file);
                 this.markAnnotationNotes();
                 // A note that says pages of a PDF, or one of the notes of a PDF whose notes hold page ranges (or that could
@@ -1605,7 +1823,28 @@ export default class AnnotatorPlugin extends Plugin {
                         void this.loadNote(pdf);
             })
         );
-        this.registerEvent(this.app.metadataCache.on('resolved', () => this.retryPendingMarkdown()));
+        this.registerEvent(
+            this.app.metadataCache.on('resolved', () => {
+                this.retryPendingMarkdown();
+                if (this.notesIndexed) return;
+                this.notesIndexed = true;
+                this.inPlaceStale = true;
+                this.bindSources();
+            })
+        );
+        // Enabled while Obsidian was already running, its notes were read already; at a start, 'resolved' says so (and if
+        // it never comes, half a minute is taken for it).
+        if ((this.app.workspace as { layoutReady?: boolean }).layoutReady === true) this.notesIndexed = true;
+        else
+            this.app.workspace.onLayoutReady(() =>
+                this.registerInterval(
+                    window.setTimeout(() => {
+                        if (this.stopped || this.notesIndexed) return;
+                        this.notesIndexed = true;
+                        this.bindSources();
+                    }, 30000)
+                )
+            );
         this.app.workspace.onLayoutReady(() => {
             if (this.stopped) return;
             this.layoutReady = true;
@@ -1738,6 +1977,26 @@ export default class AnnotatorPlugin extends Plugin {
             typeof (file as { getRealPath?: unknown }).getRealPath === 'function'
         );
     }
+    /**
+     * Every write the reader makes to the vault goes through here. Obsidian's own file functions write wherever a path
+     * says, outside the vault too (a `file:` path, a `TExternalFile`); a write to such a place is refused, whatever led
+     * to it. Sources read where they are are only ever read.
+     */
+    private get vaultWrite() {
+        const vault = this.app.vault,
+            check = (target: string | TFile) => {
+                if (!vaultWritable(target))
+                    throw new Error('Nothing is written outside the vault; this was not saved.');
+            };
+        return {
+            create: (path: string, data: string) => (check(path), vault.create(path, data)),
+            createBinary: (path: string, data: ArrayBuffer) => (check(path), vault.createBinary(path, data)),
+            createFolder: (path: string) => (check(path), vault.createFolder(path)),
+            modifyBinary: (file: TFile, data: ArrayBuffer) => (check(file), vault.modifyBinary(file, data)),
+            process: (file: TFile, change: (data: string) => string) => (check(file), vault.process(file, change)),
+            trash: (file: TFile, system: boolean) => (check(file), vault.trash(file, system))
+        };
+    }
     private readonly outsideTold = new Set<string>();
     /** Where such a file really is, as its system writes the path. */
     private outsidePath(file: { path: string }): string | null {
@@ -1749,7 +2008,10 @@ export default class AnnotatorPlugin extends Plugin {
             return null;
         }
     }
-    /** Said once for each such file: why it has no annotations, with the way to have them. */
+    /**
+     * Said once for each such file that no note names: why it has no annotations, with the ways to have them: a note
+     * that reads it where it is (where Obsidian can), or a copy in the vault.
+     */
     private tellOutside(file: { path: string }, leaf?: WorkspaceLeaf) {
         if (this.outsideTold.has(file.path)) return;
         this.outsideTold.add(file.path);
@@ -1759,23 +2021,81 @@ export default class AnnotatorPlugin extends Plugin {
             new Notice(`${words} To annotate it, move or copy it into the vault.`, 12000);
             return;
         }
-        // The press is the reader's yes: the file is copied in as if a note of theirs named it, and shown where it was.
+        // A press is the reader's yes: a note is made that names the file, and the file is shown through it where it was.
         const page = this.app.workspace.containerEl.ownerDocument,
             said = page.createDocumentFragment(),
-            press = page.createElement('button');
-        press.className = 'mod-cta annotator-outside-copy';
-        press.textContent = 'Copy into the vault and annotate';
-        said.append(`${words} `, press);
+            copy = page.createElement('button'),
+            place = page.createElement('button');
+        copy.className = 'mod-cta annotator-outside-copy';
+        copy.textContent = 'Annotate a copy in the vault';
+        place.className = 'annotator-outside-place';
+        place.textContent = 'Annotate where it is';
+        said.append(`${words} `, ...(this.readsInPlace() ? [place, ' '] : []), copy);
         const notice = new Notice(said, 20000);
-        press.addEventListener('click', () => {
+        copy.addEventListener('click', () => {
             notice.hide?.();
-            void this.importSource(path, leaf).catch(error => this.fail(error));
+            void this.importSource(path, leaf, true).catch(error => this.fail(error));
         });
+        place.addEventListener('click', () => {
+            notice.hide?.();
+            void this.importSource(path, leaf, false).catch(error => this.fail(error));
+        });
+    }
+    /** Remembers which note's target a file outside the vault answers to, read where it is, and gives its key. */
+    private placeKey(key: string, source: InPlaceSource): string {
+        const known = this.inPlace.get(key);
+        if (!known || known.origin !== source.origin || known.uri !== source.uri || known.kind !== source.kind)
+            this.inPlace.set(key, source);
+        return key;
+    }
+    /** The key a note gave an outside file, matched as the file's disk matches names; null when no note names it. */
+    private inPlaceKey(path: string): string | null {
+        if (!isExternalKey(path)) return null;
+        if (this.inPlace.has(path)) return path;
+        if (this.foldOutsideCase())
+            for (const key of this.inPlace.keys()) if (sameExternal(key, path, true)) return key;
+        return null;
+    }
+    /** What is kept in the settings for a source: for one read where it is, its note's target as written. */
+    private keptKey(path: string): string {
+        const key = this.inPlaceKey(path),
+            source = key ? this.inPlace.get(key) : undefined;
+        return source ? `target:${source.origin}` : path;
+    }
+    /** Looks at every note's target again (no disk is touched), so the outside files they name are known. */
+    private learnInPlace() {
+        if (!this.inPlaceStale) return;
+        this.inPlaceStale = false;
+        this.inPlace.clear();
+        for (const note of this.app.vault.getMarkdownFiles())
+            try {
+                this.targetKey(note);
+            } catch {
+                // A note whose target cannot be read names nothing.
+            }
+    }
+    /**
+     * The key an outside file Obsidian shows is annotated under: one a note names and this device allowed to be read
+     * where it is. Null for any other: it is shown as Obsidian shows it.
+     */
+    private boundOutside(path: string): string | null {
+        if (!this.readsInPlace()) return null;
+        let key = this.inPlaceKey(path);
+        if (!key) {
+            this.learnInPlace();
+            key = this.inPlaceKey(path);
+        }
+        return key && allowedHere(this.placeDevice(), key, this.foldOutsideCase()) ? key : null;
     }
     private baseSourceKey(view: View): string | null {
         if (view instanceof FileView && view.file) {
             if (this.outsideVault(view.file)) {
-                if (view.getViewType() === 'pdf' || view instanceof EpubView) this.tellOutside(view.file, view.leaf);
+                if (view.getViewType() !== 'pdf' && !(view instanceof EpubView)) return null;
+                // A file a note names, read where it is: annotated under that note's key.
+                const key = this.boundOutside(view.file.path);
+                if (key) return key;
+                // Until Obsidian has read every note's properties (a restored tab), no note is known to name it yet.
+                if (this.notesIndexed) this.tellOutside(view.file, view.leaf);
                 return null;
             }
             if (view.getViewType() === 'pdf' || view instanceof EpubView) return view.file.path;
@@ -1794,6 +2114,33 @@ export default class AnnotatorPlugin extends Plugin {
             }
         }
         return null;
+    }
+    /** The header action "Annotate a copy in the vault" of views showing a source read where it is. */
+    private copyActions = new Map<View, HTMLElement>();
+    /** A view shows the action while, and only while, it shows a source read where it is. */
+    private syncCopyAction(view: View, key: string | null) {
+        const wanted = !!key && isExternalKey(collectionSource(key)),
+            had = this.copyActions.get(view);
+        if (wanted === !!had) return;
+        if (had) {
+            had.remove();
+            this.copyActions.delete(view);
+            return;
+        }
+        try {
+            const action = (
+                view as unknown as { addAction?(icon: string, title: string, run: () => void): HTMLElement }
+            ).addAction?.('copy-plus', 'Annotate a copy in the vault', () => {
+                const shown = this.sourceKey(view);
+                void this.annotateCopy(shown).catch(error => this.fail(error));
+            });
+            if (action) {
+                action.classList.add('annotator-annotate-copy');
+                this.copyActions.set(view, action);
+            }
+        } catch {
+            /* A view without actions has the command instead. */
+        }
     }
     private fullscreenExit: HTMLElement | null = null;
     private fullscreenActions = new WeakMap<View, HTMLElement>();
@@ -1950,6 +2297,7 @@ export default class AnnotatorPlugin extends Plugin {
             for (const leaf of this.app.workspace.getLeavesOfType(type)) {
                 const view = leaf.view,
                     key = this.sourceKey(view);
+                this.syncCopyAction(view, key);
                 if (!key) continue;
                 live.add(view);
                 const old = this.bindings.get(view);
@@ -1995,7 +2343,7 @@ export default class AnnotatorPlugin extends Plugin {
                         capture => this.callbacksFor(view).capture(capture),
                         annotation => this.selectAnnotation(key, annotation),
                         () => this.refresh(),
-                        this.remoteUrl(key),
+                        this.remoteUrl(key) ?? this.inPlace.get(collectionSource(key))?.uri,
                         () => this.reader,
                         next => {
                             void this.setReader(next).catch(error => this.fail(error));
@@ -2074,6 +2422,7 @@ export default class AnnotatorPlugin extends Plugin {
         }
         for (const [view, binding] of this.bindings)
             if (!live.has(view)) {
+                this.syncCopyAction(view, null);
                 this.leaving(binding.file, binding.host);
                 binding.host.dispose();
                 this.bindings.delete(view);
@@ -2225,8 +2574,15 @@ export default class AnnotatorPlugin extends Plugin {
             return annotationTarget(this.targetProperty(note, 'annotation-target')) ? `video:${note.path}` : null;
         const raw = annotationTarget(this.targetProperty(note, 'annotation-target'));
         if (!raw) return null;
+        // What a copy of the source in the vault is named by, and what is kept for it in the settings: the target as written.
+        const origin = copyOrigin(raw);
         for (const [index, candidate] of targetCandidates(raw, this.customDefaultPath).entries()) {
             let value = candidate;
+            // A copy in the vault made for this target wins, on every device: annotations are then read on one set of bytes.
+            if (index === 0) {
+                const copied = this.targetCopies[origin];
+                if (copied && this.app.vault.getAbstractFileByPath(copied) instanceof TFile) return copied;
+            }
             // A Zotero or Calibre link is the file it was found to mean; one not yet followed is followed on opening.
             if (index === 0 && appLink(value)) {
                 const followed = this.appLinkPaths[value.trim()];
@@ -2255,11 +2611,12 @@ export default class AnnotatorPlugin extends Plugin {
                 try {
                     const url = httpUrl(value),
                         kind = remoteKind(url, this.targetType(note));
-                    return kind
-                        ? this.remoteSources[url] && this.app.vault.getAbstractFileByPath(this.remoteSources[url])
-                            ? this.remoteSources[url]
-                            : `remote:${url}`
-                        : `web:${url}`;
+                    if (!kind) return `web:${url}`;
+                    if (this.remoteSources[url] && this.app.vault.getAbstractFileByPath(this.remoteSources[url]))
+                        return this.remoteSources[url];
+                    // Read where it is: the download this computer has of it, or one to be made on opening.
+                    const here = this.readsInPlace() ? this.placeDevice().downloads[url] : undefined;
+                    return here ? this.placeKey(externalKey(here), { origin, uri: url, kind }) : `remote:${url}`;
                 } catch {
                     continue;
                 }
@@ -2279,7 +2636,17 @@ export default class AnnotatorPlugin extends Plugin {
                     const kind = remoteKind(local.uri, this.targetType(note));
                     if (!kind) continue;
                     const cached = this.remoteSources[local.uri];
-                    return cached && this.app.vault.getAbstractFileByPath(cached) ? cached : `remote:${local.uri}`;
+                    if (cached && this.app.vault.getAbstractFileByPath(cached)) return cached;
+                    // Read where it is, on a computer of the kind the path is written for. Nothing is looked at here.
+                    if (this.readsInPlace() && local.windows === !!Platform.isWin) {
+                        const written = externalKey(local.path);
+                        return this.placeKey(this.resolvedPaths.get(written) || written, {
+                            origin,
+                            uri: local.uri,
+                            kind
+                        });
+                    }
+                    return `remote:${local.uri}`;
                 } catch {
                     continue;
                 }
@@ -2335,6 +2702,10 @@ export default class AnnotatorPlugin extends Plugin {
         if (this.targetType(note) === 'video') return false;
         const target = this.targetKey(note);
         if (target === key) return true;
+        // A file outside the vault, read where it is: the note's key names it, as its disk tells names apart. Nothing
+        // is looked up: a lookup of such a path is a call to the disk, and this runs for every note.
+        if (isExternalKey(key))
+            return !!target && isExternalKey(target) && sameExternal(target, key, this.foldOutsideCase());
         const remote = this.remoteUrl(key);
         if (remote && target && (target.startsWith('remote:') ? target.slice(7) : this.remoteUrl(target)) === remote)
             return true;
@@ -2694,8 +3065,10 @@ export default class AnnotatorPlugin extends Plugin {
      * holds has none, and that is said.
      */
     private async ensureNote(pdf: string, page?: number | null): Promise<TFile> {
-        // Whatever led here, a note is never made beside a file that is not in the vault.
-        if (this.outsideVault({ path: collectionSource(pdf) }))
+        // A file outside the vault is annotated only through a note that names it (read where it is): never one that no
+        // note names, Obsidian's "Open with" say.
+        const outside = this.outsideVault({ path: collectionSource(pdf) });
+        if (outside && !this.inPlaceKey(collectionSource(pdf)))
             throw new Error('This file is outside your vault. Move or copy it into the vault to annotate it.');
         let state = this.notes.get(pdf);
         if (!state) {
@@ -2711,6 +3084,11 @@ export default class AnnotatorPlugin extends Plugin {
             return part.note;
         }
         if (state?.note) return state.note;
+        // Whatever led here, a note is never made beside a file that is not in the vault.
+        if (outside)
+            throw new Error(
+                "This file's annotation note was not found (was its annotation-target changed?). Open the note that names the file, or annotate a copy in the vault."
+            );
         if (this.stopped) throw new Error('Plugin unloaded before creating an annotation note.');
         const path = pdf.startsWith('web:') ? `Web annotations ${uuid().slice(0, 8)}.md` : `${pdf}.annotations.md`;
         if (this.app.vault.getAbstractFileByPath(path))
@@ -2719,7 +3097,7 @@ export default class AnnotatorPlugin extends Plugin {
             title =
                 this.sourceTitle(pdf) ||
                 (collectionSource(pdf).split('/').pop() || 'Annotations').replace(/\.[^.]+$/, '');
-        const note = await this.app.vault.create(path, await this.newNoteContent(target, title));
+        const note = await this.vaultWrite.create(path, await this.newNoteContent(target, title));
         this.madeNotes.set(note, pdf);
         this.associations[pdf] = note.path;
         await this.persist();
@@ -2779,7 +3157,7 @@ export default class AnnotatorPlugin extends Plugin {
             return;
         }
         const pdf = collectionSource(key);
-        if (this.outsideVault(source)) {
+        if (this.outsideVault(source) && !this.inPlaceKey(pdf)) {
             new Notice('This file is outside your vault. Move or copy it into the vault to annotate it.');
             return;
         }
@@ -2841,7 +3219,12 @@ export default class AnnotatorPlugin extends Plugin {
             .replace(/\s+/g, ' ')
             .trim();
         if (!clean) throw new Error('Give the note a name.');
-        const folder = source.path.slice(0, source.path.lastIndexOf('/') + 1),
+        // Read where it is, the PDF is not in the vault: the new note goes beside the notes that name it, and names it
+        // as they do.
+        const place = this.inPlaceKey(pdf) ? this.inPlace.get(this.inPlaceKey(pdf)!) : undefined,
+            named = place ? this.app.vault.getMarkdownFiles().find(note => this.noteMatchesSource(note, pdf)) : null,
+            beside = place ? named?.path || '' : source.path,
+            folder = beside.slice(0, beside.lastIndexOf('/') + 1),
             path = `${folder}${clean}.md`;
         if (this.app.vault.getAbstractFileByPath(path))
             throw new Error(
@@ -2855,7 +3238,10 @@ export default class AnnotatorPlugin extends Plugin {
             problem = rangeProblem(range, this.namedParts(state?.parts || []), host?.pageCount() ?? null);
         if (problem) throw new Error(`${problem} Nothing was written.`);
         if (this.stopped) throw new Error('Plugin unloaded before creating an annotation note.');
-        const note = await this.app.vault.create(path, await this.newNoteContent(pdf, clean, writePageRange(range)));
+        const note = await this.vaultWrite.create(
+            path,
+            await this.newNoteContent(place ? place.origin : pdf, clean, writePageRange(range))
+        );
         // Until the host has indexed it, what it is about and which pages it holds are what was written into it.
         this.madeNotes.set(note, pdf);
         this.madeRanges.set(note, range);
@@ -3719,7 +4105,7 @@ export default class AnnotatorPlugin extends Plugin {
             const picture = stored ? this.ownPicture(file, stored) : null;
             if (picture && host instanceof NativePdf) {
                 const image = await host.areaPicture(area);
-                if (image && !this.stopped) await this.app.vault.modifyBinary(picture, await image.arrayBuffer());
+                if (image && !this.stopped) await this.vaultWrite.modifyBinary(picture, await image.arrayBuffer());
             }
         } catch (error) {
             this.fail(error);
@@ -3789,7 +4175,7 @@ export default class AnnotatorPlugin extends Plugin {
                         .trim()
                         .slice(0, 60) || 'page';
                 const path = await this.attachmentPath(`${title} p${area.page} area.png`, note.path);
-                await this.app.vault.createBinary(path, await image.arrayBuffer());
+                await this.vaultWrite.createBinary(path, await image.arrayBuffer());
                 written = path;
                 picture = `![[${path}]]`;
             } else new Notice('This page gave no picture to keep; the area is saved without one.');
@@ -3890,7 +4276,7 @@ export default class AnnotatorPlugin extends Plugin {
                     `${title}${about ? ` ${about}` : ''} picture.${extension}`,
                     note.path
                 );
-                await this.app.vault.createBinary(path, capture.image.bytes.slice().buffer as ArrayBuffer);
+                await this.vaultWrite.createBinary(path, capture.image.bytes.slice().buffer as ArrayBuffer);
                 written = path;
                 picture = `![[${path}]]`;
             } else
@@ -4544,7 +4930,7 @@ export default class AnnotatorPlugin extends Plugin {
     private async trash(file: TFile) {
         const manager = this.app.fileManager as unknown as { trashFile?(file: TFile): Promise<void> } | undefined;
         if (typeof manager?.trashFile === 'function') await manager.trashFile(file);
-        else await this.app.vault.trash(file, false);
+        else await this.vaultWrite.trash(file, false);
     }
     /**
      * Put a just-deleted annotation back, with its comment, tags, colour and anchors. It returns to the end of the note
@@ -4566,7 +4952,7 @@ export default class AnnotatorPlugin extends Plugin {
             if (!note) throw new Error('Annotation note is unavailable.');
             // The picture first: the restored note embeds it. If something else took its name meanwhile, that file is left alone.
             if (picture && !this.app.vault.getAbstractFileByPath(picture.path))
-                await this.app.vault.createBinary(picture.path, picture.bytes);
+                await this.vaultWrite.createBinary(picture.path, picture.bytes);
             await this.rewrite(note, async source => {
                 if (this.stopped) throw new Error('Plugin was unloaded before restoring.');
                 if (!this.noteMatchesSource(note, file)) throw new Error('The annotation note target changed.');
@@ -4812,7 +5198,7 @@ export default class AnnotatorPlugin extends Plugin {
             const archive = `${note.path}.hypothesis-${hash}.json`;
             if (this.stopped) throw new Error('Plugin unloaded before archiving import.');
             const existing = this.app.vault.getAbstractFileByPath(archive);
-            if (!existing) await this.app.vault.createBinary(archive, bytes);
+            if (!existing) await this.vaultWrite.createBinary(archive, bytes);
             else {
                 if (!(existing instanceof TFile)) throw new Error('Import archive path is not a file.');
                 const archived = new Uint8Array(await this.app.vault.readBinary(existing)),
@@ -4841,7 +5227,7 @@ export default class AnnotatorPlugin extends Plugin {
         const raw = await this.codec.exportHypothesis(await this.app.vault.read(note));
         const path = `${note.path}.hypothesis-export-${uuid()}.json`;
         if (this.stopped) throw new Error('Plugin unloaded before export.');
-        await this.app.vault.create(path, raw);
+        await this.vaultWrite.create(path, raw);
         new Notice(`Exported Hypothesis JSON to ${path}`, 10000);
     }
     private viewDocument(file: string) {
@@ -5010,9 +5396,14 @@ export default class AnnotatorPlugin extends Plugin {
             const data = {
                 ...this.savedData,
                 nativeSettingsVersion: NATIVE_SETTINGS_VERSION,
-                associations: { ...this.associations },
+                // A file read where it is is this computer's path: what is kept for it in the settings that sync is
+                // kept under the note's target instead (positions), or not at all (the note names its source).
+                associations: Object.fromEntries(
+                    Object.entries(this.associations).filter(([key]) => !isExternalKey(collectionSource(key)))
+                ),
                 reader: { ...settingsObject(this.savedData.reader), ...this.reader },
-                positions: { ...this.positions },
+                positions: Object.fromEntries(Object.entries(this.positions).filter(([key]) => !isExternalKey(key))),
+                targetCopies: { ...this.targetCopies },
                 nativeProgress: { ...this.progressSeen },
                 localVaultTargets: { ...this.localVaultTargets },
                 appLinkPaths: { ...this.appLinkPaths },
@@ -5355,7 +5746,7 @@ export default class AnnotatorPlugin extends Plugin {
                     }
                     if (!image) continue;
                     const path = await this.attachmentPath(`${title} p${row.from.area.page} area.png`, note.path);
-                    await this.app.vault.createBinary(path, await image.arrayBuffer());
+                    await this.vaultWrite.createBinary(path, await image.arrayBuffer());
                     written.push(path);
                     row.annotation = {
                         ...row.annotation,
@@ -5538,7 +5929,7 @@ export default class AnnotatorPlugin extends Plugin {
                     const image = await host.areaPictureDrawn(area);
                     if (!image) continue;
                     const path = await this.attachmentPath(`${title} p${area.page} area.png`, note.path);
-                    await this.app.vault.createBinary(path, await image.arrayBuffer());
+                    await this.vaultWrite.createBinary(path, await image.arrayBuffer());
                     pictures.push(path);
                     row.annotation = { ...row.annotation, text: `![[${path}]]\n\n${row.annotation.text}` };
                 }
@@ -6047,6 +6438,7 @@ export default class AnnotatorPlugin extends Plugin {
     async recogniseText(key: string | null = this.currentFile) {
         const open = this.scanSource(key);
         if (!open) return;
+        if (this.outsideVault(open.source)) return this.needsCopy(key!, SEARCHABLE_NEEDS_COPY);
         const { host, source } = open,
             without = host.pagesWithoutText,
             little = host.pagesWithLittleText;
@@ -6124,6 +6516,7 @@ export default class AnnotatorPlugin extends Plugin {
     async recogniseAgain(key: string | null = this.currentFile) {
         const open = this.scanSource(key);
         if (!open) return;
+        if (this.outsideVault(open.source)) return this.needsCopy(key!, SEARCHABLE_NEEDS_COPY);
         const { host, source } = open,
             bytes = new Uint8Array(await this.app.vault.readBinary(source));
         let read: Map<number, string>;
@@ -6274,7 +6667,7 @@ export default class AnnotatorPlugin extends Plugin {
                 }
                 host.showRun('Writing the copy…', stop);
                 const made = searchablePdf(more.again, outcome.pages);
-                await this.app.vault.modifyBinary(
+                await this.vaultWrite.modifyBinary(
                     source,
                     made.bytes.buffer.slice(
                         made.bytes.byteOffset,
@@ -6471,10 +6864,10 @@ export default class AnnotatorPlugin extends Plugin {
             made.bytes.byteOffset + made.bytes.byteLength
         ) as ArrayBuffer;
         if (target) {
-            await this.app.vault.modifyBinary(target, buffer);
+            await this.vaultWrite.modifyBinary(target, buffer);
             return target;
         }
-        return this.app.vault.createBinary(this.freeCopyName(source), buffer);
+        return this.vaultWrite.createBinary(this.freeCopyName(source), buffer);
     }
     /** Say what a run came to, with a way to open the copy and, where the PDF has an annotation note, to make the copy what that note is about. */
     private offerSearchableCopy(source: TFile, saved: TFile, words: string) {
@@ -6588,7 +6981,10 @@ export default class AnnotatorPlugin extends Plugin {
                 throw error;
             }
             // The export of a PDF starts with that PDF's own bytes. A file of the export's name that does is an earlier export, and is replaced; anything else is left alone.
-            const folder = source.parent?.path && source.parent.path !== '/' ? `${source.parent.path}/` : '',
+            // A PDF read where it is is not in the vault: its export goes beside its annotation note instead.
+            const outside = this.outsideVault(source),
+                home = outside ? this.shownNote(key!)?.parent?.path : source.parent?.path,
+                folder = home && home !== '/' ? `${home}/` : '',
                 base = `${folder}${this.sourceStem(source)} (annotated)`;
             let path = `${base}.pdf`,
                 target: TFile | null = null;
@@ -6610,8 +7006,8 @@ export default class AnnotatorPlugin extends Plugin {
                 written.byteOffset + written.byteLength
             ) as ArrayBuffer;
             const saved = target
-                ? (await this.app.vault.modifyBinary(target, buffer), target)
-                : await this.app.vault.createBinary(path, buffer);
+                ? (await this.vaultWrite.modifyBinary(target, buffer), target)
+                : await this.vaultWrite.createBinary(path, buffer);
             const count = plan.notes.length,
                 left = plan.skipped.length,
                 boxed = plan.boxed || 0;
@@ -6638,7 +7034,7 @@ export default class AnnotatorPlugin extends Plugin {
         let path = `${base}.md`;
         for (let copy = 2; this.app.vault.getAbstractFileByPath(path); copy++) path = `${base} ${copy}.md`;
         if (this.stopped) throw new Error('Plugin unloaded before export.');
-        const created = await this.app.vault.create(path, text);
+        const created = await this.vaultWrite.create(path, text);
         await this.openPlainNote(created, this.app.workspace.getLeaf('tab'));
         new Notice(`Summary saved to ${path}`);
     }
@@ -6662,9 +7058,9 @@ export default class AnnotatorPlugin extends Plugin {
             folder = `${parent}${title} annotations ${copy}`;
         const exported = annotationNotes(records, this.summaryContext(file, note), this.inkLabels, folder);
         if (this.stopped) throw new Error('Plugin unloaded before export.');
-        await this.app.vault.createFolder(folder);
-        for (const item of exported.files) await this.app.vault.create(`${folder}/${item.name}`, item.content);
-        const base = await this.app.vault.create(`${folder}/${exported.base.name}`, exported.base.content);
+        await this.vaultWrite.createFolder(folder);
+        for (const item of exported.files) await this.vaultWrite.create(`${folder}/${item.name}`, item.content);
+        const base = await this.vaultWrite.create(`${folder}/${exported.base.name}`, exported.base.content);
         new Notice(`${exported.files.length} annotation notes written to ${folder}`, 8000);
         try {
             await this.app.workspace.getLeaf('tab').openFile(base);
@@ -6680,7 +7076,7 @@ export default class AnnotatorPlugin extends Plugin {
         const path = 'Annotated sources.base';
         let base = this.app.vault.getAbstractFileByPath(path);
         if (!base) {
-            base = await this.app.vault.create(path, sourcesBase());
+            base = await this.vaultWrite.create(path, sourcesBase());
             new Notice(`${path} made. It lists every note that has an annotation-target.`, 8000);
         }
         if (!(base instanceof TFile)) throw new Error(`${path} is a folder; a Base cannot be made there.`);
@@ -6812,7 +7208,7 @@ export default class AnnotatorPlugin extends Plugin {
                     throw new Error(
                         `A transcript is already configured${existing ? ' at ' + existing : ''}. Edit that file or use annotation-transcript to choose another.`
                     );
-                await this.app.vault.create(path, text);
+                await this.vaultWrite.create(path, text);
                 return path;
             },
             mediaSource: (target: string, note: TFile) => {
@@ -6833,7 +7229,7 @@ export default class AnnotatorPlugin extends Plugin {
                         .trim(),
                     note.path
                 );
-                await this.app.vault.createBinary(path, await image.arrayBuffer());
+                await this.vaultWrite.createBinary(path, await image.arrayBuffer());
                 return path;
             },
             discardPicture: async (note: TFile, link: string) => {
@@ -7059,6 +7455,12 @@ export default class AnnotatorPlugin extends Plugin {
             activate && (!destination || this.app.workspace.getMostRecentLeaf() === destination);
         requireCurrent();
         let key = this.targetKey(note);
+        // A copy in the vault named by this note's target (made on another device whose settings have not synced
+        // here) is the source, as any copy is: found by its name.
+        if (key && /^(?:applink|archive|remote):/.test(key) && (await this.copyByName(note))) {
+            requireCurrent();
+            key = this.targetKey(note);
+        }
         if (key?.startsWith('applink:')) {
             await this.followAppLink(key.slice(8));
             requireCurrent();
@@ -7067,7 +7469,10 @@ export default class AnnotatorPlugin extends Plugin {
             await this.followArchiveLink(key.slice(8));
             requireCurrent();
             key = this.targetKey(note);
-        } else if (key?.startsWith('remote:file:') && (await this.followedFileGone(note))) {
+        } else if (
+            (key?.startsWith('remote:file:') || (key && isExternalKey(key))) &&
+            (await this.followedFileGone(note))
+        ) {
             requireCurrent();
             key = this.targetKey(note);
             if (key?.startsWith('applink:')) {
@@ -7106,9 +7511,12 @@ export default class AnnotatorPlugin extends Plugin {
                 } catch {
                     // Not a path this vault can name: it is simply not one of the note's targets.
                 }
-        if (key.startsWith('remote:')) {
-            const file = await this.downloadSource(key.slice(7), this.targetType(note));
-            key = file.path;
+        if (isExternalKey(key)) key = await this.prepareInPlace(key);
+        else if (key.startsWith('remote:')) key = await this.fetchOutside(note, key.slice(7));
+        // Read where it is, a PDF may have changed since its annotations were made: said once it has opened.
+        if (isExternalKey(key) && /\.pdf$/i.test(key)) {
+            const opened = collectionKey(key, note.path);
+            window.setTimeout(() => void this.sayOtherVersion(opened, () => !this.stopped).catch(() => undefined), 0);
         }
         requireCurrent();
         if (Platform.isMobile && key.startsWith('web:')) {
@@ -7477,9 +7885,14 @@ export default class AnnotatorPlugin extends Plugin {
      * Brings a PDF or EPUB from outside the vault into it and shows it, once whoever calls has the reader's yes. Nothing
      * new is kept for it: a file that is in the vault after all is shown as it is; one copied in before is shown through
      * its note; otherwise a note is made that names it, and opening that note copies it in as for any note of the
-     * reader's own. Nothing outside the vault is written, changed or deleted.
+     * reader's own. Nothing outside the vault is written, changed or deleted. With `copy` false (where Obsidian can open
+     * files outside the vault) the note reads the file where it is instead of a copy.
      */
-    private async importSource(path: string, destination?: WorkspaceLeaf): Promise<'vault' | 'known' | 'copied'> {
+    private async importSource(
+        path: string,
+        destination?: WorkspaceLeaf,
+        copy = true
+    ): Promise<'vault' | 'known' | 'copied'> {
         if (Platform.isMobile)
             throw new Error(
                 'On a phone or tablet, save the file into the vault first; nothing outside it is read here.'
@@ -7495,12 +7908,19 @@ export default class AnnotatorPlugin extends Plugin {
             return 'vault';
         }
         const kept = this.remoteSources[local.uri],
-            copy = kept ? this.app.vault.getAbstractFileByPath(kept) : null,
-            had = copy instanceof TFile ? copy : null,
-            named = this.noteNaming(local.uri, had?.path || null),
+            existing = kept ? this.app.vault.getAbstractFileByPath(kept) : null,
+            had = existing instanceof TFile ? existing : null,
+            named = this.noteNaming(local.uri, had?.path || null, externalKey(local.path)),
             note = named || (await this.makeSourceNote(local.path));
-        // The reader's yes was given where this was called from; it is for this one copy.
+        // The reader's yes was given where this was called from: for this one copy, or to read the file where it is.
         this.approvedSources.add(local.uri);
+        if (copy) this.wantCopy.add(local.uri);
+        else if (this.readsInPlace()) {
+            const kept = this.placeDevice(),
+                key = externalKey(local.path);
+            if (!allowedHere(kept, key, this.foldOutsideCase()))
+                this.keepPlaceDevice({ ...kept, allowed: [...kept.allowed, key].slice(-2000) });
+        }
         try {
             await this.openNoteTarget(note, undefined, destination ? false : 'reuse', destination);
         } catch (error) {
@@ -7516,6 +7936,7 @@ export default class AnnotatorPlugin extends Plugin {
             throw error;
         } finally {
             this.approvedSources.delete(local.uri);
+            this.wantCopy.delete(local.uri);
         }
         if (had) void this.sayIfChanged(local.path, had);
         return had ? 'known' : 'copied';
@@ -7536,11 +7957,18 @@ export default class AnnotatorPlugin extends Plugin {
         }
     }
     /** The note that already names this file outside the vault, if there is one. */
-    private noteNaming(uri: string, copy: string | null): TFile | null {
+    private noteNaming(uri: string, copy: string | null, place?: string): TFile | null {
         const names = (note: TFile) => {
             try {
                 const key = this.targetKey(note);
-                return key === `remote:${uri}` || (!!copy && key === copy);
+                return (
+                    key === `remote:${uri}` ||
+                    (!!copy && key === copy) ||
+                    (!!place &&
+                        !!key &&
+                        isExternalKey(key) &&
+                        sameExternal(key, this.resolvedPaths.get(place) || place, this.foldOutsideCase()))
+                );
             } catch {
                 return false;
             }
@@ -7574,7 +8002,7 @@ export default class AnnotatorPlugin extends Plugin {
             if (count > 500) throw new Error('Could not find a free name for the note of this file.');
             name = `${title} ${count}`;
         }
-        const note = await this.app.vault.create(at(name), await this.newNoteContent(path, title));
+        const note = await this.vaultWrite.create(at(name), await this.newNoteContent(path, title));
         // Right after a note is written Obsidian has not read its properties yet. Until it has, the note names nothing.
         for (let waited = 0; waited < 5000 && !this.stopped && !this.targetKey(note); waited += 40)
             await new Promise(resolve => window.setTimeout(resolve, 40));
@@ -7593,21 +8021,33 @@ export default class AnnotatorPlugin extends Plugin {
             // Gone or unreadable: the copy is what there is.
         }
     }
-    private async downloadSource(raw: string, type: unknown): Promise<TFile> {
+    /**
+     * A copy of a source outside the vault, in the vault: downloaded, or copied from this computer (from `from`, the
+     * file read where it is, when given: the very bytes the reader has been reading). A copy made for a note's target
+     * (`origin`, the target as written) is named by it, so any device finds it from the note; one made without is
+     * named by its address, as 0.3 named copies.
+     */
+    private async downloadSource(
+        raw: string,
+        type: unknown,
+        origin?: string,
+        how: 'copy' | 'phone' = 'copy',
+        from?: string
+    ): Promise<TFile> {
         const url = this.sourceOrigin(raw),
             kind = remoteKind(url, type);
         if (!kind) throw new Error('Source is not a PDF or EPUB.');
         const pending = this.downloads.get(url);
         if (pending) return pending;
         const job = (async () => {
-            const known = this.remoteSources[url],
+            const known = this.remoteSources[url] || (origin ? this.targetCopies[origin] : undefined),
                 existing = known && this.app.vault.getAbstractFileByPath(known);
             if (existing instanceof TFile) return existing;
             // Nothing outside the vault is fetched or read on a note's say-so alone.
-            await this.approveSource(url, kind);
+            await this.approveSource(url, kind, how);
             if (this.stopped) throw new Error('Plugin unloaded before downloading the source.');
             new Notice(`Preparing ${remoteLabel(kind)} for reading…`);
-            const bytes = await this.sourceBytes(url, kind);
+            const bytes = from ? await this.readOutside(from, kind) : await this.sourceBytes(url, kind);
             validateRemote(bytes, kind);
             if (url.startsWith('file:'))
                 await reviewRemote(
@@ -7618,10 +8058,17 @@ export default class AnnotatorPlugin extends Plugin {
                     () => loadPdfJs(),
                     () => !this.stopped
                 );
-            const path = await remoteFilename(url, kind);
+            const path = origin
+                ? await copyName(
+                      origin,
+                      kind === 'mobi'
+                          ? /\.(mobi|prc|azw3)$/i.exec(new URL(url).pathname)?.[1].toLowerCase() || 'mobi'
+                          : kind
+                  )
+                : await remoteFilename(url, kind);
             if (this.stopped) throw new Error('Plugin unloaded before downloading the source.');
             if (!(await this.app.vault.adapter.exists('Annotator sources')))
-                await this.app.vault.createFolder('Annotator sources');
+                await this.vaultWrite.createFolder('Annotator sources');
             const existingAtPath = this.app.vault.getAbstractFileByPath(path);
             if (
                 existingAtPath &&
@@ -7630,17 +8077,21 @@ export default class AnnotatorPlugin extends Plugin {
             )
                 throw new Error('A cached source contains different bytes. It was not overwritten.');
             const file =
-                existingAtPath instanceof TFile ? existingAtPath : await this.app.vault.createBinary(path, bytes);
+                existingAtPath instanceof TFile ? existingAtPath : await this.vaultWrite.createBinary(path, bytes);
             if (this.stopped) throw new Error('Plugin unloaded; source bytes were retained without selecting them.');
             if ((await digest(await this.app.vault.readBinary(file))) !== (await digest(bytes)))
                 throw new Error('Cached source verification failed. Original files and notes were not changed.');
-            const prior = this.remoteSources[url];
+            const prior = this.remoteSources[url],
+                priorCopy = origin ? this.targetCopies[origin] : undefined;
             this.remoteSources[url] = path;
+            if (origin) this.targetCopies[origin] = path;
             try {
                 await this.persist();
             } catch (error) {
                 if (prior) this.remoteSources[url] = prior;
                 else delete this.remoteSources[url];
+                if (origin && priorCopy) this.targetCopies[origin] = priorCopy;
+                else if (origin) delete this.targetCopies[origin];
                 try {
                     await this.persist();
                 } catch {
@@ -7661,6 +8112,395 @@ export default class AnnotatorPlugin extends Plugin {
             this.downloads.delete(url);
         }
     }
+    /** Outside sources the reader asked to have copied into the vault (by their address), from a question asked earlier. */
+    private wantCopy = new Set<string>();
+    /** Downloads to this computer's cache under way, by address. */
+    private cacheJobs = new Map<string, Promise<string>>();
+    /**
+     * A note's target outside the vault that is not yet on hand: a web address not downloaded yet, or (on a phone, on
+     * an older Obsidian, or with copies chosen in the settings) a file to be copied in. Gives the key it is read under.
+     */
+    private async fetchOutside(note: TFile, raw: string): Promise<string> {
+        const url = this.sourceOrigin(raw),
+            kind = remoteKind(url, this.targetType(note));
+        if (!kind) throw new Error('Source is not a PDF or EPUB.');
+        const written = annotationTarget(this.targetProperty(note, 'annotation-target')),
+            origin = written ? copyOrigin(written) : undefined;
+        if (Platform.isMobile) {
+            if (url.startsWith('file:')) throw new Error(PHONE_FILE);
+            return (await this.downloadSource(raw, this.targetType(note), origin, 'phone')).path;
+        }
+        if (this.readsInPlace() && /^https?:/i.test(url)) {
+            const choice = await this.approveSource(url, kind, 'place');
+            if (choice === 'copy' || this.wantCopy.delete(url))
+                return (await this.downloadSource(raw, this.targetType(note), origin)).path;
+            return this.downloadToCache(url, kind, origin || url);
+        }
+        return (await this.downloadSource(raw, this.targetType(note), origin)).path;
+    }
+    /**
+     * A file outside the vault that a note names, before it is read where it is: asked about (unless this device allowed
+     * it), resolved to the file's own path, and found. Gives the key to open: the file's, or a copy's in the vault when
+     * the reader chose one instead.
+     */
+    private async prepareInPlace(key: string): Promise<string> {
+        const entry = this.inPlace.get(key);
+        if (!entry) throw new Error('This source is no longer named by its note. Open the note again.');
+        const web = /^https?:/i.test(entry.uri);
+        let choice: 'yes' | 'copy' = this.wantCopy.delete(entry.uri) ? 'copy' : 'yes';
+        if (choice === 'yes')
+            choice = web
+                ? await this.approveSource(entry.uri, entry.kind, 'place')
+                : await this.approvePlace(key, entry.kind);
+        if (choice === 'copy') return (await this.copyEntry(entry, key)).path;
+        // A download this computer had and no longer has (the cache was emptied) is downloaded again.
+        if (web && !this.app.vault.getAbstractFileByPath(key)) {
+            const kept = this.placeDevice(),
+                downloads = { ...kept.downloads };
+            delete downloads[entry.uri];
+            this.keepPlaceDevice({ ...kept, downloads });
+            return this.downloadToCache(entry.uri, entry.kind, entry.origin);
+        }
+        // The file's own path: a link at its end, or letters written in another case, become the file's.
+        if (!web) {
+            const real = await this.realKey(key);
+            if (real !== key) {
+                this.resolvedPaths.set(key, real);
+                this.placeKey(real, entry);
+                const kept = this.placeDevice();
+                if (!allowedHere(kept, real, this.foldOutsideCase()))
+                    this.keepPlaceDevice({ ...kept, allowed: [...kept.allowed, real].slice(-2000) });
+                key = real;
+            }
+        }
+        if (!(this.app.vault.getAbstractFileByPath(key) instanceof TFile))
+            throw new Error(
+                `There is no file at ${externalPath(key)} on this computer (or it is not a file). If it was moved or renamed, point the note's annotation-target at it again.`
+            );
+        return key;
+    }
+    /** The key of the file a path leads to, links followed; the key as given when that cannot be asked. */
+    private async realKey(key: string): Promise<string> {
+        try {
+            return externalKey(await this.desktopFileSystem().realpath(externalPath(key)));
+        } catch {
+            return key;
+        }
+    }
+    /** The bytes of a file outside the vault, read through one descriptor and refused if it changes meanwhile. */
+    private async readOutside(key: string, kind: RemoteKind): Promise<ArrayBuffer> {
+        const local = localTarget(externalPath(key));
+        if (!local) throw new Error('This is not the path of a file on this computer.');
+        return readLocalSource(
+            local.uri,
+            (kind === 'pdf' ? 128 : 64) * 1024 * 1024,
+            Platform.isWin,
+            this.desktopFileSystem()
+        );
+    }
+    /** Where web sources read where they are are downloaded to on this computer, outside every vault. Replaceable (tests). */
+    cacheFolder(): string | null {
+        const host = (
+            globalThis as unknown as { process?: { platform?: string; env?: Record<string, string | undefined> } }
+        ).process;
+        let home = '';
+        try {
+            home = this.homeFolder();
+        } catch {
+            home = '';
+        }
+        return cacheRoot({
+            platform: host?.platform || '',
+            home,
+            localAppData: host?.env?.LOCALAPPDATA,
+            xdgCache: host?.env?.XDG_CACHE_HOME
+        });
+    }
+    /** Downloads a web source to this computer's cache (once at a time), after the reader's yes. Gives its key. */
+    private downloadToCache(url: string, kind: RemoteKind, origin: string): Promise<string> {
+        const pending = this.cacheJobs.get(url);
+        if (pending) return pending;
+        const job = (async () => {
+            if (this.stopped) throw new Error('Plugin unloaded before downloading the source.');
+            new Notice(`Downloading ${remoteLabel(kind)} for reading…`);
+            const bytes = await this.sourceBytes(url, kind);
+            validateRemote(bytes, kind);
+            return this.keepDownload(url, kind, origin, bytes);
+        })();
+        this.cacheJobs.set(url, job);
+        return job.finally(() => this.cacheJobs.delete(url));
+    }
+    /**
+     * Keeps downloaded bytes in the cache, in a folder of their own (named by the address's digest and theirs), under
+     * the name the address gives the file, and makes them what the address means on this computer. Nothing in the
+     * cache is ever written over: a file open in a tab is never replaced.
+     */
+    private async keepDownload(url: string, kind: RemoteKind, origin: string, bytes: ArrayBuffer): Promise<string> {
+        const root = this.cacheFolder();
+        if (!root) throw new Error("This computer's folder for caches is not known, so the file cannot be downloaded.");
+        const path = cachePath(root, await digest(url), await digest(bytes), cacheFileName(url, kind));
+        if (!inCache(root, path)) throw new Error('A download is kept only in the cache.');
+        const files = this.desktopFileSystem(),
+            folder = path.slice(0, Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')));
+        let there = false;
+        try {
+            there = (await files.stat(path)).size === bytes.byteLength;
+        } catch {
+            there = false;
+        }
+        if (!there) {
+            await files.mkdir(folder, { recursive: true });
+            const part = `${folder}${path.charAt(folder.length)}.part-${uuid().slice(0, 8)}`;
+            await files.writeFile(part, new Uint8Array(bytes), { flag: 'wx' });
+            try {
+                await files.rename(part, path);
+            } catch (error) {
+                await files.unlink(part).catch(() => undefined);
+                throw error;
+            }
+        }
+        if (this.stopped) throw new Error('Plugin unloaded; the download was kept without selecting it.');
+        const key = externalKey(path),
+            kept = this.placeDevice();
+        this.keepPlaceDevice({
+            allowed: allowedHere(kept, key, this.foldOutsideCase())
+                ? kept.allowed
+                : [...kept.allowed, key].slice(-2000),
+            downloads: { ...kept.downloads, [url]: path }
+        });
+        this.placeKey(key, { origin, uri: url, kind });
+        return key;
+    }
+    /** A copy in the vault named by the note's target (`copyName`), made on any device: found and remembered, or null. */
+    private async copyByName(note: TFile): Promise<string | null> {
+        const written = annotationTarget(this.targetProperty(note, 'annotation-target'));
+        if (!written) return null;
+        const origin = copyOrigin(written);
+        for (const ending of COPY_ENDINGS) {
+            const path = await copyName(origin, ending);
+            if (!(this.app.vault.getAbstractFileByPath(path) instanceof TFile)) continue;
+            if (this.targetCopies[origin] !== path) {
+                this.targetCopies[origin] = path;
+                await this.persist().catch(() => undefined);
+            }
+            return path;
+        }
+        return null;
+    }
+    /** A copy in the vault of a source read where it is, made from the very file being read. */
+    private async copyEntry(entry: InPlaceSource, key: string): Promise<TFile> {
+        // The reader's press (or answer) is the yes for this one copy.
+        this.approvedSources.add(entry.uri);
+        try {
+            return await this.downloadSource(
+                entry.uri,
+                entry.kind,
+                entry.origin,
+                'copy',
+                this.app.vault.getAbstractFileByPath(key) ? key : undefined
+            );
+        } finally {
+            if (entry.uri.startsWith('file:')) this.approvedSources.delete(entry.uri);
+        }
+    }
+    /**
+     * "Annotate a copy in the vault": the source read where it is is copied into the vault, and shown in its place, with
+     * the same annotations (they are anchored on the same bytes). The note keeps its target; the copy is read from now
+     * on, on every device.
+     */
+    async annotateCopy(key: string | null = this.currentFile) {
+        const source = key ? collectionSource(key) : '',
+            found = source ? this.inPlaceKey(source) : null,
+            entry = found ? this.inPlace.get(found) : undefined;
+        if (!found || !entry) {
+            new Notice('Open a source that is read where it is, outside the vault, first.');
+            return;
+        }
+        if (this.editMode || this.draft || this.busy) throw new Error('Save or cancel the annotation draft first.');
+        const note =
+            this.shownNote(key) || this.app.vault.getMarkdownFiles().find(each => this.noteMatchesSource(each, found));
+        const file = await this.copyEntry(entry, found);
+        const leaves: WorkspaceLeaf[] = [];
+        this.app.workspace.iterateAllLeaves?.(leaf => {
+            const shown = leaf.view ? this.baseSourceKey(leaf.view) : null;
+            if (shown && sameExternal(shown, found, this.foldOutsideCase())) leaves.push(leaf);
+        });
+        if (note)
+            if (leaves.length) for (const leaf of leaves) await this.openNoteTarget(note, undefined, false, leaf);
+            else await this.openNoteTarget(note, undefined, 'tab');
+        new Notice(
+            `Copied into the vault as ${file.path}. Its annotations are the same; the file outside the vault is no longer read for this note.`,
+            10000
+        );
+    }
+    /**
+     * Removes the downloads of web sources kept on this computer, except those a tab shows now. Only folders the cache
+     * itself made (named by digests) are removed; a source removed is downloaded again when its note is next opened.
+     */
+    async clearDownloadCache() {
+        const root = this.cacheFolder();
+        if (!root) throw new Error("This computer's folder for caches is not known.");
+        const shown = new Set<string>();
+        this.app.workspace.iterateAllLeaves?.(leaf => {
+            const file = leaf.view instanceof FileView ? leaf.view.file : null;
+            if (file && isExternalKey(file.path)) shown.add(externalKey(externalPath(file.path)));
+        });
+        const files = this.desktopFileSystem(),
+            separator = /^[a-z]:\\/i.test(root) && !root.includes('/') ? '\\' : '/',
+            hex = /^[0-9a-f]{64}$/;
+        let removed = 0,
+            kept = 0;
+        let addresses: string[] = [];
+        try {
+            addresses = await files.readdir(root);
+        } catch {
+            addresses = [];
+        }
+        for (const address of addresses.filter(name => hex.test(name))) {
+            const folder = `${root}${separator}${address}`;
+            for (const version of (await files.readdir(folder).catch(() => [] as string[])).filter(name =>
+                hex.test(name)
+            )) {
+                const inner = `${folder}${separator}${version}`,
+                    names = await files.readdir(inner).catch(() => [] as string[]);
+                if (names.some(name => shown.has(externalKey(`${inner}${separator}${name}`)))) {
+                    kept++;
+                    continue;
+                }
+                await files.rm(inner, { recursive: true, force: true });
+                removed++;
+            }
+            if (!(await files.readdir(folder).catch(() => [] as string[])).length)
+                await files.rmdir(folder).catch(() => undefined);
+        }
+        const device = this.placeDevice(),
+            downloads: Record<string, string> = {};
+        for (const [url, path] of Object.entries(device.downloads))
+            if (shown.has(externalKey(path))) downloads[url] = path;
+        this.keepPlaceDevice({ ...device, downloads });
+        new Notice(
+            removed || kept
+                ? `${removed} ${removed === 1 ? 'download' : 'downloads'} removed${kept ? `; ${kept} open in a tab kept` : ''}.`
+                : 'The download cache is empty.'
+        );
+    }
+    /** Says that an action needs the source in the vault, with the way to put a copy there. */
+    private needsCopy(key: string, why: string) {
+        const page = this.app.workspace.containerEl.ownerDocument,
+            said = page.createDocumentFragment(),
+            press = page.createElement('button');
+        press.className = 'mod-cta annotator-annotate-copy';
+        press.textContent = 'Annotate a copy in the vault';
+        said.append(`${why} `, press);
+        const notice = new Notice(said, ACTION_NOTICE_MS);
+        press.addEventListener('click', () => {
+            notice.hide?.();
+            void this.annotateCopy(key).catch(error => this.fail(error));
+        });
+    }
+    /**
+     * A PDF read where it is may have changed since its annotations were made (Zotero, Calibre or someone replaced it).
+     * Each annotation carries the fingerprint of the PDF it was made on; those made on another version are counted and
+     * the reader is told once for each opening. Nothing in the notes is changed.
+     */
+    private async sayOtherVersion(key: string, current: () => boolean) {
+        for (let waited = 0; waited < 20000 && current() && !this.stopped; waited += 250) {
+            const host = this.bindingFor(key)?.host;
+            if (host instanceof NativePdf) {
+                let fingerprint = '';
+                try {
+                    fingerprint = host.identity().document.documentFingerprint;
+                } catch {
+                    fingerprint = '';
+                }
+                if (fingerprint) {
+                    const records = this.notes.get(key)?.records || [],
+                        other = records.filter(row => otherCopy(row, fingerprint)).length;
+                    if (other)
+                        new Notice(
+                            `${other === 1 ? 'One annotation' : `${other} annotations`} of this note ${other === 1 ? 'was' : 'were'} made on another version of this PDF: the file has changed since. Passages are found by their words and marked in the list; areas and drawings from the other version are not placed. Annotate a copy in the vault to keep one version fixed.`,
+                            15000
+                        );
+                    return;
+                }
+            }
+            await new Promise(resolve => window.setTimeout(resolve, 250));
+        }
+    }
+    /**
+     * "Refresh" for a web source read where it is: downloaded again; if the bytes differ, the annotations are reviewed
+     * against them, and on the reader's yes this computer reads the new download (the earlier one stays in the cache).
+     */
+    private async refreshInPlace(key: string, entry: InPlaceSource) {
+        const previous = await this.readOutside(key, entry.kind),
+            previousHash = await digest(previous);
+        new Notice(`Reading a new ${remoteLabel(entry.kind)} revision for review…`);
+        const bytes = await this.sourceBytes(entry.uri, entry.kind, true);
+        if (this.stopped) throw new Error('Plugin unloaded before source review.');
+        validateRemote(bytes, entry.kind);
+        const sha256 = await digest(bytes);
+        if (sha256 === previousHash) {
+            new Notice('Source bytes are unchanged.');
+            return;
+        }
+        const snapshots: { path: string; sha256: string; records: Annotation[] }[] = [];
+        for (const note of this.app.vault.getMarkdownFiles()) {
+            if (!this.noteMatchesSource(note, key)) continue;
+            const raw = await this.app.vault.read(note);
+            snapshots.push({ path: note.path, sha256: await digest(raw), records: await this.codec.readAll(raw) });
+        }
+        const review = await reviewRemote(
+            bytes,
+            entry.kind,
+            snapshots.flatMap((note, index) =>
+                note.records.map(row => ({
+                    ...row,
+                    id: `${index}:${row.id}`,
+                    ...(row.references ? { references: row.references.map(id => `${index}:${id}`) } : {})
+                }))
+            ),
+            this.app.workspace.containerEl.ownerDocument,
+            loadPdfJs,
+            () => !this.stopped
+        );
+        const now = new Date().toISOString(),
+            candidate: RemoteCandidate = {
+                url: entry.uri,
+                kind: entry.kind,
+                previous: { path: externalPath(key), sha256: previousHash, kind: entry.kind, capturedAt: now },
+                next: {
+                    path: 'this computer’s download cache',
+                    sha256,
+                    kind: entry.kind,
+                    capturedAt: now,
+                    ...(review.fingerprint ? { fingerprint: review.fingerprint } : {})
+                },
+                bytes,
+                notes: snapshots.map((note, index) => ({
+                    path: note.path,
+                    sha256: note.sha256,
+                    review: {
+                        fingerprint: review.fingerprint,
+                        checks: review.checks
+                            .filter(item => item.id.startsWith(`${index}:`))
+                            .map(item => ({ ...item, id: item.id.slice(String(index).length + 1) }))
+                    }
+                }))
+            };
+        new RemoteRevisionModal(this.app, candidate, async () => {
+            const next = await this.keepDownload(entry.uri, entry.kind, entry.origin, bytes),
+                note = this.shownNote(this.currentFile);
+            const leaves: WorkspaceLeaf[] = [];
+            this.app.workspace.iterateAllLeaves?.(leaf => {
+                if (leaf.view && this.baseSourceKey(leaf.view) === key) leaves.push(leaf);
+            });
+            if (note && this.noteMatchesSource(note, next))
+                for (const leaf of leaves) await this.openNoteTarget(note, undefined, false, leaf);
+            new Notice(
+                'Source revision selected. The earlier download stays in the cache, and the notes are unchanged.'
+            );
+        }).open();
+    }
     /**
      * A Zotero or Calibre link names a file those programs keep, not where it is. It is found once, by looking in the
      * folder the settings name (Zotero's usual place in the home folder when none is named), and remembered. Nothing is
@@ -7673,7 +8513,7 @@ export default class AnnotatorPlugin extends Plugin {
         if (link.app === 'devonthink') {
             if (Platform.isMobile)
                 throw new Error(
-                    'DEVONthink links are followed on a Mac only. Open this note in Obsidian on the Mac that has the database first: the copy it keeps in the vault is read here afterwards. Or point annotation-target at the file in the vault.'
+                    'DEVONthink links are followed on a Mac only. On the Mac that has the database, open this note and choose Annotate a copy in the vault: the copy then syncs here. Or point annotation-target at the file in the vault.'
                 );
             if (!Platform.isDesktopApp || !Platform.isMacOS)
                 throw new Error(
@@ -7700,10 +8540,7 @@ export default class AnnotatorPlugin extends Plugin {
             await this.persist();
             return;
         }
-        if (Platform.isMobile)
-            throw new Error(
-                'Open this note on a computer first: the link is followed there, and the copy kept in the vault is read here afterwards.'
-            );
+        if (Platform.isMobile) throw new Error(PHONE_FILE);
         const files = this.desktopFileSystem(),
             list = async (folder: string) =>
                 (await files.readdir(folder, { withFileTypes: true })).map(entry => ({
@@ -7744,13 +8581,19 @@ export default class AnnotatorPlugin extends Plugin {
         const pending = this.archiveLookups.get(item.key);
         if (pending) return pending;
         const job = (async () => {
-            await this.approveSource(item.key, 'archive.org');
+            // Asked as the book would be read: where it is (downloaded to this computer's cache), or copied into the vault.
+            const choice = await this.approveSource(
+                item.key,
+                'archive.org',
+                Platform.isMobile ? 'phone' : this.readsInPlace() ? 'place' : 'copy'
+            );
             if (this.stopped) throw new Error('Plugin unloaded before archive.org was asked.');
             const file = await lookUpArchiveItem(item, async url => {
                 const response = await requestUrl({ url, throw: false });
                 return { status: response.status, arrayBuffer: response.arrayBuffer };
             });
             this.approvedSources.add(file.url);
+            if (choice === 'copy') this.wantCopy.add(file.url);
             this.archiveFiles[item.key] = file.url;
             await this.persist();
         })();
@@ -7806,7 +8649,7 @@ export default class AnnotatorPlugin extends Plugin {
         if (url.startsWith('file:')) {
             if (Platform.isMobile)
                 throw new Error(
-                    'Open this local source on desktop first. A retained vault copy can be used on mobile after sync.'
+                    'A phone or tablet cannot read a file that is on a computer. Do this on the desktop computer that has the file; the copy in the vault syncs here.'
                 );
             return readLocalSource(
                 url,
@@ -8022,7 +8865,7 @@ export default class AnnotatorPlugin extends Plugin {
                     (await digest(await this.app.vault.readBinary(file))) !== candidate.next.sha256)
             )
                 throw new Error('The revision path contains different bytes. It was not overwritten.');
-            if (!file) file = await this.app.vault.createBinary(candidate.next.path, candidate.bytes);
+            if (!file) file = await this.vaultWrite.createBinary(candidate.next.path, candidate.bytes);
             if (!(file instanceof TFile) || this.stopped)
                 throw new Error('Source revision was retained on disk, but not selected.');
             if ((await digest(await this.app.vault.readBinary(file))) !== candidate.next.sha256)
@@ -8055,12 +8898,18 @@ export default class AnnotatorPlugin extends Plugin {
                 ...new Map([...history, candidate.previous, candidate.next].map(entry => [entry.path, entry])).values()
             ];
             this.remoteSources[candidate.url] = candidate.next.path;
+            // A copy named by a note's target moves to the chosen revision with it.
+            const named = Object.keys(this.targetCopies).filter(
+                origin => this.targetCopies[origin] === candidate.previous.path
+            );
+            for (const origin of named) this.targetCopies[origin] = candidate.next.path;
             if (this.associations[candidate.previous.path])
                 this.associations[candidate.next.path] = this.associations[candidate.previous.path];
             try {
                 await this.persist();
             } catch (error) {
                 this.remoteSources[candidate.url] = candidate.previous.path;
+                for (const origin of named) this.targetCopies[origin] = candidate.previous.path;
                 this.remoteHistory[candidate.url] = history;
                 if (association) this.associations[candidate.next.path] = association;
                 else delete this.associations[candidate.next.path];
@@ -8096,6 +8945,25 @@ export default class AnnotatorPlugin extends Plugin {
         new Notice('Source revision selected. Previous cached files and all annotation notes were retained.', 8000);
     }
     private async offerRemoteRefresh() {
+        // A source read where it is: a web address is downloaded again; a file on this computer is always read as it is.
+        const found = this.currentFile ? this.inPlaceKey(collectionSource(this.currentFile)) : null,
+            entry = found ? this.inPlace.get(found) : undefined;
+        if (found && entry) {
+            if (!/^https?:/i.test(entry.uri))
+                throw new Error(
+                    'This file is read where it is, so it is always shown as it is now. A copy in the vault keeps one version fixed.'
+                );
+            if (this.editMode || this.draft || this.busy)
+                throw new Error('Save or cancel the annotation draft before changing source revisions.');
+            if (this.reviewingRemote) throw new Error('A source review is already being prepared.');
+            this.reviewingRemote = true;
+            try {
+                await this.refreshInPlace(found, entry);
+            } finally {
+                this.reviewingRemote = false;
+            }
+            return;
+        }
         const { url } = this.remoteContext();
         if (this.reviewingRemote) throw new Error('A source review is already being prepared.');
         this.reviewingRemote = true;
@@ -8180,9 +9048,9 @@ export default class AnnotatorPlugin extends Plugin {
             copy++
         )
             base = `${htmlCopyBase(html.path)} ${copy}`;
-        await this.app.vault.create(`${base}.source.json`, JSON.stringify(result.archive));
+        await this.vaultWrite.create(`${base}.source.json`, JSON.stringify(result.archive));
         const frontmatter = `---\nannotator-snapshot: 1\nsource: ${JSON.stringify(url)}\nannotator-archive: ${JSON.stringify(`${base}.source.json`)}\nannotator-source-file: ${JSON.stringify(html.path)}\n---\n\n`;
-        const file = await this.app.vault.create(`${base}.md`, frontmatter + result.markdown);
+        const file = await this.vaultWrite.create(`${base}.md`, frontmatter + result.markdown);
         // The copy is read as soon as it is made; the index learns of its properties a moment later.
         for (
             let wait = 0;
@@ -8212,7 +9080,7 @@ export default class AnnotatorPlugin extends Plugin {
         }
         const result = await makeSnapshot(html, url, this.app.workspace.containerEl.ownerDocument);
         const folder = 'Web snapshots';
-        if (!this.app.vault.getAbstractFileByPath(folder)) await this.app.vault.createFolder(folder);
+        if (!this.app.vault.getAbstractFileByPath(folder)) await this.vaultWrite.createFolder(folder);
         const name =
             result.archive.title
                 // Control characters are what this pattern is there to find.
@@ -8224,9 +9092,9 @@ export default class AnnotatorPlugin extends Plugin {
         const base = `${folder}/${name}-${uuid().slice(0, 8)}`,
             archive = `${base}.source.json`;
         if (this.stopped) throw new Error('Plugin unloaded before saving the reading copy.');
-        await this.app.vault.create(archive, JSON.stringify(result.archive));
+        await this.vaultWrite.create(archive, JSON.stringify(result.archive));
         const frontmatter = `---\nannotator-snapshot: 1\nsource: ${JSON.stringify(url)}\nannotator-archive: ${JSON.stringify(archive)}\n---\n\n`;
-        const file = await this.app.vault.create(`${base}.md`, frontmatter + result.markdown);
+        const file = await this.vaultWrite.create(`${base}.md`, frontmatter + result.markdown);
         await this.app.workspace.getLeaf('tab').openFile(file);
         this.bindSources();
         await this.openSidebar();
@@ -8540,6 +9408,16 @@ class NativeSettings extends PluginSettingTab {
             );
 
         new Setting(root).setName('Sources outside the vault').setHeading();
+        new Setting(root)
+            .setName('Copy outside sources into the vault')
+            .setDesc(
+                "Off: a note's source outside the vault (a web address, a file on this computer, a Zotero, Calibre or DEVONthink link) is read where it is, and nothing is put into the vault; Annotate a copy in the vault makes a copy when you want one. On: every such source is copied into “Annotator sources” the first time, as Annotator 0.3 did. Copies already made are read either way. Phones and tablets always read a copy, and so does Obsidian before 1.14.4."
+            )
+            .addToggle(control =>
+                control
+                    .setValue(plugin.display.copySources)
+                    .onChange(value => save(plugin.setDisplay({ copySources: value })))
+            );
         new Setting(root)
             .setName('Zotero data folder')
             .setDesc(

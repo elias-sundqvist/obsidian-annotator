@@ -412,8 +412,10 @@ export class ConfirmModal extends Modal {
         private heading: string,
         private lines: string[],
         private yes: string,
-        private answer: (choice: 'yes' | 'always' | 'no') => void,
-        private always?: string
+        private answer: (choice: 'yes' | 'always' | 'copy' | 'no') => void,
+        private always?: string,
+        /** A second way to go on (a copy in the vault instead of the file where it is), answered as 'copy'. */
+        private other?: string
     ) {
         super(app);
     }
@@ -423,13 +425,14 @@ export class ConfirmModal extends Modal {
         for (const [index, line] of this.lines.entries())
             this.contentEl.createEl('p', { text: line, cls: index === 1 ? 'annotator-confirm-subject' : '' });
         const row = new Setting(this.contentEl);
-        const pick = (choice: 'yes' | 'always' | 'no') => {
+        const pick = (choice: 'yes' | 'always' | 'copy' | 'no') => {
             if (this.answered) return;
             this.answered = true;
             this.close();
             this.answer(choice);
         };
         row.addButton(button => button.setButtonText('Not now').onClick(() => pick('no')));
+        if (this.other) row.addButton(button => button.setButtonText(this.other!).onClick(() => pick('copy')));
         if (this.always) row.addButton(button => button.setButtonText(this.always!).onClick(() => pick('always')));
         row.addButton(button =>
             button

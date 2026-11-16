@@ -10,6 +10,7 @@ import type AnnotatorPlugin from './main';
 import type { NativePdf } from './native-pdf';
 import { showing } from './rest';
 import { displayTitle } from './library';
+import { vaultWritable } from './in-place';
 import { Codes, plain, type Entry, type Proposal, type Row } from './citations';
 import type { KnownList, PageView, PdfCitations } from './pdf-citations';
 import { doiKey, nameWords, noteFacts, noteProperties, workKey, type NoteFacts } from './reference-note';
@@ -794,12 +795,18 @@ export class CitationsView extends ItemView {
             const folder = this.plugin.display.referenceFolder.trim().replace(/^\/+|\/+$/g, '');
             let parent = folder;
             if (folder) {
+                if (!vaultWritable(folder))
+                    throw new Error(
+                        'Nothing is written outside the vault. Name a folder of the vault for these notes.'
+                    );
                 if (!this.app.vault.getAbstractFileByPath(folder)) await this.app.vault.createFolder(folder);
             } else {
                 const where = this.app.fileManager.getNewFileParent(this.host?.view.file?.path || '');
                 parent = where.path === '/' ? '' : where.path;
             }
             const path = normalizePath(`${parent ? `${parent}/` : ''}${name}.md`);
+            if (!vaultWritable(path) || (folder && !vaultWritable(folder)))
+                throw new Error('Nothing is written outside the vault. Name a folder of the vault for these notes.');
             if (this.app.vault.getAbstractFileByPath(path))
                 throw new Error(
                     `A note named “${name}” is already there. Nothing was written; give this one another name.`
