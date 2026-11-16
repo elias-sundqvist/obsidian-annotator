@@ -3,7 +3,7 @@
 What changed for someone using Annotator. How to use each thing is in
 [README.md](README.md).
 
-## Unreleased
+## 0.3.5 (2026-11-16)
 
 - "Open with Annotator" is installed with a button: **Install**, in the
   settings under **Open from outside Obsidian**, on macOS, Windows and
