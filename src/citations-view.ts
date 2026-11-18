@@ -9,7 +9,6 @@ import { ItemView, Keymap, Menu, Notice, Platform, TFile, normalizePath, setIcon
 import type AnnotatorPlugin from './main';
 import type { NativePdf } from './native-pdf';
 import { showing } from './rest';
-import { displayTitle } from './library';
 import { vaultWritable } from './in-place';
 import { Codes, plain, type Entry, type Proposal, type Row } from './citations';
 import type { KnownList, PageView, PdfCitations } from './pdf-citations';
@@ -80,6 +79,10 @@ export class CitationsView extends ItemView {
     }
     getIcon() {
         return 'book-marked';
+    }
+    /** A note's title changed, or the property titles are taken from: the names shown follow. */
+    retitle() {
+        this.render();
     }
     async onOpen() {
         this.closed = false;
@@ -373,7 +376,7 @@ export class CitationsView extends ItemView {
         title.createDiv({
             cls: 'annotator-head-name annotator-citation-source',
             text: state?.note
-                ? displayTitle(state.note.basename)
+                ? this.plugin.noteName(state.note)
                 : this.source
                   ? this.source.split('/').pop() || 'Citations'
                   : 'Citations'
@@ -654,9 +657,11 @@ export class CitationsView extends ItemView {
     private noteLink(parent: HTMLElement, note: NoteFacts, lead: string) {
         const line = parent.createDiv({ cls: 'annotator-citation-note' });
         if (lead) line.createSpan({ text: lead });
+        const file = this.app.vault.getAbstractFileByPath(note.path),
+            title = file instanceof TFile ? this.plugin.noteTitle(file) : '';
         const link = line.createEl('a', {
             cls: 'internal-link',
-            text: note.path.replace(/^.*\//, '').replace(/\.md$/i, ''),
+            text: title || note.path.replace(/^.*\//, '').replace(/\.md$/i, ''),
             attr: { href: note.path, 'data-href': note.path }
         });
         link.onclick = event => {

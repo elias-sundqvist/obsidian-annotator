@@ -16,11 +16,17 @@ export class FileView extends View {
     file: any;
     constructor(public leaf: any) { super(); this.contentEl = leaf.contentEl; this.containerEl = leaf.contentEl; this.app = leaf.app; }
     getState(): Record<string, unknown> { return {}; }
+    getDisplayText(): string { return this.file?.basename || ''; }
     async setState(state: Record<string, unknown>, _result: unknown) { if (state.file) { this.file = this.app.vault.getAbstractFileByPath(state.file); await (this as any).onLoadFile(this.file); } }
 }
 export class MarkdownView extends FileView {}
 export class ItemView extends FileView {addChild<T>(child:T){return child;}removeChild(_child:unknown){} }
-export class WorkspaceLeaf { async setViewState(state:any){(this as any).state=state;} }
+export class WorkspaceLeaf {
+    async setViewState(state:any){(this as any).state=state;}
+    // As the host names a tab: by the leaf's own display text, written into the tab's title when its header is updated.
+    getDisplayText(): string { return (this as any).view?.getDisplayText?.() || ''; }
+    updateHeader(){ const title=(this as any).tabHeaderInnerTitleEl; if(title) title.textContent=this.getDisplayText(); }
+}
 export class TFile {
     stat={mtime:1,size:0}; extension:string; basename:string; name:string;
     constructor(public path:string){this.extension=path.split('.').at(-1)||'';this.name=path.split('/').at(-1)!;this.basename=this.name.replace(/\.[^.]+$/,'');}

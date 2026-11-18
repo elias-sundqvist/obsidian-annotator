@@ -3,6 +3,20 @@
 What changed for someone using Annotator. How to use each thing is in
 [README.md](README.md).
 
+## Unreleased
+
+- **Show titles from this property** (settings, under **Annotation notes**)
+  names annotation notes and their sources by a property of the note, such
+  as `title`, instead of by file names: in the tab of a PDF, book, web page
+  or video (also one read from the download cache or where it is), the
+  window's title, the sidebar, **Open annotated source…**, **Search all
+  annotations…**, Citations, and a new **Make a Base of everything
+  annotated**. A list gives its first entry, a link its words; a note
+  without the property keeps its name, and a changed title shows at once.
+  It is empty by default, and only changes what is shown: no file is
+  renamed and no note is written. Obsidian's own PDF view keeps the file's
+  name in its header, where typing renames the file.
+
 ## 0.3.5 (2026-11-16)
 
 - "Open with Annotator" is installed with a button: **Install**, in the

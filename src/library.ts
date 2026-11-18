@@ -30,6 +30,8 @@ export interface LibraryHost {
     /** `annotation-target` of a note and the key it resolves to, or null when the note is not an annotation note. */
     describeTarget(note: TFile): { raw: string; key: string | null; type: string | null } | null;
     openSource(note: TFile): Promise<void>;
+    /** What a note is called: its title where the reader takes titles from a property and it has one (note-title.ts). */
+    noteName?(note: TFile): string;
     /** Notes are read off the UI thread. */
     logic: Pick<LogicHost, 'call'>;
 }
@@ -73,7 +75,7 @@ export async function scanLibrary(host: LibraryHost): Promise<LibraryEntry[]> {
         const kind = kindOf(target.raw, target.key, target.type);
         const entry: LibraryEntry = {
             note,
-            title: displayTitle(note.basename),
+            title: host.noteName?.(note) || displayTitle(note.basename),
             kind,
             target: target.raw,
             resolved: !!target.key,
@@ -319,7 +321,7 @@ export async function scanAnnotations(host: LibraryHost): Promise<AnnotationHit[
         const target = host.describeTarget(note);
         if (!target) continue;
         const kind = kindOf(target.raw, target.key, target.type),
-            title = displayTitle(note.basename);
+            title = host.noteName?.(note) || displayTitle(note.basename);
         try {
             const source = await host.app.vault.cachedRead(note);
             if (kind === 'video') {
@@ -382,7 +384,9 @@ export class AnnotationSearch extends FuzzySuggestModal<AnnotationHit> {
         return this.hits;
     }
     getItemText(hit: AnnotationHit) {
-        return `${hit.comment} ${hit.quote} ${hit.tags.map(tag => `#${tag}`).join(' ')} ${hit.title}`;
+        // A note shown by its title is still found by its name.
+        const named = displayTitle(hit.note.basename);
+        return `${hit.comment} ${hit.quote} ${hit.tags.map(tag => `#${tag}`).join(' ')} ${hit.title}${hit.title === named ? '' : ` ${named}`}`;
     }
     renderSuggestion(match: FuzzyMatch<AnnotationHit>, el: HTMLElement) {
         const hit = match.item;

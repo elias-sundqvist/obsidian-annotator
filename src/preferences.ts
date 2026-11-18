@@ -1,5 +1,6 @@
 import { clone } from './portable';
 import { yamlName } from './note-template';
+import { titlePropertyName } from './note-title';
 /** Versioned native preferences; legacy settings are read without modifying them. */
 export interface ReaderPreferences {
     readingMode: 'scroll' | 'pagination';
@@ -108,13 +109,23 @@ export function annotationTarget(value: unknown): string | null {
  * "Export each annotation as its own note" carries an `annotation-id` and is not
  * one, whatever it calls its source). The columns are the properties such a
  * note may carry: what "Add the PDF's details" writes, and where the reader
- * was.
+ * was. Where the reader takes titles from a property ("Show titles from this
+ * property"), that property is shown beside each note's name, as Title.
  */
-export function sourcesBase(alias = ''): string {
+export function sourcesBase(alias = '', title = ''): string {
     const second = targetAliasName(alias),
         given = (name: string) => `'!note[${JSON.stringify(name).replace(/'/g, "''")}].isEmpty()'`,
         column = (name: string) => yamlName(`note.${name}`),
-        sources = second ? [column('annotation-target'), column(second)] : [column('annotation-target')];
+        sources = second ? [column('annotation-target'), column(second)] : [column('annotation-target')],
+        named = titlePropertyName(title),
+        // A property that is a column already is not shown twice.
+        titled =
+            named &&
+            !['annotation-target', 'annotation-progress', 'author', 'year', second].some(
+                each => each && each.toLowerCase() === named.toLowerCase()
+            )
+                ? column(named)
+                : '';
     return [
         'filters:',
         '  and:',
@@ -130,6 +141,7 @@ export function sourcesBase(alias = ''): string {
         'properties:',
         '  file.name:',
         '    displayName: Note',
+        ...(titled ? [`  ${titled}:`, '    displayName: Title'] : []),
         '  note.annotation-target:',
         '    displayName: Source',
         '  note.annotation-progress:',
@@ -147,6 +159,7 @@ export function sourcesBase(alias = ''): string {
         '    name: Everything annotated',
         '    order:',
         '      - file.name',
+        ...(titled ? [`      - ${titled}`] : []),
         ...sources.map(each => `      - ${each}`),
         '      - note.annotation-progress',
         '      - note.author',
@@ -163,6 +176,7 @@ export function sourcesBase(alias = ''): string {
         '        - \'!note["annotation-progress"].isEmpty()\'',
         '    order:',
         '      - file.name',
+        ...(titled ? [`      - ${titled}`] : []),
         '      - note.annotation-progress',
         ...sources.map(each => `      - ${each}`),
         '      - file.mtime',

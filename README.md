@@ -241,6 +241,20 @@ filters:
 
 An `Annotated sources.base` made before is not changed when the setting is.
 
+**Show titles from this property** (settings, under **Annotation notes**;
+empty by default) names sources by a property of their notes instead of by
+file names. Put `title` there, the property **Add the PDF's details to the
+note** fills in, and a source whose note has a title is called by it: in its
+tab and the window's title, the sidebar, **Open annotated source…**,
+**Search all annotations…**, Citations, and the header of a book or a video.
+That helps most with a PDF read from the download cache, whose file is named
+by the cache. A list gives its first entry and a link the words it shows; a
+note without the property keeps its name, and the title follows the note as
+you edit it. Only what is shown changes: no file is renamed and no note is
+written. Obsidian's own PDF view keeps the file's name in its header, where
+typing renames the file. A Base made by **Make a Base of everything
+annotated** while a property is named has it as a Title column.
+
 Nothing is stored anywhere else. If a block in the note is damaged (a sync
 conflict, a slip of the hand), the readable annotations are still shown, the
 sidebar names the damaged part with a button to its line, and nothing is

@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 const setup = new JSDOM('<body></body>', { pretendToBeVisual: true }); globalThis.window = setup.window; globalThis.document = setup.window.document;
-const { Native, TFile, Notice, Platform, AnnotationView,summaryMarkdown, annotationMarkdown, annotationNotes, annotationThreads, scanLibrary, displayTitle, INKS, inkOf, inkAt, inkLabel, noteGist, placeComposer, around, themeChooser, openPageAppearance, PAGE_THEMES } = await import('./.generated/plugin-boundary.mjs');
+const { Native, TFile, Notice, Platform, AnnotationView,summaryMarkdown, annotationMarkdown, annotationNotes, annotationThreads, scanLibrary, displayTitle, titleFromProperty, titlePropertyName, INKS, inkOf, inkAt, inkLabel, noteGist, placeComposer, around, themeChooser, openPageAppearance, PAGE_THEMES } = await import('./.generated/plugin-boundary.mjs');
 const { create: storeCreate, readAll: storeRead, recolor } = await import('./.generated/codec.mjs');
 setup.window.close();
 
@@ -480,7 +480,7 @@ test('the settings are grouped under headings that say what they are about, in s
         const under = heading => groups.find(group => group[0] === heading)?.slice(1);
         assert.deepEqual(groups.map(group => group[0]), ['Highlight colours', 'Writing notes', 'Keys on a selection', 'Sidebar', 'Annotation notes', 'Copying and exporting', 'Opening', 'Sources outside the vault', 'Reading', 'Open from outside Obsidian', 'Text recognition', 'Coming from Annotator 0.2']);
         assert.deepEqual(under('Sidebar'), ['Compact cards', 'Open the sidebar when a source opens', 'Always show card actions']);
-        assert.deepEqual(under('Annotation notes'), ['New annotation notes start with', 'Template for new annotation notes', 'Write new annotations under this heading', 'Give each annotation a heading', 'Level of annotation headings', 'Highlight quotes in the note', 'Keep text before the quote', 'Keep text after the quote', 'Keep reading progress in the note', 'Fold annotation data in Live Preview']);
+        assert.deepEqual(under('Annotation notes'), ['New annotation notes start with', 'Template for new annotation notes', 'Write new annotations under this heading', 'Give each annotation a heading', 'Level of annotation headings', 'Highlight quotes in the note', 'Keep text before the quote', 'Keep text after the quote', 'Keep reading progress in the note', 'Fold annotation data in Live Preview', 'Show titles from this property']);
         assert.deepEqual(under('Copying and exporting'), ['Copied link', 'Export style', 'Link exports back to the passage']);
         assert.deepEqual(under('Opening'), ['Open annotation notes in the reader', 'Default target folders', 'Also read the source from this property', 'Write new notes with this property instead']);
         assert.deepEqual(under('Sources outside the vault'), ['Copy outside sources into the vault', 'Zotero data folder', 'Calibre library folders']);
@@ -495,6 +495,62 @@ test('the settings are grouped under headings that say what they are about, in s
         assert.equal(h.plugin.display.zoteroFolder, '~/Elsewhere'); assert.equal(h.plugin.display.writeUnder, '## Highlights');
         assert.equal(h.plugin.data.nativeDisplay.zoteroFolder, '~/Elsewhere'); assert.equal(h.plugin.data.nativeDisplay.writeUnder, '## Highlights');
     } finally { h.dispose(); }
+});
+
+test('"Show titles from this property" is empty unless filled in, offers title, says it only changes what is shown, and keeps the property it is given', async () => {
+    const h = host();
+    try {
+        await h.plugin.onload();
+        assert.equal(h.plugin.display.titleProperty, '');
+        const tab = h.plugin.settingTabs[0]; tab.display();
+        const rows = [...tab.containerEl.querySelectorAll('.setting-item')], row = rows.find(each => each.querySelector('.setting-item-name')?.textContent === 'Show titles from this property');
+        const field = row.querySelector('input'), said = row.querySelector('.setting-item-description').textContent;
+        assert.equal(field.value, ''); assert.equal(field.placeholder, 'title');
+        assert.match(said, /instead of the file's name/); assert.match(said, /"Add the PDF's details" fills in title/); assert.match(said, /no file is renamed and no note is changed/); assert.match(said, /A note without it is named as before/);
+        assert.equal(row.hasAttribute('title') || field.hasAttribute('title'), false);
+        const settle = async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setTimeout(resolve, 0)); };
+        // Typed with the colon of a property line and spaces around it: the name alone is kept.
+        field.value = '  title:  '; field.dispatchEvent(new h.dom.window.Event('input')); await settle();
+        assert.equal(h.plugin.display.titleProperty, 'title'); assert.equal(h.plugin.data.nativeDisplay.titleProperty, 'title');
+        field.value = ''; field.dispatchEvent(new h.dom.window.Event('input')); await settle();
+        assert.equal(h.plugin.display.titleProperty, ''); assert.equal(h.plugin.data.nativeDisplay.titleProperty, '');
+    } finally { h.dispose(); }
+    // Kept with the settings and read back; what cannot be a property's name is no name.
+    for (const [kept, read] of [['title', 'title'], ['Short title', 'Short title'], ['a\nb', ''], ['x'.repeat(101), ''], [42, ''], [undefined, '']]) {
+        const again = host();
+        try { again.plugin.data = { nativeDisplay: { titleProperty: kept } }; await again.plugin.onload(); assert.equal(again.plugin.display.titleProperty, read, String(kept)); } finally { again.dispose(); }
+    }
+});
+
+test('a title is what the property says: the first words of a list, a link as the words it shows, white space made single, and nothing for a value that is not words', () => {
+    assert.equal(titleFromProperty({ title: 'Attention Is All You Need' }, 'title'), 'Attention Is All You Need');
+    assert.equal(titleFromProperty({ title: '  Two\n  lines  ' }, 'title'), 'Two lines');
+    assert.equal(titleFromProperty({ title: ['', null, 'First', 'Second'] }, 'title'), 'First', 'the first entry that says something');
+    assert.equal(titleFromProperty({ title: [] }, 'title'), '');
+    assert.equal(titleFromProperty({ title: '[[Papers/Vaswani 2017|Transformers]]' }, 'title'), 'Transformers');
+    assert.equal(titleFromProperty({ title: '[[Papers/Vaswani 2017.md#Abstract]]' }, 'title'), 'Vaswani 2017');
+    assert.equal(titleFromProperty({ title: ['[[Vaswani 2017]]'] }, 'title'), 'Vaswani 2017');
+    assert.equal(titleFromProperty({ title: 'On [[Attention]] and ![[figure.png|pictures]]' }, 'title'), 'On Attention and pictures');
+    assert.equal(titleFromProperty({ title: '[The paper](https://example.org/paper.pdf)' }, 'title'), 'The paper');
+    assert.equal(titleFromProperty({ title: 1984 }, 'title'), '1984', 'YAML reads "title: 1984" as a number');
+    for (const nothing of [undefined, null, '', '   ', true, { a: 'b' }, NaN, [[]]]) assert.equal(titleFromProperty({ title: nothing }, 'title'), '', String(nothing));
+    assert.equal(titleFromProperty({ Title: 'By any case' }, 'title'), 'By any case');
+    assert.equal(titleFromProperty({ Title: 'Other', title: 'Exact' }, 'title'), 'Exact', 'the name as written first');
+    assert.equal(titleFromProperty({ title: 'x' }, ''), '', 'no property named, no title');
+    assert.equal(titleFromProperty(undefined, 'title'), ''); assert.equal(titleFromProperty(null, 'title'), '');
+    const long = titleFromProperty({ title: 'word '.repeat(100) }, 'title'); assert.equal(long.length, 200); assert.ok(long.endsWith('…'));
+    assert.equal(titlePropertyName(' title: '), 'title'); assert.equal(titlePropertyName('a\nb'), ''); assert.equal(titlePropertyName(3), '');
+});
+
+test('the Base of everything annotated shows the property titles are taken from beside each note\'s name, and only then', async () => {
+    const { sourcesBase } = await import('./.generated/readers/preferences.js');
+    assert.equal(sourcesBase('', ''), sourcesBase(), 'without one the Base is as it was');
+    const base = sourcesBase('', 'title'), views = base.split('\n  - type: table\n').slice(1);
+    assert.ok(base.includes('  file.name:\n    displayName: Note\n  note.title:\n    displayName: Title\n'));
+    for (const view of views) assert.ok(view.includes('      - file.name\n      - note.title\n'), view);
+    // A name YAML would misread is quoted; a property that is a column already is not shown twice.
+    assert.ok(sourcesBase('', 'Short title').includes('      - note.Short title\n')); assert.ok(sourcesBase('', '#title').includes('      - "note.#title"\n'));
+    assert.equal(sourcesBase('', 'author'), sourcesBase()); assert.equal(sourcesBase('source', 'Source'), sourcesBase('source'));
 });
 
 test('annotating in embedded PDFs is one toggle under showing their highlights: on unless turned off, kept, and offered only while highlights are shown there', async () => {

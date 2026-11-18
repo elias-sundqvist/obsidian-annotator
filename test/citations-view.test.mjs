@@ -10,7 +10,7 @@ import { Codes } from './.generated/readers/citations.js';
 const setup = new JSDOM('<body></body>', { pretendToBeVisual: true });
 globalThis.window = setup.window;
 globalThis.document = setup.window.document;
-const { CitationsView, TFile, Notice, Platform } = await import('./.generated/plugin-boundary.mjs');
+const { CitationsView, TFile, Notice, Platform, displayTitle } = await import('./.generated/plugin-boundary.mjs');
 setup.window.close();
 
 /** A vault, a PDF open on a frozen fixture, and the view on it. */
@@ -84,6 +84,9 @@ function stage(fixture = 'numbered', { links = true, note = true, notes = {} } =
         logic: { call: async (name, ...args) => logic[name](...args) },
         notes: new Map(own ? [[pdf.path, { note: own }]] : []),
         display: { referenceFolder: '' },
+        // Names as the plugin gives them with no property for titles named.
+        noteTitle: () => '',
+        noteName: file => displayTitle(file.basename),
         async annotationNote(key) { const file = add(`${key}.annotations.md`, { 'annotation-target': key }); made.push(file.path); this.notes.set(key, { note: file }); return file; }
     };
     const content = dom.window.document.createElement('div');

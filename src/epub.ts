@@ -24,11 +24,14 @@ import { figurePath, figureSelector } from './area';
 import { fixedPageFit, fixedSpreads, type FixedSpread, type PageViewport } from './epub-layout';
 import { applyPublisherStyles, publisherEnvironment, type PublisherStyles } from './publisher-styles';
 import type { ReaderPreferences, ReadingPosition } from './preferences';
+import { retitleHeader } from './note-title';
 interface EpubCallbacks extends ReaderCallbacks {
     preferences(): ReaderPreferences;
     progress(path: string): ReadingPosition | null;
     saveProgress(path: string, position: ReadingPosition): void;
     setPreferences(value: ReaderPreferences): Promise<void>;
+    /** What the book's note says it is called, where titles are taken from a property; empty for none. */
+    title?(): string;
 }
 export { openPublication, chapterUri, archivePath } from './epub-book';
 export const EPUB_VIEW = 'annotator-native-epub';
@@ -228,7 +231,11 @@ export class EpubView extends FileView {
         return 'book-open';
     }
     getDisplayText() {
-        return this.book?.title || this.file?.basename || 'Book';
+        return this.callbacks.title?.() || this.book?.title || this.file?.basename || 'Book';
+    }
+    /** The header says the name as it now is: its note's title may have changed, or the book may have been read since. */
+    retitle() {
+        retitleHeader(this);
     }
     async onLoadFile(file: TFile) {
         this.opened = false;

@@ -30,3 +30,6 @@ export {CitationsView, CITATIONS_VIEW} from '../../src/citations-view';
 export {scanIntroduction, chosenPages, scanStanding} from '../../src/scan-dialog';
 export {EveryMatchModal, matchStatus} from '../../src/every-match-dialog';
 export {PageRangeModal} from '../../src/page-range-dialog';
+export {titleFromProperty, titlePropertyName, installLeafTitles, retitleHeader} from '../../src/note-title';
+export {LibrarySwitcher, AnnotationSearch, scanAnnotations} from '../../src/library';
+export {EpubView} from '../../src/epub';

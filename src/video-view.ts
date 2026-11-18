@@ -20,10 +20,13 @@ import { chooseFrame, cropStill, type FrameChoice } from './video-frame';
 import { leadingImage, type PageArea } from './area';
 import { noteGist } from './ink';
 import { DEFAULT_SELECTION_KEYS, pressed, type SelectionKeys } from './selection-keys';
+import { retitleHeader } from './note-title';
 
 export const VIDEO_VIEW = 'annotator-native-video';
 export interface VideoCallbacks {
     target(file: TFile): string | null;
+    /** What the note says it is called, where titles are taken from a property; empty for none. */
+    title?(file: TFile): string;
     /** What the note's annotation-progress says another device left this recording at, when that should be resumed; asked once as the video opens. */
     resume?(file: TFile): string | null;
     /** The plugin's logic host; without one the view keeps its own. */
@@ -150,7 +153,13 @@ export class VideoView extends FileView {
         return VIDEO_VIEW;
     }
     getDisplayText() {
-        return this.file?.basename || 'Video annotations';
+        return (this.file && this.callbacks.title?.(this.file)) || this.file?.basename || 'Video annotations';
+    }
+    /** The header and the toolbar say the note's name as it now is: its title from a property may have changed. */
+    retitle() {
+        retitleHeader(this);
+        const heading = this.contentEl.querySelector(':scope > .annotator-video-toolbar > h2');
+        if (heading && heading.textContent !== this.getDisplayText()) heading.textContent = this.getDisplayText();
     }
     getIcon() {
         return 'clapperboard';
@@ -218,7 +227,7 @@ export class VideoView extends FileView {
         this.contentEl.empty();
         this.contentEl.addClass('annotator-video-view');
         const toolbar = this.contentEl.createDiv({ cls: 'annotator-video-toolbar' });
-        toolbar.createEl('h2', { text: file.basename });
+        toolbar.createEl('h2', { text: this.getDisplayText() });
         // Each control keeps its words as its name; quiet ones show only their icon.
         const tool = (text: string, icon: string, cls: string) => {
             const button = toolbar.createEl('button', {

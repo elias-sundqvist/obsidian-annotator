@@ -24,7 +24,6 @@ import { searchAnnotations, compareLocations, defaultLocation } from './annotati
 import { INKS, inkLabel, inkOf, type Ink } from './ink';
 import { MARK_STYLES, STYLE_NAMES, styleIcon, styleOf } from './mark-style';
 import { createCommentEditor, type CommentEditor } from './rich-editor';
-import { displayTitle } from './library';
 import { describePages } from './page-ranges';
 import { keyLabel } from './selection-keys';
 // @ts-expect-error The proofs' JavaScript wrappers carry no type declarations.
@@ -131,9 +130,12 @@ export class AnnotationView extends ItemView {
     getIcon() {
         return 'highlighter';
     }
-    /** A source by its name: a copy kept under a digest by the file it was made from, any other by its own file's. */
+    /**
+     * A source by its name: by its note's title where a property for titles is named and says one, else a copy kept
+     * under a digest by the file it was made from, any other by its own file's.
+     */
     private sourceName(key: string) {
-        return this.plugin.sourceTitle(key) || sourceName(key);
+        return this.plugin.sourceNoteTitle(key) || this.plugin.sourceTitle(key) || sourceName(key);
     }
     async onOpen() {
         this.closed = false;
@@ -439,7 +441,7 @@ export class AnnotationView extends ItemView {
         const quoted = threads.roots.filter(node => inTab(node, 'annotations'));
         const name = title.createEl('button', {
             cls: 'annotator-head-name',
-            text: state?.note ? displayTitle(state.note.basename) : file ? this.sourceName(file) : 'Annotations'
+            text: state?.note ? plugin.noteName(state.note) : file ? this.sourceName(file) : 'Annotations'
         });
         if (state?.note) describe(name, `Open ${state.note.path}`);
         name.disabled = !state?.note;

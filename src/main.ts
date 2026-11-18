@@ -27,6 +27,7 @@ import {
     type CollectionContext
 } from './collection-context';
 import { installCollectionWorkspace, retainCollectionState } from './collection-workspace';
+import { installLeafTitles, titleFromProperty, titlePropertyName } from './note-title';
 import { VideoView, VIDEO_VIEW } from './video-view';
 import { annotatePdf, PdfExportError } from './pdf-write';
 import { canvasPictures, flattenPdf, type FlattenResult } from './pdf-flatten';
@@ -723,6 +724,7 @@ export default class AnnotatorPlugin extends Plugin {
         /** Whether a tablet's drawer has been docked beside the page for the annotations once; after that the reader's own choice stands. */ tabletDocked: boolean;
         /** The folder notes for cited works are made in; empty for where Obsidian puts new notes. */ referenceFolder: string;
         /** Whether a source outside the vault is copied into it, as 0.3 did, instead of read where it is. */ copySources: boolean;
+        /** The property of an annotation note whose value names it and its source wherever Annotator names them; empty for the file's name. */ titleProperty: string;
     } = {
         compact: false,
         alwaysActions: false,
@@ -744,7 +746,8 @@ export default class AnnotatorPlugin extends Plugin {
         noteTemplate: '',
         tabletDocked: false,
         referenceFolder: '',
-        copySources: false
+        copySources: false,
+        titleProperty: ''
     };
     /** The composer floating beside the passage, when notes are written on the page. */
     private floating: FloatingComposer | null = null;
@@ -983,13 +986,20 @@ export default class AnnotatorPlugin extends Plugin {
             noteTemplate: typeof shown.noteTemplate === 'string' ? shown.noteTemplate.slice(0, 400) : '',
             tabletDocked: shown.tabletDocked === true,
             referenceFolder: typeof shown.referenceFolder === 'string' ? shown.referenceFolder.slice(0, 400) : '',
-            copySources: shown.copySources === true
+            copySources: shown.copySources === true,
+            titleProperty: titlePropertyName(shown.titleProperty)
         };
         this.register(() => {
             this.floating?.close();
             this.floating = null;
         });
         this.applyDisplay();
+        // A source's tab says its note's title, where a property for titles is named; with the plugin gone, file names again.
+        const untitle = installLeafTitles(WorkspaceLeaf.prototype, leaf => this.viewTitle(leaf.view));
+        this.register(() => {
+            untitle();
+            this.retitle();
+        });
         this.register(() => {
             for (const marked of Array.from(this.app.workspace.containerEl.querySelectorAll('.annotator-note')))
                 marked.classList.remove('annotator-note');
@@ -1102,7 +1112,8 @@ export default class AnnotatorPlugin extends Plugin {
                 setPreferences: value => this.setReader(value),
                 capture: capture => this.callbacksFor(view).capture(capture),
                 open: row => this.callbacksFor(view).open(row),
-                changed: () => this.callbacksFor(view).changed()
+                changed: () => this.callbacksFor(view).changed(),
+                title: () => this.viewTitle(view)
             });
             return view;
         });
@@ -1957,6 +1968,8 @@ export default class AnnotatorPlugin extends Plugin {
                         ((!!state.parts || !!state.error || paged) && names(pdf))
                     )
                         void this.loadNote(pdf);
+                // Its title may have changed: tabs and the views that name it say the new one (or the file's name again).
+                if (this.display.titleProperty) this.titleChanged(file);
             })
         );
         this.registerEvent(
@@ -2634,6 +2647,7 @@ export default class AnnotatorPlugin extends Plugin {
                 this.collectionStateCleanups.delete(view);
                 if (this.lastSource === view) this.lastSource = null;
             }
+        if (this.display.titleProperty) this.retitle();
     }
     /**
      * What a PDF's areas, drawings and text boxes do once made or changed on its page: the same in a tab and in an
@@ -3192,6 +3206,7 @@ export default class AnnotatorPlugin extends Plugin {
             this.updateHosts(pdf);
             this.resumeElsewhere(pdf);
             this.refresh();
+            if (this.display.titleProperty) this.retitle();
         } catch (error) {
             if (this.stopped || this.versions.get(pdf) !== generation) return;
             this.notes.set(pdf, { note: null, records: [], error: `Annotations unavailable: ${String(error)}` });
@@ -3286,6 +3301,7 @@ export default class AnnotatorPlugin extends Plugin {
         this.updateHosts(pdf);
         this.resumeElsewhere(pdf);
         this.refresh();
+        if (this.display.titleProperty) this.retitle();
     }
     /** The notes a source's annotations are read from: its one note, or each note of a PDF whose notes hold page ranges. */
     private notesOf(state: NoteState | undefined): TFile[] {
@@ -3607,7 +3623,7 @@ export default class AnnotatorPlugin extends Plugin {
         this.madeNotes.set(note, pdf);
         this.madeRanges.set(note, range);
         await this.loadNote(pdf);
-        new Notice(`${clean} made for ${describePages(range)} of ${this.sourceTitle(source.path) || source.basename}.`);
+        new Notice(`${clean} made for ${describePages(range)} of ${this.sourceLabel(pdf, source)}.`);
         const at = host?.currentPage();
         if (host && (!at || !partForPage([{ range }], at))) host.showPage(range.first);
         this.refresh();
@@ -3802,10 +3818,15 @@ export default class AnnotatorPlugin extends Plugin {
         body.classList.toggle('annotator-always-actions-setting', this.display.alwaysActions);
     }
     async setDisplay(value: Partial<AnnotatorPlugin['display']>) {
+        const titled = this.display.titleProperty;
         this.display = { ...this.display, ...value };
         this.applyDisplay();
         await this.persist();
         this.refresh();
+        if (this.display.titleProperty !== titled) {
+            this.retitle();
+            this.refreshCitations();
+        }
     }
     async setSummary(value: SummaryOptions) {
         this.summary = summaryOptions(value);
@@ -7464,7 +7485,10 @@ export default class AnnotatorPlugin extends Plugin {
         const path = 'Annotated sources.base';
         let base = this.app.vault.getAbstractFileByPath(path);
         if (!base) {
-            base = await this.vaultWrite.create(path, sourcesBase(this.display.targetAlias));
+            base = await this.vaultWrite.create(
+                path,
+                sourcesBase(this.display.targetAlias, this.display.titleProperty)
+            );
             const alias = this.display.targetAlias;
             new Notice(
                 `${path} made. It lists every note that has an annotation-target${alias ? ` or a “${alias}” property` : ''}.`,
@@ -7551,6 +7575,7 @@ export default class AnnotatorPlugin extends Plugin {
             keyFor = (note: string, target: string) => JSON.stringify([note, target]);
         return {
             logic: this.logic,
+            title: (file: TFile) => this.noteTitle(file),
             resume: (file: TFile) => this.progressElsewhere(file),
             changed: () => this.refresh(),
             keys: () => this.selectionKeys,
@@ -9238,6 +9263,70 @@ export default class AnnotatorPlugin extends Plugin {
         const url = this.remoteUrl(key);
         return url ? originalName(url) : '';
     }
+    /** What the property named in "Show titles from this property" says of a note; empty without one (note-title.ts). */
+    noteTitle(note: TFile | null | undefined): string {
+        const name = this.display.titleProperty;
+        if (!name || !note) return '';
+        return titleFromProperty(
+            this.app.metadataCache.getFileCache(note)?.frontmatter as Record<string, unknown> | undefined,
+            name
+        );
+    }
+    /** What Annotator calls an annotation note: its title, else its name without the endings that say what it annotates. */
+    noteName(note: TFile): string {
+        return this.noteTitle(note) || displayTitle(note.basename);
+    }
+    /**
+     * The title of a source's annotation note, or empty: of its one note, or of all of its notes where they hold its
+     * pages and every one says the same.
+     */
+    sourceNoteTitle(key: string): string {
+        if (!this.display.titleProperty) return '';
+        const titles = new Set(this.notesOf(this.notes.get(key)).map(note => this.noteTitle(note)));
+        return titles.size === 1 ? [...titles][0] : '';
+    }
+    /** A source by its name, as a notice says it: its note's title, else what it was made from, else its file's name. */
+    private sourceLabel(key: string, file: TFile): string {
+        return this.sourceNoteTitle(key) || this.sourceTitle(file.path) || file.basename;
+    }
+    /** What a tab says of the source it shows: its note's title, or empty where Obsidian's own name stands. */
+    private viewTitle(view: View | null | undefined): string {
+        if (this.stopped || !this.display.titleProperty || !view) return '';
+        if (view instanceof VideoView) return this.noteTitle(view.file);
+        const bound = this.bindings.get(view);
+        return bound ? this.sourceNoteTitle(bound.file) : '';
+    }
+    /** Each annotation note's title as last shown, so that a change to its other properties re-renders nothing. */
+    private titlesShown = new Map<string, string>();
+    /** A note's properties changed: where it is an annotation note whose title is now another, everything naming it follows. */
+    private titleChanged(note: TFile) {
+        if (!this.titlesShown.has(note.path) && !this.describeTarget(note)) return;
+        const title = this.noteTitle(note);
+        if (this.titlesShown.get(note.path) === title) return;
+        this.titlesShown.set(note.path, title);
+        this.retitle();
+        this.refresh();
+        this.refreshCitations();
+    }
+    /** The Citations view names the note of the PDF it is about. */
+    private refreshCitations() {
+        for (const leaf of this.app.workspace.getLeavesOfType(CITATIONS_VIEW))
+            if (leaf.view instanceof CitationsView) leaf.view.retitle();
+    }
+    /**
+     * Tabs, the window and the headers of the reader's own views say the titles as they now are: after a note's
+     * properties change, a note is found for a source, or the setting changes. Only what differs is touched.
+     */
+    private retitle() {
+        this.app.workspace.iterateAllLeaves(leaf => {
+            const view = leaf.view;
+            if (view instanceof EpubView || view instanceof VideoView) view.retitle();
+            const shown = (leaf as { tabHeaderInnerTitleEl?: HTMLElement }).tabHeaderInnerTitleEl;
+            if (shown && shown.textContent !== leaf.getDisplayText())
+                (leaf as { updateHeader?(): void }).updateHeader?.();
+        });
+        (this.app.workspace as { updateTitle?(): void }).updateTitle?.();
+    }
     /** A source's name for a file made from it (a searchable copy, an export): as `sourceTitle`, as a file may be named. */
     private sourceStem(source: TFile): string {
         const named = this.sourceTitle(source.path)
@@ -9823,6 +9912,17 @@ class NativeSettings extends PluginSettingTab {
                     save(plugin.setDisplay({ foldData: value }));
                     plugin.refold();
                 })
+            );
+        new Setting(root)
+            .setName('Show titles from this property')
+            .setDesc(
+                'Where Annotator names an annotation note or its source (the tab of a PDF, book, page or video, the sidebar, the list of annotated sources, the search of all annotations, Citations), it says what this property of the note says, such as title, instead of the file\'s name. "Add the PDF\'s details" fills in title. A note without it is named as before. Only what is shown changes: no file is renamed and no note is changed. Empty: file names.'
+            )
+            .addText(control =>
+                control
+                    .setPlaceholder('title')
+                    .setValue(plugin.display.titleProperty)
+                    .onChange(value => save(plugin.setDisplay({ titleProperty: titlePropertyName(value) })))
             );
 
         new Setting(root).setName('Copying and exporting').setHeading();

@@ -2413,3 +2413,87 @@ test('the settings say whether Open with Annotator is installed by reading files
   await assert.rejects(h.plugin.installOpenWith(),/child_process was loaded/);assert.equal(loaded,1);
  }finally{h.dispose();fs.rmSync(home,{recursive:true,force:true});}
 });
+
+// Titles from a property ("Show titles from this property"): only what is shown changes.
+function dressed(h){const w=h.dom.window,p=w.HTMLElement.prototype;p.empty=function(){this.replaceChildren();};p.addClass=function(...names){this.classList.add(...names);};p.setText=function(text){this.textContent=text;};p.createEl=function(tag,o={}){const e=w.document.createElement(tag);if(o.text)e.textContent=o.text;if(o.cls)e.className=o.cls;for(const[k,v]of Object.entries(o.attr||{}))e.setAttribute(k,v);this.append(e);return e;};p.createDiv=function(o){return this.createEl('div',o);};p.createSpan=function(o){return this.createEl('span',o);};return w;}
+/** A PDF in a tab as Obsidian has one: its view names the file, its tab says what the leaf says, and an annotation note names it. */
+function titledPdf(h,frontmatter){
+ const pdf=h.add('Annotator sources/3f9a1c.pdf'),note=h.add('Reading/Cached paper.md','Prose that stays.\n',{'annotation-target':pdf.path,...frontmatter});
+ h.dom.window.ResizeObserver=class{observe(){}unobserve(){}disconnect(){}};
+ const leaves=[];class Leaf extends WorkspaceLeaf{constructor(file){super();this.contentEl=h.dom.window.document.createElement('div');h.dom.window.document.body.append(this.contentEl);this.app=h.app;this.view=new FileView(this);this.view.file=file;this.view.getViewType=()=>'pdf';this.view.titleEl=h.dom.window.document.createElement('div');this.view.titleEl.setAttribute('contenteditable','true');this.view.titleEl.textContent=file.basename;this.view.viewer={child:{pdfViewer:{pdfViewer:{currentPageNumber:1,pdfDocument:{fingerprints:['titlefixture'],numPages:1,getPage:async()=>({getTextContent:async()=>({items:[{str:'A passage'}]})})}}}}};this.tabHeaderInnerTitleEl=h.dom.window.document.createElement('div');this.tabHeaderInnerTitleEl.textContent=file.basename;}}
+ const leaf=new Leaf(pdf);leaves.push(leaf);let windowTitled=0;
+ h.app.workspace.getLeavesOfType=type=>type==='pdf'?leaves:type==='annotator-sidebar'?[{}]:[];h.app.workspace.iterateAllLeaves=fn=>{for(const each of leaves)if(fn(each))break;};h.app.workspace.getMostRecentLeaf=()=>leaf;h.app.workspace.updateTitle=()=>windowTitled++;
+ const renamed=[];h.app.fileManager={renameFile:async(...args)=>renamed.push(args),processFrontMatter:async(...args)=>renamed.push(args)};h.app.vault.rename=async(...args)=>renamed.push(args);
+ return {pdf,note,leaf,leaves,renamed,windowTitled:()=>windowTitled,changed:async(values)=>{Object.assign(h.metadata.get(note.path).frontmatter,values);for(const [key,value] of Object.entries(values))if(value===undefined)delete h.metadata.get(note.path).frontmatter[key];h.events.get('metadata:changed')(note);await h.plugin.loads.get(pdf.path);for(let i=0;i<5;i++)await new Promise(resolve=>setTimeout(resolve,0));}};
+}
+test('with a property for titles named, a source\'s tab, the window and the sidebar say its note\'s title; the editable header keeps the file\'s name, and nothing is written',async()=>{
+ const h=host();try{
+  const s=titledPdf(h,{title:'Attention Is All You Need'}),w=dressed(h),before=h.contents.get(s.note.path);
+  h.plugin.data={nativeDisplay:{titleProperty:'title'}};await h.plugin.onload();h.plugin.bindSources();await h.plugin.loadNote(s.pdf.path);
+  assert.equal(h.plugin.display.titleProperty,'title');assert.equal(h.plugin.bindings.get(s.leaf.view).file,s.pdf.path);
+  // The tab and the window (both the leaf's display text) say the title; Obsidian's own view, and its field that renames the file, keep the file's name.
+  assert.equal(s.leaf.getDisplayText(),'Attention Is All You Need');assert.equal(s.leaf.tabHeaderInnerTitleEl.textContent,'Attention Is All You Need');assert.ok(s.windowTitled()>0);
+  assert.equal(s.leaf.view.getDisplayText(),'3f9a1c');assert.equal(s.leaf.view.titleEl.textContent,'3f9a1c');
+  // The sidebar's heading.
+  const content=w.document.createElement('div');w.document.body.append(content);h.plugin.currentFile=s.pdf.path;const sidebar=new AnnotationView({contentEl:content,app:h.app},h.plugin);h.app.workspace.getLeavesOfType=type=>type==='pdf'?s.leaves:type==='annotator-sidebar'?[{view:sidebar}]:[];sidebar.show();
+  const heading=()=>content.querySelector('.annotator-head-name').textContent;assert.equal(heading(),'Attention Is All You Need');
+  // Changed in the note's properties: everything follows, through the metadata cache's changed event.
+  await s.changed({title:'Attention, revised'});
+  assert.equal(s.leaf.tabHeaderInnerTitleEl.textContent,'Attention, revised');assert.equal(heading(),'Attention, revised');
+  // A list gives its first words, a link the words it shows.
+  await s.changed({title:['', '[[Papers/Vaswani 2017|Transformers]]','Second']});assert.equal(s.leaf.tabHeaderInnerTitleEl.textContent,'Transformers');assert.equal(heading(),'Transformers');
+  // Taken out of the note: today's names again (the tab the file's, the sidebar the note's).
+  await s.changed({title:undefined});assert.equal(s.leaf.tabHeaderInnerTitleEl.textContent,'3f9a1c');assert.equal(heading(),'Cached paper');
+  await s.changed({title:'   '});assert.equal(s.leaf.tabHeaderInnerTitleEl.textContent,'3f9a1c','a property that says nothing is no title');
+  await s.changed({title:'Back again'});assert.equal(s.leaf.tabHeaderInnerTitleEl.textContent,'Back again');
+  // The setting emptied: file names everywhere, at once.
+  await h.plugin.setDisplay({titleProperty:''});assert.equal(s.leaf.tabHeaderInnerTitleEl.textContent,'3f9a1c');sidebar.show();assert.equal(heading(),'Cached paper');assert.equal(h.plugin.data.nativeDisplay.titleProperty,'');
+  await h.plugin.setDisplay({titleProperty:'TITLE'});assert.equal(s.leaf.tabHeaderInnerTitleEl.textContent,'Back again','a property is found by its name in any case, as Obsidian treats property names');
+  // Nothing was renamed or written: the note is as it was, and no file was asked to change.
+  assert.deepEqual(s.renamed,[]);assert.equal(h.contents.get(s.note.path),before);assert.ok(h.files.has('Annotator sources/3f9a1c.pdf'));
+  // Unloaded, the plugin takes its wrapping of the tab's name off again, and the tab names the file.
+  for(const fn of h.plugin.cleanups.splice(0).reverse())fn();
+  assert.equal(s.leaf.getDisplayText(),'3f9a1c');assert.equal(s.leaf.tabHeaderInnerTitleEl.textContent,'3f9a1c');
+ }finally{h.dispose();}
+});
+test('without the setting, or for a note without the property, every name is the one it was',async()=>{
+ const h=host();try{
+  const s=titledPdf(h,{title:'Attention Is All You Need'});await h.plugin.onload();h.plugin.bindSources();await h.plugin.loadNote(s.pdf.path);
+  assert.equal(h.plugin.display.titleProperty,'','empty unless the reader names a property');
+  assert.equal(s.leaf.getDisplayText(),'3f9a1c');assert.equal(s.leaf.tabHeaderInnerTitleEl.textContent,'3f9a1c');assert.equal(h.plugin.noteName(s.note),'Cached paper');assert.equal(h.plugin.sourceNoteTitle(s.pdf.path),'');
+  await s.changed({title:'Something else'});assert.equal(s.leaf.tabHeaderInnerTitleEl.textContent,'3f9a1c');
+  // Named, but the note has no such property: the same.
+  await h.plugin.setDisplay({titleProperty:'shorttitle'});assert.equal(s.leaf.tabHeaderInnerTitleEl.textContent,'3f9a1c');assert.equal(h.plugin.noteName(s.note),'Cached paper');
+  // A number is words (YAML reads "title: 1984" as one); anything else is not.
+  await s.changed({shorttitle:1984});assert.equal(s.leaf.tabHeaderInnerTitleEl.textContent,'1984');
+  await s.changed({shorttitle:{nested:'no'}});assert.equal(s.leaf.tabHeaderInnerTitleEl.textContent,'3f9a1c');
+  await s.changed({shorttitle:true});assert.equal(h.plugin.noteName(s.note),'Cached paper');
+ }finally{h.dispose();}
+});
+test('the list of annotated sources, the search of all annotations, a video\'s tab and header, a book\'s tab and Citations name notes by their titles, falling back to their names',async()=>{
+ const h=host();const {create}=await import('./.generated/codec.mjs');const {LibrarySwitcher,AnnotationSearch,scanAnnotations,scanLibrary,EpubView,CitationsView}=await import('./.generated/plugin-boundary.mjs');try{
+  const w=dressed(h),row={id:'a1',uri:'urn:x-pdf:t',text:'Why attention',tags:['ml'],target:[{source:'urn:x-pdf:t',selector:[{type:'TextQuoteSelector',exact:'scaled dot-product'}]}]};
+  h.add('paper.pdf');h.add('book.epub');
+  const titled=h.add('paper.pdf.annotations.md',create('',row),{'annotation-target':'paper.pdf',title:'[[Attention Is All You Need]]'}),plain=h.add('book.epub.annotations.md',create('',{...row,id:'b1'}),{'annotation-target':'book.epub'});
+  h.app.vault.cachedRead=h.app.vault.read;h.plugin.data={nativeDisplay:{titleProperty:'title'}};await h.plugin.onload();
+  const library=await scanLibrary(h.plugin);assert.ok(library.every(entry=>!entry.problem));assert.deepEqual(library.map(entry=>[entry.note.path,entry.title]).sort(),[['book.epub.annotations.md','book'],['paper.pdf.annotations.md','Attention Is All You Need']]);
+  const hits=await scanAnnotations(h.plugin);assert.deepEqual(hits.map(hit=>[hit.id,hit.title]).sort(),[['a1','Attention Is All You Need'],['b1','book']]);
+  // Shown by its title, a note is still found by its name.
+  const search=new AnnotationSearch(h.plugin,hits,()=>{});const text=hit=>search.getItemText(hit);assert.match(text(hits.find(hit=>hit.id==='a1')),/Attention Is All You Need paper$/);assert.match(text(hits.find(hit=>hit.id==='b1')),/ book$/);
+  const switcher=new LibrarySwitcher(h.plugin,library),item=w.document.createElement('div');switcher.renderSuggestion({item:library.find(entry=>entry.note===titled)},item);assert.equal(item.querySelector('.suggestion-title').textContent,'Attention Is All You Need');
+  // A video's note is its view's file: its tab, its header and its toolbar say its title, and follow it.
+  const video=h.add('Talk.md','',{'annotation-target-type':'video','annotation-target':'https://youtu.be/M7lc1UVf-VE',title:'The talk'}),leaf={contentEl:w.document.createElement('div'),app:h.app},view=new VideoView(leaf,{title:file=>h.plugin.noteTitle(file)});view.file=video;view.titleEl=w.document.createElement('div');view.titleEl.textContent='Talk';view.contentEl.createDiv({cls:'annotator-video-toolbar'}).createEl('h2',{text:view.getDisplayText()});
+  assert.equal(view.getDisplayText(),'The talk');view.retitle();assert.equal(view.titleEl.textContent,'The talk');
+  h.metadata.get(video.path).frontmatter.title='The talk, again';view.retitle();assert.equal(view.titleEl.textContent,'The talk, again');assert.equal(view.contentEl.querySelector('h2').textContent,'The talk, again');
+  delete h.metadata.get(video.path).frontmatter.title;view.retitle();assert.equal(view.titleEl.textContent,'Talk');
+  // A header that can be typed in renames its file: it is never written.
+  view.titleEl.setAttribute('contenteditable','true');h.metadata.get(video.path).frontmatter.title='Not here';view.retitle();assert.equal(view.titleEl.textContent,'Talk');
+  // A book: its note's title first, then the book's own title, then its file's name.
+  const book=Object.create(EpubView.prototype);book.callbacks={title:()=>h.plugin.noteTitle(titled)};book.book={title:'The book says'};book.file={basename:'book'};
+  assert.equal(book.getDisplayText(),'Attention Is All You Need');book.callbacks={title:()=>''};assert.equal(book.getDisplayText(),'The book says');book.book=null;assert.equal(book.getDisplayText(),'book');
+  // Citations names the note of the PDF it is about.
+  const content=w.document.createElement('div');w.document.body.append(content);const citations=new CitationsView({contentEl:content,app:h.app},h.plugin);citations.app=h.app;citations.contentEl=content;citations.closed=false;citations.source='paper.pdf';h.plugin.notes.set('paper.pdf',{note:titled,records:[]});citations.retitle();
+  assert.equal(content.querySelector('.annotator-citation-source').textContent,'Attention Is All You Need');
+  h.plugin.notes.set('paper.pdf',{note:plain,records:[]});citations.retitle();assert.equal(content.querySelector('.annotator-citation-source').textContent,'book');
+ }finally{h.dispose();}
+});
