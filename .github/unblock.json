@@ -1670,6 +1670,14 @@
       "parent": "community",
       "dependsOn": [],
       "notes": "Published 2026-11-18 (tag 0.3.5, Latest, files identical to the tested build, master at the release commit)."
+    },
+    {
+      "id": "show-annotation-notes-by-a-title",
+      "title": "Show annotation notes by a title property",
+      "status": "doing",
+      "parent": "community",
+      "dependsOn": [],
+      "notes": "GitHub issue about online PDFs, 2026-11-16: 'can the plugin show the actual title of the annotation notes from a specified note property such as title?' A setting naming the property; display only, wherever Annotator names a note or its source."
     }
   ]
 }
