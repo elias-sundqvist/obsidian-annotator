@@ -1674,10 +1674,10 @@
     {
       "id": "show-annotation-notes-by-a-title",
       "title": "Show annotation notes by a title property",
-      "status": "doing",
+      "status": "done",
       "parent": "community",
       "dependsOn": [],
-      "notes": "GitHub issue about online PDFs, 2026-11-16: 'can the plugin show the actual title of the annotation notes from a specified note property such as title?' A setting naming the property; display only, wherever Annotator names a note or its source."
+      "notes": "GitHub issue about online PDFs, 2026-11-16: 'can the plugin show the actual title of the annotation notes from a specified note property such as title?' A setting naming the property; display only, wherever Annotator names a note or its source.\n\nDone 2026-11-18: On next (3958d20): 'Show titles from this property'; tabs, window title, sidebar, lists, search, Citations, Base column; display only; checked live"
     }
   ]
 }
