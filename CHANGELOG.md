@@ -3,7 +3,7 @@
 What changed for someone using Annotator. How to use each thing is in
 [README.md](README.md).
 
-## Unreleased
+## 0.3.6 (2026-11-18)
 
 - **Show titles from this property** (settings, under **Annotation notes**)
   names annotation notes and their sources by a property of the note, such
