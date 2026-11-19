@@ -3,7 +3,7 @@
 What changed for someone using Annotator. How to use each thing is in
 [README.md](README.md).
 
-## Unreleased
+## 0.3.7 (2026-11-19)
 
 - **Open what your browser shows in Annotator, with a bookmarklet.** Settings
   → Open from outside Obsidian → **Bookmarklet**: drag **Annotate in
