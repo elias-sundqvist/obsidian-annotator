@@ -10752,8 +10752,8 @@ class NativeSettings extends PluginSettingTab {
             .setName('Bookmarklet')
             .setDesc(
                 Platform.isMobile
-                    ? 'Hands the page your browser shows to Annotator: a PDF, a book, a video or a web page. Phone browsers make bookmarklets awkward: make a bookmark of any page, then change its address to the text below; Annotator then asks for a press in Obsidian before it fetches anything. On Android, Share in the browser, then Obsidian, then Annotate in Annotator, is easier, and needs no press.'
-                    : 'Drag the link to your browser’s bookmarks bar. On any page, it hands the page to Annotator: a PDF, a book, a video or a web page. Annotator asks for a press in Obsidian before it fetches anything. If your browser does not take the link, make a bookmark and give it the text below as its address.'
+                    ? 'Hands the page your browser shows to Annotator: a PDF, a book, a video or a web page. Phone browsers make bookmarklets awkward: make a bookmark of any page, then change its address to the text below (Copy copies it); Annotator then asks for a press in Obsidian before it fetches anything. On Android, Share in the browser, then Obsidian, then Annotate in Annotator, is easier, and needs no press.'
+                    : 'Drag the link to your browser’s bookmarks bar. On any page, it hands the page to Annotator: a PDF, a book, a video or a web page. Annotator asks for a press in Obsidian before it fetches anything. If your browser does not take the link, make a bookmark and give it the text below as its address: Copy copies it.'
             );
         setting.settingEl.addClass('annotator-open-with-block', 'annotator-bookmarklet');
         if (!Platform.isMobile) {
@@ -10773,13 +10773,27 @@ class NativeSettings extends PluginSettingTab {
                 event.dataTransfer?.setData('text/x-moz-url', `${code}\n${name}`);
             });
         }
-        const box = setting.controlEl.createEl('textarea', { cls: 'annotator-open-with-recipe is-address' });
-        box.value = code;
-        box.readOnly = true;
-        box.rows = 3;
-        box.spellcheck = false;
-        box.setAttribute('aria-label', 'The bookmarklet’s address');
+        // The whole of it, wrapped and readable: what it does can be read before it is used. Copy is there for a
+        // browser that does not take the link by dragging (and for a phone, where nothing can be dragged).
+        setting.addButton(control =>
+            control
+                .setButtonText('Copy')
+                .setTooltip('Copy the bookmarklet, to paste as a new bookmark’s address')
+                .onClick(() => {
+                    void this.writeClipboard(code).then(
+                        () => new Notice('Copied. Paste it as the address of a new bookmark.'),
+                        () => new Notice('Could not copy. Select the text and copy it by hand.')
+                    );
+                })
+        );
+        setting.controlEl.createEl('code', {
+            cls: 'annotator-bookmarklet-code',
+            text: code,
+            attr: { 'aria-label': 'The bookmarklet’s address' }
+        });
     }
+    /** Puts words on the clipboard when the reader presses Copy. Replaceable (tests). */
+    writeClipboard: (words: string) => Promise<void> = words => navigator.clipboard.writeText(words);
     /** The row with Install and Uninstall, and what is there now. */
     private openWithApp(root: HTMLElement, system: 'mac' | 'windows' | 'linux', manual: HTMLDetailsElement) {
         const plugin = this.plugin,

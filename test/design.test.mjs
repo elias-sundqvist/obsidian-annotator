@@ -1572,7 +1572,7 @@ test('the command that moves a note\'s annotations under the heading: explained 
 });
 
 test('Open from outside Obsidian: Install first, with what is there now and what it came to; the recipe folded under Do it yourself; the address shown whole', async () => {
-    const { Platform } = await import('./.generated/plugin-boundary.mjs');
+    const { Platform, Notice } = await import('./.generated/plugin-boundary.mjs');
     const settle = async () => { for (let i = 0; i < 8; i++) await new Promise(resolve => setTimeout(resolve, 0)); };
     const h = host(), store = new Map();
     h.app.loadLocalStorage = key => store.has(key) ? structuredClone(store.get(key)) : null; h.app.saveLocalStorage = (key, value) => store.set(key, structuredClone(value)); h.app.appId = 'aaaa000000000001';
@@ -1619,10 +1619,15 @@ test('Open from outside Obsidian: Install first, with what is there now and what
         // select; it names the vault by name (a bookmark may be used on another device) and carries no key.
         const marklet = named('Bookmarklet'), link = marklet.querySelector('a.annotator-bookmarklet-link');
         assert.equal(link.getAttribute('draggable'), 'true'); assert.equal(link.textContent, 'Annotate in Annotator');
-        const code = marklet.querySelector('textarea').value; assert.equal(link.getAttribute('href'), code); assert.equal(marklet.querySelector('textarea').readOnly, true);
+        // The whole code is shown as text, wrapped, in monospace: nothing hidden in a scroll box.
+        const shownCode = marklet.querySelector('code.annotator-bookmarklet-code'), code = shownCode.textContent; assert.equal(link.getAttribute('href'), code); assert.equal(marklet.querySelector('textarea'), null);
         assert.match(code, /^javascript:\(\(\)=>\{location\.href='obsidian:\/\/annotator-open\?vault=[^&']*&url='\+encodeURIComponent\(location\.href\)\+'&title='/); assert.doesNotMatch(code, /key=/);
         assert.equal(code.includes(h.plugin.openDeviceState().key), false);
-        assert.deepEqual(buttons(marklet), [], 'nothing is put on the clipboard from here');
+        // Copy puts the code on the clipboard when pressed (here a stand-in), and says so.
+        assert.deepEqual(buttons(marklet), ['Copy']); const copied = []; tab.writeClipboard = async words => { copied.push(words); };
+        const saidBefore = Notice.messages.length; marklet.querySelector('button').click(); await settle();
+        assert.deepEqual(copied, [code]); assert.match(String(Notice.messages.at(-1)), /^Copied\. Paste it as the address of a new bookmark\.$/); assert.equal(Notice.messages.length, saidBefore + 1);
+        tab.writeClipboard = async () => { throw new Error('denied'); }; marklet.querySelector('button').click(); await settle(); assert.match(String(Notice.messages.at(-1)), /Could not copy/);
         const pressedHere = new h.dom.window.MouseEvent('click', { bubbles: true, cancelable: true }); link.dispatchEvent(pressedHere); assert.equal(pressedHere.defaultPrevented, true);
         assert.match(section()[0].querySelector('.setting-item-description').textContent, /a page from your browser with the bookmarklet/);
         // Files are read where they are here: no list of folders for copies to show.
@@ -1651,6 +1656,6 @@ test('Open from outside Obsidian: Install first, with what is there now and what
         // The bookmarklet on a phone: no link to drag (there is nowhere to drag it), the text to make a bookmark of, and the share sheet said.
         assert.equal(named('Bookmarklet').querySelector('a'), null);
         assert.match(named('Bookmarklet').querySelector('.setting-item-description').textContent, /awkward.*On Android, Share in the browser, then Obsidian, then Annotate in Annotator/);
-        assert.match(named('Bookmarklet').querySelector('textarea').value, /^javascript:/);
+        assert.match(named('Bookmarklet').querySelector('code.annotator-bookmarklet-code').textContent, /^javascript:/); assert.deepEqual(buttons(named('Bookmarklet')), ['Copy'], 'a phone copies it, as nothing can be dragged there');
     } finally { Platform.isDesktopApp = false; Platform.isMacOS = false; Platform.isMobile = false; h.dispose(); }
 });

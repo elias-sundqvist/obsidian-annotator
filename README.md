@@ -1038,7 +1038,8 @@ click on a bookmark: a PDF, a book, a YouTube video, or any other web page.
 - **The bookmarklet.** In Annotator's settings, under **Open from outside
   Obsidian**, drag **Annotate in Annotator** to your browser's bookmarks
   bar. If your browser does not take it from there, make a bookmark of any
-  page and give it the text shown below the link as its address. It sends
+  page and give it the text shown below the link as its address (**Copy**
+  copies it). The whole code is shown, so you can read what it does. It sends
   the page's address and title, URL-encoded, and your vault's name, to
   `obsidian://annotator-open`; your browser asks once whether it may open
   Obsidian.
