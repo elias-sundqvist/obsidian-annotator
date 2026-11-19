@@ -42,7 +42,7 @@ export interface NewNote {
 export function markdownWords(text: string): string {
     return text
         .replace(/[\r\n\u2028\u2029]+/g, ' ')
-        .replace(/[\\`$[\]<>|*_~=%{}!#^]/g, char => `\\${char}`)
+        .replace(/[\\`$[\]<>|*_~=%!#^]/g, char => `\\${char}`)
         .replace(/^(\s*)([>+-]|\d+[.)])(?=\s|$)/, '$1\\$2');
 }
 export function newNoteText(note: NewNote): string {
