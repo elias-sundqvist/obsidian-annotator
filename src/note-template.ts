@@ -34,6 +34,17 @@ export interface NewNote {
     /** For a note that holds some of a PDF's pages: its `annotation-pages`, as written ("10-100"). */ pages?: string;
     /** The property the target is written in; `annotation-target` when none is given. */ property?: string;
 }
+/**
+ * Words from outside the reader's hands (a page's title, an address) made plain Markdown text: what Markdown, Obsidian
+ * or a plugin would read as code, a link, a tag, a comment or markup (Dataview's \`= …\` and \`$= …\`, Templater's
+ * `<% … %>`, an embed) is escaped, and the words are kept on one line.
+ */
+export function markdownWords(text: string): string {
+    return text
+        .replace(/[\r\n\u2028\u2029]+/g, ' ')
+        .replace(/[\\`$[\]<>|*_~=%{}!#^]/g, char => `\\${char}`)
+        .replace(/^(\s*)([>+-]|\d+[.)])(?=\s|$)/, '$1\\$2');
+}
 export function newNoteText(note: NewNote): string {
     const name = note.property?.trim() || TARGET_PROPERTY,
         property = (target: string, pages?: string) =>
@@ -41,14 +52,14 @@ export function newNoteText(note: NewNote): string {
         // The template's own target is replaced: under annotation-target, under the property written instead, and
         // its pages where the note says its own.
         replaced = [TARGET_PROPERTY, name, ...(note.pages ? ['annotation-pages'] : [])];
-    const fill = (text: string) =>
-        text.replace(
-            /\{\{\s*(title|date|target)\s*\}\}/gi,
-            (_whole, name: string) =>
-                (({ title: note.title, date: note.date, target: note.target }) as Record<string, string>)[
-                    name.toLowerCase()
-                ]
-        );
+    // In the note's text the title and the target are plain words (`markdownWords`); in its properties, on one line.
+    const fill = (text: string, body = true) =>
+        text.replace(/\{\{\s*(title|date|target)\s*\}\}/gi, (_whole, name: string) => {
+            const value = ({ title: note.title, date: note.date, target: note.target } as Record<string, string>)[
+                name.toLowerCase()
+            ];
+            return body ? markdownWords(value) : value.replace(/[\r\n\u2028\u2029]+/g, ' ');
+        });
     const template = typeof note.template === 'string' ? note.template.replace(/\r\n?/g, '\n') : '';
     if (template.trim()) {
         const found = /^---\n([\s\S]*?)\n---[ \t]*(?:\n|$)/.exec(template);
@@ -64,7 +75,7 @@ export function newNoteText(note: NewNote): string {
                 kept.push(lines[i]);
             }
             const body = fill(template.slice(found[0].length)),
-                head = fill(kept.join('\n')).replace(/\n+$/, '');
+                head = fill(kept.join('\n'), false).replace(/\n+$/, '');
             return `---\n${property(note.target, note.pages)}${head.trim() ? `\n${head}` : ''}\n---\n${body.startsWith('\n') ? '' : '\n'}${body}${body.endsWith('\n') ? '' : '\n'}`;
         }
         const body = fill(template);

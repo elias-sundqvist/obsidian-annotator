@@ -1046,7 +1046,8 @@ click on a bookmark: a PDF, a book, a YouTube video, or any other web page.
   from where, and that nothing has been fetched. The bookmarklet carries no
   key ([docs/SECURITY.md](docs/SECURITY.md) says why), so nothing is
   fetched, and no note is made, until you press the button there. The tab
-  waits, also through a restart of Obsidian.
+  waits, also through a restart of Obsidian. The same address twice opens
+  one tab, and at most three wait at once.
 - **Where it goes**, told from the address where it can be, else by asking
   the page's server what it is (without downloading it):
 
@@ -1059,11 +1060,13 @@ click on a bookmark: a PDF, a book, a YouTube video, or any other web page.
 
   A PDF, a book or a video opens through the note that already names it;
   where there is none, a note is made where your new notes go, named after
-  the page's title. The PDF or book is then read as any [source outside the
+  the file (or, shared from a phone, the page's title). The PDF or book is then read as any [source outside the
   vault](#sources-outside-the-vault) is: downloaded to this computer's
   cache, or on a phone into the folder for copies. An address that carries
   a key of its own (`?token=…`) is not written into a note, and the reader
-  says so.
+  says so. Where an address sends Annotator on to another, each step is
+  checked on a computer, and one that leads to `http` or to your own
+  network is refused ([docs/SECURITY.md](docs/SECURITY.md)).
 - **What is refused**: anything but `https`, an address with a user name or
   password in it, one on this computer or its network, and one longer than
   4,000 characters.

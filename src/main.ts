@@ -82,6 +82,7 @@ import {
     type AddressRoute
 } from './open-address';
 import { HANDED_VIEW, HandedView } from './handed-view';
+import { nodeHops, settleAddress, type HopTools, type NodeHops } from './address-hops';
 import { resolveVideoTarget } from './video-provider';
 import {
     install,
@@ -1273,6 +1274,8 @@ export default class AnnotatorPlugin extends Plugin {
                     phone: () => !!Platform.isMobile
                 })
         );
+        // Addresses that waited through a restart: at most as many as may wait at once.
+        this.app.workspace.onLayoutReady(() => this.trimWaiting());
         this.registerView(CITATIONS_VIEW, leaf => new CitationsView(leaf, this));
         this.addCommand({
             id: 'open-citations',
@@ -8416,17 +8419,20 @@ export default class AnnotatorPlugin extends Plugin {
             if (typeof (menu as { addItem?: unknown } | null)?.addItem !== 'function') return;
             const url = sharedAddress(text);
             if (!url) return;
+            const host = new URL(url).hostname;
             // A browser shares the page's title with its address: it names the note, where one is made.
             const title = handedTitle(String(text).replace(url, ' '));
             (menu as Menu).addItem(item =>
                 item
-                    .setTitle('Annotate in Annotator')
+                    // The host is said before anything is asked of it.
+                    .setTitle(`Annotate in Annotator: ${host}`)
                     .setIcon('highlighter')
                     // Under the shared text, above Obsidian's "Add text to file" (its menu knows only its own sections, and
                     // puts any other after Cancel).
                     .setSection('title')
                     .onClick(() => {
                         // The share, and the pick, are the reader's: it opens at once.
+                        new Notice(`Opening ${host} in Annotator…`, 4000);
                         void this.openAddress(url, routeOf(url), title).catch(error => this.fail(error));
                     })
             );
@@ -8434,64 +8440,120 @@ export default class AnnotatorPlugin extends Plugin {
             console.error('Annotator could not add to the menu for shared text:', error);
         }
     }
+    /** When an address without the key was last refused or set waiting aloud, and when a waiting tab last took the focus. */
+    private addressSaid = 0;
+    private addressFocused = 0;
+    /** Says why an address handed over was not opened: at most once a minute, so that links cannot pester. */
+    private sayAddress(words: string) {
+        if (Date.now() - this.addressSaid < 60000) return;
+        this.addressSaid = Date.now();
+        new Notice(words, 10000);
+    }
+    /** At most this many addresses wait for a press at once; the oldest gives way. */
+    static readonly WAITING_MOST = 3;
+    /** Addresses that wait for a press beyond the most there may be (restored after a restart, say): the oldest go. */
+    private trimWaiting(keep: WorkspaceLeaf | null = null) {
+        const waiting = this.app.workspace.getLeavesOfType(HANDED_VIEW).filter(leaf => leaf !== keep);
+        const room = AnnotatorPlugin.WAITING_MOST - (keep ? 1 : 0);
+        for (const leaf of waiting.slice(0, Math.max(0, waiting.length - room))) leaf.detach();
+    }
     /**
      * `obsidian://annotator-open?url=…`: a browser (the bookmarklet), a script or a phone hands an address over. It is
      * refused unless it is https, without a password, not on this computer or its network, and not too long. Without
      * this device's key nothing is fetched, and no note is made, until the reader presses for it in a tab that waits
-     * (and is still there after a restart); with the key it is opened where it goes at once.
+     * (and is still there after a restart); with the key it is opened where it goes at once. Without the key: the
+     * page's title is not taken (a link can say anything), one address waits in one tab, at most three wait, a tab
+     * takes the focus at most once in ten seconds, and what is said is said at most once a minute.
      */
     private async openAddressRequest(params: Record<string, unknown>) {
+        const key = this.openDeviceState().key,
+            keyed = !!key && typeof params.key === 'string' && sameKey(params.key, key),
+            say = (words: string) => (keyed ? new Notice(words, 10000) : this.sayAddress(words));
         if (typeof params.file === 'string' || typeof params.source === 'string') {
-            new Notice('The address names both a web address and a file. Nothing was opened.', 10000);
+            say('The address names both a web address and a file. Nothing was opened.');
             return;
         }
         const checked = checkAddress(params.url);
         if ('refused' in checked) {
-            new Notice(checked.refused, 10000);
+            say(checked.refused);
             return;
         }
         const url = checked.url,
-            route = routeOf(url),
-            title = handedTitle(params.title),
-            key = this.openDeviceState().key,
-            keyed = !!key && typeof params.key === 'string' && sameKey(params.key, key);
-        if (!keyed) {
-            const leaf = this.app.workspace.getLeaf('tab');
-            await leaf.setViewState({
-                type: HANDED_VIEW,
-                state: { url, route, ...(title ? { title } : {}) },
-                active: true
-            });
-            await this.app.workspace.revealLeaf(leaf);
+            route = routeOf(url);
+        if (keyed) {
+            await this.openAddress(url, route, handedTitle(params.title));
             return;
         }
-        await this.openAddress(url, route, title);
-    }
-    /** Asks what a server says an address is (HEAD), before anything of it is downloaded. Replaceable (tests). */
-    addressProbe: (url: string) => Promise<{ type: string } | null> = async url => {
-        try {
-            const answer = await requestUrl({ url, method: 'HEAD', throw: false });
-            if (answer.status < 200 || answer.status >= 300) return null;
-            const type = Object.entries(answer.headers || {}).find(([name]) => name.toLowerCase() === 'content-type');
-            return { type: String(type?.[1] || '').toLowerCase() };
-        } catch {
-            return null;
+        const there = this.app.workspace
+            .getLeavesOfType(HANDED_VIEW)
+            .find(leaf => (leaf.view as HandedView).getState().url === url);
+        if (there) {
+            await this.app.workspace.revealLeaf(there);
+            return;
         }
+        const focus = Date.now() - this.addressFocused >= 10000,
+            leaf = this.app.workspace.getLeaf('tab');
+        await leaf.setViewState({ type: HANDED_VIEW, state: { url, route }, active: focus });
+        this.trimWaiting(leaf);
+        if (focus) {
+            this.addressFocused = Date.now();
+            await this.app.workspace.revealLeaf(leaf);
+        } else this.sayAddress(`An address from ${new URL(url).hostname} waits in a tab for you to open it.`);
+    }
+    /** How the steps of an address are asked (`address-hops.ts`): with Node on a computer; on a phone, its type only. */
+    addressTools: () => HopTools = () => {
+        const load = (window as unknown as { require?: (name: string) => unknown }).require;
+        if (Platform.isDesktopApp && !Platform.isMobile && load) {
+            const https = load('https') as NodeHops['https'] | undefined,
+                dns = load('dns') as NodeHops['dns'] | undefined;
+            if (https && dns) return nodeHops({ https, dns });
+        }
+        return {
+            head: async url => {
+                const answer = await requestUrl({ url, method: 'HEAD', throw: false });
+                const type = Object.entries(answer.headers || {}).find(
+                    ([name]) => name.toLowerCase() === 'content-type'
+                );
+                // The app's request function has followed any redirect already: what it says is the end's.
+                return { status: answer.status, location: null, type: String(type?.[1] || '').toLowerCase() };
+            }
+        };
     };
     /**
      * Opens a web address where it goes, once the reader has said yes to it (pressed for it, a share, or an address that
      * carried this device's key): a PDF or a book read where it is, a video in the video reader, any other page in the
      * Web viewer (a phone: as a reading copy). A PDF, a book or a video opens through the note that names it, made when
      * there is none. With `leaf`, it is opened there (the tab that waited).
+     *
+     * The address is checked again here (a waiting tab's may come from a synced workspace), and where it leads is
+     * followed step by step first (`settleAddress`): every step must pass the same rules, and the address it ends at
+     * is the one read. An address that carries a key of its own is not opened: it would be written into a note.
      */
-    async openAddress(url: string, route: AddressRoute, title = '', leaf?: WorkspaceLeaf): Promise<void> {
+    async openAddress(raw: string, route: AddressRoute, title = '', leaf?: WorkspaceLeaf): Promise<void> {
         if (this.stopped) return;
-        if (route === 'unknown') {
-            const said = await this.addressProbe(url).catch(() => null);
-            route = said ? routeByType(said.type) : 'web';
+        const checked = checkAddress(raw);
+        if ('refused' in checked) throw new Error(checked.refused);
+        // A video plays in YouTube's own player, from YouTube's own address: nothing is asked of the address given.
+        if (route === 'video') {
+            await this.openVideoAddress(checked.url, title, leaf);
+            return;
         }
-        if (route === 'video') await this.openVideoAddress(url, title, leaf);
-        else if (route === 'pdf' || route === 'epub') await this.openWebSource(url, route, title, leaf);
+        const settled = await settleAddress(checked.url, this.addressTools()),
+            url = settled.url;
+        if (keyedQuery(url))
+            throw new Error(
+                'This address carries a personal key, so it is not written into a note. Download the file and open it from the vault instead.'
+            );
+        if (route === 'unknown') {
+            // Where it ends may say what it is by its name (a PDF, a video a short link leads to), else by its type.
+            const named = routeOf(url);
+            if (named === 'video') {
+                await this.openVideoAddress(url, title, leaf);
+                return;
+            }
+            route = named !== 'unknown' ? named : routeByType(settled.type);
+        }
+        if (route === 'pdf' || route === 'epub') await this.openWebSource(url, route, title, leaf);
         else if (Platform.isMobile) {
             // A phone has no Web viewer: the page is saved as a reading copy, which opens in a tab of its own.
             await this.saveReadingCopy(url);

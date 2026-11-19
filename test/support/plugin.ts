@@ -36,3 +36,4 @@ export {EpubView} from '../../src/epub';
 export * as OpenAddress from '../../src/open-address';
 export {attachmentFolder, folderChoices} from '../../src/folder-suggest';
 export {HandedView} from '../../src/handed-view';
+export {settleAddress,nodeHops,localAddress,HOP_LIMIT} from '../../src/address-hops';

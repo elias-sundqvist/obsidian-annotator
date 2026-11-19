@@ -2535,35 +2535,40 @@ function addressHost(){
  h.app.vault.create=async(path,text)=>{if(h.files.has(path))throw new Error('File already exists.');h.made.push(path);const file=h.add(path,text,{}),front={};
   for(const line of (/^---\n([\s\S]*?)\n---/.exec(text)?.[1]||'').split('\n')){const at=line.indexOf(': ');if(at>0){const raw=line.slice(at+2);try{front[line.slice(0,at)]=JSON.parse(raw);}catch{front[line.slice(0,at)]=raw;}}}
   h.metadata.delete(path);setTimeout(()=>h.metadata.set(path,{frontmatter:front}),30);return file;};
- const leaf=()=>{const made={view:null,setViewState:async state=>{states.push(state);made.view=state.type==='annotator-handed'?Object.create(HandedView.prototype):{};},openFile:async file=>h.opened.push({file,leaf:made}),detach:()=>detached.push(made)};return made;};
- h.app.workspace.getLeaf=()=>leaf();h.app.workspace.revealLeaf=async()=>{};
+ const leaves=[],revealed=[];
+ const leaf=()=>{const made={view:null,setViewState:async state=>{states.push(state);if(state.type==='annotator-handed'){made.view=Object.create(HandedView.prototype);made.view.url=state.state.url;made.view.route=state.state.route;}else made.view={};},openFile:async file=>h.opened.push({file,leaf:made}),detach:()=>{detached.push(made);made.gone=true;}};leaves.push(made);return made;};
+ const sidebar=h.app.workspace.getLeavesOfType;h.app.workspace.getLeavesOfType=type=>type==='annotator-handed'?leaves.filter(each=>!each.gone&&each.view instanceof HandedView):sidebar(type);
+ h.app.workspace.getLeaf=()=>leaf();h.app.workspace.revealLeaf=async at=>{revealed.push(at);};
  globalThis.__annotatorTestRequest=async options=>{requests.push(options);return {status:200,headers:{'content-type':'application/pdf'},arrayBuffer:new TextEncoder().encode('%PDF-1.7 handed over').buffer};};
- h.plugin.addressProbe=async url=>{probes.push(url);return h.said===undefined?{type:'text/html'}:h.said;};
+ // Where an address leads: each step asked (HEAD) by the test's own table, and names looked up there too.
+ h.hops={};h.names={};
+ h.plugin.addressTools=()=>({head:async url=>{probes.push(url);if(h.hops[url])return h.hops[url];if(h.said===null)return null;return {status:200,location:null,type:h.said===undefined?'text/html':h.said.type};},resolve:async host=>h.names[host]||['93.184.216.34']});
  h.plugin.sourceApproval=async(url,kind,how)=>{asked.push({url,kind,how});return 'yes';};
  h.plugin.openWebsite=async(url,newLeaf,at)=>{websites.push({url,at});};
  h.plugin.saveReadingCopy=async url=>{copies.push(url);};
- return Object.assign(h,{states,detached,requests,probes,asked,websites,copies,leaf,ready:async()=>{await h.plugin.onload();}});
+ return Object.assign(h,{states,detached,requests,probes,asked,websites,copies,leaf,leaves,revealed,ready:async()=>{await h.plugin.onload();}});
 }
 test('without this device’s key, a handed-over address only waits in a tab for a press: nothing fetched, asked or made, whatever it is, and the wait survives a restart',async()=>{
  const h=addressHost();try{await h.ready();const key=h.plugin.newOpenKey();
   for(const [url,route] of [['https://example.org/paper.pdf','pdf'],['https://www.youtube.com/watch?v=dQw4w9WgXcQ','video'],['https://example.org/post','unknown'],['https://example.org/book.epub','epub']]){
-   await h.fire({url,title:'The page\u0007 title'});await h.fire({url,key:key+'x',title:'The page title'});
-   for(const state of h.states.slice(-2)){assert.equal(state.type,'annotator-handed');assert.deepEqual(state.state,{url,route,title:'The page title'});}
+   const before=h.states.length;await h.fire({url,title:'The page\u0007 title'});await h.fire({url,key:key+'x',title:'The page title'});
+   // One address waits in one tab, and a link's title is not taken: nothing a link without the key says names a note.
+   assert.equal(h.states.length,before+1,url);const state=h.states.at(-1);assert.equal(state.type,'annotator-handed');assert.deepEqual(state.state,{url,route});
   }
   assert.equal(h.requests.length,0,'nothing was fetched');assert.equal(h.probes.length,0,'no server was asked what anything is');assert.deepEqual(h.made,[],'no note was made');assert.deepEqual(h.asked,[]);assert.deepEqual(h.websites,[]);assert.deepEqual(h.copies,[]);
   // The tab keeps the address, the route and the title in its state: a restart, or a tab first shown later, waits again.
   dressed(h);const mount=()=>{const v=new HandedView({app:h.app},{open:async(...args)=>{v.pressed.push(args);},phone:()=>false});v.pressed=[];v.contentEl=h.dom.window.document.createElement('div');v.leaf={};return v;};
-  const view=mount();await view.setState({url:'https://example.org/paper.pdf',route:'pdf',title:'Paper'},{});assert.deepEqual(view.getState(),{url:'https://example.org/paper.pdf',route:'pdf',title:'Paper'});
+  const view=mount();await view.setState({url:'https://example.org/paper.pdf',route:'pdf',title:'Paper'},{});assert.deepEqual(view.getState(),{url:'https://example.org/paper.pdf',route:'pdf'},'a title in the state is not kept');
   const restored=mount();await restored.setState(view.getState(),{});const text=restored.contentEl.textContent;
   assert.match(text,/Another app asked to open a PDF/);assert.match(text,/Nothing has been fetched/);assert.match(text,/https:\/\/example\.org\/paper\.pdf/);
   assert.deepEqual(restored.pressed,[],'nothing before the press');restored.contentEl.querySelector('button.mod-cta').click();await new Promise(resolve=>setTimeout(resolve,0));
-  assert.deepEqual(restored.pressed,[['https://example.org/paper.pdf','pdf','Paper',restored.leaf]]);
+  assert.deepEqual(restored.pressed,[['https://example.org/paper.pdf','pdf','',restored.leaf]]);
   const odd=mount();await odd.setState({url:'http://example.org/x',route:'pdf'},{});assert.equal(odd.contentEl.textContent,'','an http address is not shown, nor pressed for');
   const other=mount();await other.setState({url:'https://example.org/x',route:'anything'},{});assert.equal(other.getState().route,'unknown');
   // Refused addresses are said, and nothing is opened.
   const states=h.states.length,since=Notice.messages.length;
   for(const url of ['http://example.org/paper.pdf','https://me:pw@example.org/paper.pdf','https://192.168.0.4/paper.pdf','https://'+'a'.repeat(4100)+'.org/x'])await h.fire({url,key});
-  assert.equal(h.states.length,states);assert.equal(Notice.messages.length-since,4);assert.equal(h.requests.length,0);
+  assert.equal(h.states.length,states);assert.equal(Notice.messages.length-since,4,'with the key, each is said');assert.equal(h.requests.length,0);
   await h.fire({url:'https://example.org/a.pdf',source:'/x.pdf',key});assert.equal(h.states.length,states);
  }finally{delete globalThis.__annotatorTestRequest;h.dispose();}
 });
@@ -2577,7 +2582,7 @@ test('pressed for (or keyed), a PDF is read through a note made for it, in the w
   const shown=h.opened.at(-1);assert.equal(shown.leaf,tab,'shown in the tab that waited');assert.match(shown.file.path,/^Annotator sources\/[0-9a-f]{64}\.pdf$/);
   await h.fire({url,key});assert.equal(h.made.length,1);assert.equal(h.opened.at(-1).file,shown.file);
   h.said={type:'application/pdf'};await h.fire({url:'https://arxiv.org/pdf/1706.03762',key,title:'Attention'});
-  assert.deepEqual(h.probes,['https://arxiv.org/pdf/1706.03762']);const typed=h.files.get(h.made.at(-1));assert.equal(h.metadata.get(typed.path).frontmatter['annotation-target-type'],'pdf');
+  assert.ok(h.probes.includes('https://arxiv.org/pdf/1706.03762'));const typed=h.files.get(h.made.at(-1));assert.equal(h.metadata.get(typed.path).frontmatter['annotation-target-type'],'pdf');
   const before=h.made.length;await assert.rejects(h.plugin.openAddress('https://files.example/paper.pdf?token=abcdef123456','pdf'),/personal key/);assert.equal(h.made.length,before);
   globalThis.__annotatorTestRequest=async()=>({status:404,headers:{},arrayBuffer:new ArrayBuffer(0)});
   await assert.rejects(h.plugin.openAddress('https://example.org/gone.pdf','pdf','Gone'));assert.ok(h.trashed.includes('Gone.md'));
@@ -2602,7 +2607,7 @@ test('pressed for, a video gets a note by its own address and plays; any other p
 test('text shared to Obsidian on a phone offers Annotate in Annotator, under the shared text, and opens the address at once; a share without an address adds nothing',async()=>{
  const h=addressHost();try{await h.ready();
   const menu=()=>{const items=[];return {items,addItem(build){const item={setTitle(t){item.title=t;return item;},setIcon(){return item;},setSection(s){item.section=s;return item;},onClick(run){item.run=run;return item;}};build(item);items.push(item);return this;}};};
-  const shared=menu();h.events.get('receive-text-menu')(shared,'Attention Is All You Need\nhttps://youtu.be/dQw4w9WgXcQ');assert.deepEqual(shared.items.map(item=>[item.title,item.section]),[['Annotate in Annotator','title']]);
+  const shared=menu();h.events.get('receive-text-menu')(shared,'Attention Is All You Need\nhttps://youtu.be/dQw4w9WgXcQ');assert.deepEqual(shared.items.map(item=>[item.title,item.section]),[['Annotate in Annotator: youtu.be','title']],'the host is said before anything is asked');
   shared.items[0].run();for(let i=0;i<40&&!h.made.length;i++)await new Promise(resolve=>setTimeout(resolve,10));await new Promise(resolve=>setTimeout(resolve,50));assert.equal(h.made[0],'Attention Is All You Need.md','the shared title names the note');
   for(const text of ['just words','http://example.org/a','https://10.1.1.1/a']){const none=menu();h.events.get('receive-text-menu')(none,text);assert.deepEqual(none.items,[],text);}
  }finally{delete globalThis.__annotatorTestRequest;h.dispose();}
@@ -2637,5 +2642,98 @@ test('the folder for copies: chosen, made where missing, remembered once used; c
   h.app.vault.getFiles=()=>[...h.files.values()].filter(file=>file instanceof TFile);const parent=copy.parent;copy.parent={path:'Library/Copies'};
   h.plugin.display.copyFoldersUsed=[];delete h.plugin.targetCopies[url];delete h.plugin.remoteSources[url];assert.equal(h.plugin.targetKey(note),'remote:'+url);
   await h.plugin.openNoteTarget(note);assert.equal(requests,0,'nothing downloaded again');assert.equal(h.opened.at(-1).file,copy);assert.deepEqual(h.plugin.display.copyFoldersUsed,['Library/Copies']);assert.equal(h.plugin.targetKey(note),copy.path);copy.parent=parent;
+ }finally{delete globalThis.__annotatorTestRequest;h.dispose();}
+});
+// The security review of the bookmarklet (before 0.3.7): one test for each finding.
+const {settleAddress,nodeHops,localAddress,HOP_LIMIT}=await import('./.generated/plugin-boundary.mjs');
+const {markdownWords,newNoteText}=await import('./.generated/readers/note-template.js');
+test('review 1: where an address leads is followed step by step, each step checked: no http, nothing local, not by name, five steps at most',async()=>{
+ const table=(hops,names={})=>({head:async url=>hops[url]??{status:200,location:null,type:'application/pdf'},resolve:async host=>names[host]||['93.184.216.34']});
+ const to=location=>({status:302,location,type:''});
+ assert.deepEqual(await settleAddress('https://a.example/doc',table({'https://a.example/doc':to('/files/doc.pdf')})),{url:'https://a.example/files/doc.pdf',type:'application/pdf',steps:1});
+ for(const [where,why] of [['http://192.168.1.1/admin',/one it does not open/],['http://b.example/doc.pdf',/one it does not open/],['https://192.168.1.1/x',/one it does not open/],['https://me:pw@b.example/x',/one it does not open/],['https://localhost./x',/one it does not open/]])
+  await assert.rejects(settleAddress('https://evil.example/doc',table({'https://evil.example/doc':to(where)})),why,where);
+ // A public name that leads to this computer: refused before it is asked anything.
+ let asked=0;await assert.rejects(settleAddress('https://localtest.me/doc',{head:async()=>{asked++;return null;},resolve:async()=>['127.0.0.1']}),/leads to an address on this computer/);assert.equal(asked,0);
+ await assert.rejects(settleAddress('https://evil.example/doc',table({'https://evil.example/doc':to('https://nip.example/x')},{'nip.example':['::1']})),/leads to an address/);
+ // Round and round, or on and on: given up.
+ const loop={};for(let i=0;i<10;i++)loop[`https://a.example/${i}`]=to(`https://a.example/${i+1}`);
+ await assert.rejects(settleAddress('https://a.example/0',table(loop)),/too many times/);assert.equal(HOP_LIMIT,5);
+ // No answer to HEAD: the address as it is, with no type.
+ assert.deepEqual(await settleAddress('https://a.example/x',{head:async()=>null}),{url:'https://a.example/x',type:'',steps:0});
+ for(const ip of ['127.0.0.1','10.1.2.3','::1','fe80::1','::ffff:7f00:1','224.0.0.251'])assert.equal(localAddress(ip),true,ip);assert.equal(localAddress('93.184.216.34'),false);
+});
+test('review 1: on a computer each step is asked with Node, following nothing, and the connection looks its name up through the same check',async()=>{
+ const asked=[],dnsTable={'a.example':[{address:'93.184.216.34',family:4}],'rebind.example':[{address:'10.0.0.5',family:4}]};
+ const node={dns:{lookup:(host,options,done)=>dnsTable[host]?done(null,dnsTable[host]):done(new Error('ENOTFOUND'),[])},https:{request:(options,answered)=>{asked.push(options);const events={};const request={on:(name,heard)=>{events[name]=heard;},end:()=>{options.lookup(options.hostname,{},(error,address)=>{if(error)return events.error?.(error);answered({statusCode:301,headers:{location:'/next','content-type':'text/html'},resume(){}});});},destroy(){}};return request;}}};
+ const tools=nodeHops(node);
+ assert.deepEqual(await tools.head('https://a.example/doc?x=1'),{status:301,location:'/next',type:'text/html'});
+ assert.equal(asked[0].method,'HEAD');assert.equal(asked[0].path,'/doc?x=1');assert.equal(asked[0].protocol,'https:');
+ assert.equal(await tools.head('https://rebind.example/doc'),null,'a name that leads to the local network is not connected to');
+ assert.deepEqual(await tools.resolve('a.example'),['93.184.216.34']);
+});
+test('review 1 and 2: pressed for, a redirect to the local network or to http opens nothing; an address with a key opens nothing on any route, a phone’s reading copy included',async()=>{
+ const h=addressHost();try{await h.ready();
+  h.hops['https://evil.example/doc.pdf']={status:302,location:'http://192.168.1.1/router.pdf',type:''};
+  await assert.rejects(h.plugin.openAddress('https://evil.example/doc.pdf','pdf'),/one it does not open/);
+  h.hops['https://evil.example/page']={status:302,location:'https://10.0.0.1/',type:''};
+  await assert.rejects(h.plugin.openAddress('https://evil.example/page','unknown'),/one it does not open/);
+  h.names['localtest.me']=['127.0.0.1'];await assert.rejects(h.plugin.openAddress('https://localtest.me/a.pdf','pdf'),/leads to an address on this computer/);
+  assert.deepEqual(h.made,[]);assert.equal(h.requests.length,0,'nothing was downloaded');assert.deepEqual(h.websites,[]);
+  // A redirect that stays on the internet: the address it ends at is the one read and written.
+  h.hops['https://short.example/p']={status:301,location:'https://files.example/paper.pdf',type:''};
+  await h.plugin.openAddress('https://short.example/p','unknown');const note=h.files.get(h.made[0]);assert.equal(h.metadata.get(note.path).frontmatter['annotation-target'],'https://files.example/paper.pdf');
+  // A key in the address, or in where it leads: refused before anything is read, on every route.
+  h.hops['https://short.example/k']={status:302,location:'https://cdn.example/page?token=abcdef123456',type:''};
+  for(const [url,route] of [['https://x.example/a.pdf?token=abcdef12','pdf'],['https://x.example/page?auth=abcd1234','web'],['https://x.example/page?sig=abcd1234','unknown'],['https://short.example/k','web']])
+   await assert.rejects(h.plugin.openAddress(url,route),/personal key/,url);
+  Platform.isMobile=true;await assert.rejects(h.plugin.openAddress('https://x.example/page?session=abcd1234','web'),/personal key/);assert.deepEqual(h.copies,[],'no reading copy holds the key');
+  // Shared on a phone, the same: said, and nothing kept.
+  const menu={items:[],addItem(build){const item={setTitle(){return item;},setIcon(){return item;},setSection(){return item;},onClick(run){item.run=run;return item;}};build(item);this.items.push(item);return this;}};
+  h.events.get('receive-text-menu')(menu,'https://x.example/page?token=abcdef12345');const since=Notice.messages.length;menu.items[0].run();await new Promise(resolve=>setTimeout(resolve,50));
+  assert.ok(Notice.messages.slice(since).some(said=>/personal key/.test(String(said))));assert.deepEqual(h.copies,[]);
+ }finally{Platform.isMobile=false;delete globalThis.__annotatorTestRequest;h.dispose();}
+});
+test('review 3: links without the key cannot flood: one tab per address, three wait at most (the oldest gives way), the focus is taken once in ten seconds, and refusals are said once a minute',async()=>{
+ const h=addressHost();try{await h.ready();
+  await h.fire({url:'https://a.example/1.pdf'});await h.fire({url:'https://a.example/1.pdf'});
+  assert.equal(h.plugin.app.workspace.getLeavesOfType('annotator-handed').length,1,'the same address twice: one tab');assert.equal(h.revealed.length,2,'the second time, the tab already there is shown');
+  assert.equal(h.states[0].active,true);
+  for(const n of [2,3,4,5])await h.fire({url:`https://a.example/${n}.pdf`});
+  const waiting=h.plugin.app.workspace.getLeavesOfType('annotator-handed').map(leaf=>leaf.view.getState().url);
+  assert.deepEqual(waiting,['https://a.example/3.pdf','https://a.example/4.pdf','https://a.example/5.pdf']);
+  assert.equal(h.states.slice(1).every(state=>state.active===false),true,'no tab after the first took the focus');
+  const since=Notice.messages.length;for(const url of ['http://a.example/x','https://10.0.0.1/x','https://a:b@c.example/','javascript:alert(1)'])await h.fire({url});
+  assert.ok(Notice.messages.length-since<=1,'said once a minute at most');
+  // After a restart, no more wait than may.
+  for(const n of [6,7])await (h.leaf()).setViewState({type:'annotator-handed',state:{url:`https://a.example/${n}.pdf`,route:'pdf'}});
+  assert.equal(h.plugin.app.workspace.getLeavesOfType('annotator-handed').length,5);h.plugin.trimWaiting();assert.equal(h.plugin.app.workspace.getLeavesOfType('annotator-handed').length,3);
+ }finally{delete globalThis.__annotatorTestRequest;h.dispose();}
+});
+test('review 4: names written with a final dot, .internal names, multicast and broadcast are the local network',()=>{
+ const {checkAddress,localNetwork}=OpenAddress;
+ for(const url of ['https://localhost./','https://router./x','https://nas.local./','https://router.lan./','https://foo.home.arpa./','https://metadata.google.internal./','https://metadata.google.internal/','https://127.0.0.1./','https://224.0.0.1/','https://255.255.255.255/','https://printer../'])
+  {assert.equal(localNetwork(url),true,url);assert.ok('refused' in checkAddress(url),url);}
+ for(const url of ['https://example.org./','https://arxiv.org/pdf/1706.03762'])assert.equal(localNetwork(url),false,url);
+});
+test('review 5: a title or an address is plain words in a new note: no code, link, embed, tag, comment or Dataview and Templater markup; one line in the properties',()=>{
+ const evil='Paper `$= dv.el("b", app.vault.adapter.basePath)` [[Secret]] ![[x]] <% tp.file %> #tag %%c%% =x= | a\n# Heading';
+ const words=markdownWords(evil);
+ assert.doesNotMatch(words,/(^|[^\\])[`$[\]<>|#%=!]/,'every mark is escaped');assert.doesNotMatch(words,/\n/);
+ assert.equal(markdownWords('- a list? 1. no'),'\\- a list? 1. no');assert.equal(markdownWords('Plain words, 2026'),'Plain words, 2026');
+ const text=newNoteText({target:'https://x.example/`$=x`.pdf',title:evil,date:'2026-11-19',template:'---\ntags: [paper]\nsummary: {{title}} more\n---\n# {{title}}\nFrom {{target}}\n'});
+ const [, head, body]=/^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(text);
+ assert.equal(head.split('\n').length,3,'the title stays on one line in the properties');assert.doesNotMatch(head,/\n# Heading/);
+ assert.match(body,/^# Paper \\`\\\$\\= dv\.el\("b", app\.vault\.adapter\.basePath\)\\` \\\[\\\[Secret\\\]\\\] \\!\\\[\\\[x\\\]\\\] \\<\\% tp\.file \\%\\> \\#tag/m);
+ assert.match(body,/From https:\/\/x\.example\/\\`\\\$\\=x\\`\.pdf/);
+ // The note's target property itself is the address as it is (a YAML string), so that the note reads it.
+ assert.match(head,/^annotation-target: "https:\/\/x\.example\/`\$=x`\.pdf"$/m);
+});
+test('review 6: the address is checked again at the press, whatever the waiting tab’s state says (it may come from a synced workspace)',async()=>{
+ const h=addressHost();try{await h.ready();
+  for(const url of ['https://192.168.1.10/a.pdf','http://example.org/a.pdf','https://u:p@example.org/a.pdf','https://localhost./a.pdf'])
+   await assert.rejects(h.plugin.openAddress(url,'pdf'),/https only|on this computer or its network/,url);
+  await assert.rejects(h.plugin.openAddress('https://10.0.0.1/watch','video'),/on this computer or its network/);
+  assert.deepEqual(h.made,[]);assert.deepEqual(h.probes,[],'nothing was asked');
  }finally{delete globalThis.__annotatorTestRequest;h.dispose();}
 });

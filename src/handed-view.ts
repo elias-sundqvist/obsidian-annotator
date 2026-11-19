@@ -4,7 +4,7 @@
  * state, so a restart, or a tab first shown later, still waits.
  */
 import { ItemView, type WorkspaceLeaf } from 'obsidian';
-import { ADDRESS_ROUTES, handedTitle, waitingWords, type AddressRoute } from './open-address';
+import { ADDRESS_ROUTES, waitingWords, type AddressRoute } from './open-address';
 
 export const HANDED_VIEW = 'annotator-handed';
 
@@ -22,7 +22,6 @@ function shownAddress(url: string): string {
 export class HandedView extends ItemView {
     private url = '';
     private route: AddressRoute = 'unknown';
-    private title = '';
     constructor(
         leaf: WorkspaceLeaf,
         private hooks: HandedHooks
@@ -43,16 +42,16 @@ export class HandedView extends ItemView {
         }
     }
     getState() {
-        return { url: this.url, route: this.route, ...(this.title ? { title: this.title } : {}) };
+        // No title is kept: a link without the key may say anything, and nothing it says names a note.
+        return { url: this.url, route: this.route };
     }
     async setState(state: unknown, result: Parameters<ItemView['setState']>[1]) {
-        const given = (state || {}) as { url?: unknown; route?: unknown; title?: unknown };
+        const given = (state || {}) as { url?: unknown; route?: unknown };
         if (typeof given.url === 'string' && /^https:\/\//i.test(given.url)) {
             this.url = given.url;
             this.route = ADDRESS_ROUTES.includes(given.route as AddressRoute)
                 ? (given.route as AddressRoute)
                 : 'unknown';
-            this.title = handedTitle(given.title);
             this.draw();
             (this.leaf as WorkspaceLeaf & { updateHeader?(): void }).updateHeader?.();
             (this as { titleEl?: HTMLElement }).titleEl?.setText?.(this.getDisplayText());
@@ -78,7 +77,7 @@ export class HandedView extends ItemView {
         go.onclick = () => {
             go.disabled = true;
             status.setText('');
-            void this.hooks.open(this.url, this.route, this.title, this.leaf).then(
+            void this.hooks.open(this.url, this.route, '', this.leaf).then(
                 () => {
                     go.disabled = false;
                 },

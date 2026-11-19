@@ -379,17 +379,47 @@ shows. Where it goes is decided in `src/open-address.ts`.
 
 **What is taken** (`checkAddress`): `https` only; no user name or password;
 nothing on this computer or its network (`localNetwork`: loopback, private,
-link-local and carrier ranges, `.local` and bare names, IPv4 inside IPv6);
-at most 4,000 characters; an address that names a file too (`source`,
-`file`) is refused. The fragment is dropped. The requests wait in the same
-queue as the rest of `annotator-open`, which cuts off a flood.
+link-local, carrier, multicast and broadcast ranges, `localhost`, `.local`,
+`.lan`, `.internal`, `.home.arpa` and bare names, each also written with a
+final dot, and IPv4 inside IPv6); at most 4,000 characters; an address that
+names a file too (`source`, `file`) is refused. The fragment is dropped. The
+address is checked again at the press (`openAddress`), since a waiting tab's
+state may come from a synced workspace.
+
+**Where it leads** (`src/address-hops.ts`). Obsidian's request function
+follows a redirect without saying where to. So before anything is read,
+every step is asked here instead:
+
+- **On a computer**, each step is a HEAD request made with Node's own
+  client, which follows no redirect. Every `Location` must pass the same
+  rules as the address handed over (so no `http`, nothing local), and after
+  five steps it is given up. The name is looked up first, and refused if it
+  leads to this computer or its network (`localtest.me`,
+  `127.0.0.1.nip.io`). The request also looks its name up through the same
+  check as it connects, so a name that changes its answer in between is
+  not connected to. The address it ends at is the one written into the
+  note and read.
+- **What is not guaranteed.** The file itself is then downloaded with
+  Obsidian's request function, which looks the name up again and would
+  follow a redirect it is given: a server that answers HEAD with the file
+  and the download with a redirect, or a name that changes its answer
+  between the check and the download, is not caught on that last request.
+  A page opened in the Web viewer is browsed as any page is.
+- **On a phone** there is no such client: only the address handed over (or
+  shared) is checked, by its name; where it leads, and what its name leads
+  to, cannot be seen. A phone reads an address only after a press or a
+  share, which the reader makes.
 
 **Without this device's key, nothing is fetched and no note is made.** The
 address opens a tab of its own (`src/handed-view.ts`) that says what it
 seems to be (from the address alone), which host would be asked, and that
 nothing has been fetched. It waits for a press, and keeps waiting through a
-restart: the tab's state holds only the address, the route and the page's
-title. The words say what the press does: for a PDF, a book or a video, that
+restart: the tab's state holds only the address and the route. **A link
+cannot flood**: the same address again shows the tab already there; at most
+three addresses wait at once (the oldest gives way, also after a restart); a
+tab takes the focus at most once in ten seconds; and refusals, and the word
+that another address waits, are said at most once a minute, as for keyless
+`file=` and `source=` addresses. The words say what the press does: for a PDF, a book or a video, that
 a note is made (or the one that names it opened). A note is made only after
 that press, never from the link. The request that tells an address's kind
 when the address does not (a HEAD) is made only after the press too.
@@ -407,17 +437,28 @@ once, as a file handed over with the key does.
 | Web page | Anything else, and a server that does not answer HEAD | Obsidian's Web viewer, as **Open website in core Web viewer** does; on a phone, an offline reading copy, as **Save website as an offline Markdown reading copy** does. No annotation note before the first highlight |
 
 - **Keys in addresses.** An address whose query carries a key (`keyedQuery`:
-  `token`, `sig`, `auth`, `key` and the like) is not written into a note: a
-  PDF or a book at such an address is refused, and the reader is told to
-  download it. A YouTube note holds YouTube's own address only.
-- **The title** handed over (the page's own, `title=`) only names a new note,
-  cleaned of control characters, of what a file name cannot hold, and cut at
-  200 characters. The waiting tab does not show it: a page could title itself
-  as anything; the tab shows the host and the address.
+  `token`, `sig`, `auth`, `key` and the like), handed over or reached by a
+  redirect, is not opened on any route that writes an address into a note
+  (a PDF, a book, a web page's note or a phone's reading copy, shared or
+  pressed for), and the reader is told to download it instead. A YouTube
+  note holds YouTube's own address only.
+- **The title** (`title=`) is taken only with this device's key; without it a
+  new note is named after the file or the host. A title shared from a phone's
+  browser names the note too. Either way it is cleaned of control
+  characters and of what a file name cannot hold, and cut at 200
+  characters. The waiting tab shows only the host and the address.
+- **Words in a new note.** A title and an address filled into the reader's
+  template (`{{title}}`, `{{target}}`) are plain text in the note's body:
+  backticks, `$`, `=`, brackets, `<`, `>`, `|`, `%`, `#`, `!` and a leading
+  list mark are escaped (`markdownWords`), so a title cannot become
+  Dataview or Templater code, a link, an embed or a tag; in the note's
+  properties they stay on one line. This holds for every new note, not only
+  those made from a link.
 - **Text shared to Obsidian on a phone** (Obsidian's `receive-text-menu`,
-  which then offers **Annotate in Annotator** when the text holds an `https`
-  address) takes the same route at once: the reader shared the page and
-  picked the item. The same rules apply.
+  which then offers **Annotate in Annotator: \<host\>** when the text holds
+  an `https` address) takes the same route at once: the reader shared the
+  page and picked the item, which names the host it will ask. The same
+  rules apply.
 
 ### Why the bookmarklet carries no key
 

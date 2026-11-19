@@ -45,7 +45,11 @@ export function keyedQuery(address: string): boolean {
 export function localNetwork(address: string): boolean {
     let name: string;
     try {
-        name = new URL(address).hostname.toLowerCase().replace(/^\[|\]$/g, '');
+        // A name written with its final dot (`localhost.`, `router.lan.`) is the same name.
+        name = new URL(address).hostname
+            .toLowerCase()
+            .replace(/^\[|\]$/g, '')
+            .replace(/\.+$/, '');
     } catch {
         return false;
     }
@@ -88,6 +92,8 @@ export function localNetwork(address: string): boolean {
         return (
             a === 0 ||
             a === 127 ||
+            // Multicast, reserved and broadcast: never a page on the internet.
+            a >= 224 ||
             a === 10 ||
             (a === 192 && b === 168) ||
             (a === 172 && b >= 16 && b <= 31) ||
