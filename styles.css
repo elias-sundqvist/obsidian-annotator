@@ -1919,3 +1919,5 @@ body.annotator-box-clear .annotator-text-box { --annotator-box-ground: transpare
 .annotator-bookmarklet-link:hover { background: var(--interactive-hover); }
 /* The bookmarklet's code, whole and wrapped, under its link and Copy (Settings → Open from outside Obsidian). */
 .annotator-bookmarklet-code { display: block; flex: 1 1 100%; order: 3; box-sizing: border-box; width: 100%; padding: var(--size-4-2) var(--size-4-3); border: 1px solid var(--background-modifier-border); border-radius: var(--radius-s); background: var(--background-primary-alt); color: var(--text-normal); font-family: var(--font-monospace); font-size: var(--font-smaller); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+.annotator-bookmarklet > .setting-item-control { flex-wrap: wrap; justify-content: flex-start; text-align: left; }
+.annotator-bookmarklet .annotator-bookmarklet-code { text-align: left; }
