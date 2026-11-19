@@ -873,8 +873,8 @@ annotations go into the note, and the file is only read, never changed.
   still found before you take the new one; the earlier download stays.
   **Clear the download cache** removes the downloads no tab shows.
 - **Annotate a copy in the vault** (in the first question, as the button in
-  the view's header, or as a command) copies the file into `Annotator
-  sources`, where it is read from then on, on every device. The note keeps
+  the view's header, or as a command) copies the file into the folder for
+  copies, where it is read from then on, on every device. The note keeps
   its link, and its annotations stay as they are: they belong to the same
   file. A copy is what a phone reads (below), and what is needed to export
   the PDF with its annotations or to make a searchable copy of a scan, since
@@ -886,10 +886,19 @@ annotations go into the note, and the file is only read, never changed.
   passages are found by their words and marked in the list; areas and
   drawings from the other version are not placed. A copy in the vault keeps
   one version fixed.
+- **The folder for copies** is `Annotator sources` unless you choose
+  another under **Settings → Sources outside the vault → Folder for
+  copies**, which suggests your vault's folders (Obsidian's attachment
+  folder first, where it is one folder). Copies already made stay where
+  they are and are still read: nothing is moved. Each copy is named by a
+  digest of the note's link, so the same source is one file, whichever note
+  asked for it. Obsidian's attachment setting is not followed by itself:
+  its "same folder as the note" choices would put one copy, shared by every
+  note that names the source, beside whichever note opened it first.
 - **On a phone or tablet** a file is read from the vault. A copy made on a
   computer syncs and is read; it is found by its name, which follows from
-  the note's link, so this works even when the plugin's settings do not
-  sync. A web address without a copy is offered as one (**Download a copy**).
+  the note's link, wherever it is in the vault, so this works even when the
+  plugin's settings do not sync. A web address without a copy is offered as one (**Download a copy**).
   A file that is only on a computer cannot be read on the phone, and the
   reader says what to do: on that computer, open the note and choose
   **Annotate a copy in the vault**.
@@ -992,8 +1001,8 @@ open in.
   **Annotate where it is**, or **Annotate a copy in the vault**. Obsidian
   opens such a file in the vault you used last.
 - **On an older Obsidian** (before 1.14.4), which cannot read a file outside
-  the vault, a file opened with "Open with Annotator" is copied into
-  `Annotator sources` after a question; **Always from this folder** stops
+  the vault, a file opened with "Open with Annotator" is copied into the
+  folder for copies after a question; **Always from this folder** stops
   the question for that folder. So it is with **Copy outside sources into
   the vault** on.
 - **On a phone or tablet** a file is read from the vault only, so it is
@@ -1012,6 +1021,7 @@ Behind "Open with Annotator" is an address that any script or Shortcut can open:
 | --- | --- |
 | `obsidian://annotator-open?vault=…&file=Papers%2FPaper.pdf` | A PDF or book already in the vault, by its path there |
 | `obsidian://annotator-open?vault=…&key=…&source=%2FUsers%2Fme%2FPaper.pdf` | One outside the vault, by its full path (a computer only) |
+| `obsidian://annotator-open?vault=…&url=https%3A%2F%2F…&title=…` | A web page, PDF, book or video, by its address ([below](#open-a-page-from-your-browser)) |
 
 An address can be opened by any web page, so a file outside the vault is
 read only when the address carries this computer's key, which Install writes
@@ -1019,6 +1029,56 @@ into "Open with Annotator" (and makes, if there is none). Without it nothing
 is looked at and nothing is asked. The key is kept on this computer, not in
 the settings that sync, and **New key** in the settings ends the old one
 (press **Install again** afterwards).
+
+### Open a page from your browser
+
+A page you are reading in your browser can be handed to Annotator with one
+click on a bookmark: a PDF, a book, a YouTube video, or any other web page.
+
+- **The bookmarklet.** In Annotator's settings, under **Open from outside
+  Obsidian**, drag **Annotate in Annotator** to your browser's bookmarks
+  bar. If your browser does not take it from there, make a bookmark of any
+  page and give it the text shown below the link as its address. It sends
+  the page's address and title, URL-encoded, and your vault's name, to
+  `obsidian://annotator-open`; your browser asks once whether it may open
+  Obsidian.
+- **In Obsidian, one press.** A tab opens that says what was asked for and
+  from where, and that nothing has been fetched. The bookmarklet carries no
+  key ([docs/SECURITY.md](docs/SECURITY.md) says why), so nothing is
+  fetched, and no note is made, until you press the button there. The tab
+  waits, also through a restart of Obsidian.
+- **Where it goes**, told from the address where it can be, else by asking
+  the page's server what it is (without downloading it):
+
+  | The address is | It opens |
+  | --- | --- |
+  | a PDF (`….pdf`, or a server that says `application/pdf`, as arXiv's) | In the PDF view, read where it is, through its note |
+  | an EPUB | In the book reader, the same way |
+  | a YouTube video | In the video reader, through its note |
+  | any other page | In Obsidian's Web viewer, where you annotate the live page ([Web pages](#web-pages)); on a phone, as an offline reading copy saved in the vault |
+
+  A PDF, a book or a video opens through the note that already names it;
+  where there is none, a note is made where your new notes go, named after
+  the page's title. The PDF or book is then read as any [source outside the
+  vault](#sources-outside-the-vault) is: downloaded to this computer's
+  cache, or on a phone into the folder for copies. An address that carries
+  a key of its own (`?token=…`) is not written into a note, and the reader
+  says so.
+- **What is refused**: anything but `https`, an address with a user name or
+  password in it, one on this computer or its network, and one longer than
+  4,000 characters.
+- **Some pages ignore a bookmarklet**: a browser's own PDF viewer may not
+  run it (Firefox's does not), and a few sites block bookmarklets. Copy
+  the address instead and make it a note's `annotation-target`.
+- **On a phone.** Phone browsers make bookmarklets awkward: there is no
+  bar to drag to. On Android, use **Share** in the browser, choose
+  Obsidian, then **Annotate in Annotator** in the menu Obsidian shows; that
+  is the easy way, and needs no press afterwards (the share was yours). In
+  Chrome on Android a bookmarklet runs only when you type its name in the
+  address bar and pick it. On an iPhone or iPad, Safari runs a bookmarklet
+  from the bookmarks list: bookmark any page, edit the bookmark, and paste
+  the text from the settings as its address. Annotator then waits for the
+  same press.
 
 ## With Zotero
 

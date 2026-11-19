@@ -509,6 +509,7 @@ export class OpenSourceModal extends Modal {
         private shown: string,
         private whole: string,
         private vault: string,
+        private folder: string,
         private answer: (choice: 'file' | 'folder' | 'no') => void
     ) {
         super(app);
@@ -517,7 +518,7 @@ export class OpenSourceModal extends Modal {
         this.setTitle?.('Copy this file into the vault?');
         this.modalEl.addClass('annotator-confirm');
         this.contentEl.createEl('p', {
-            text: 'Something on this computer asked Annotator to open a file from outside the vault. To read and annotate it, it is copied once into \u201cAnnotator sources\u201d and a note is made for it. The file itself is not changed.'
+            text: `Something on this computer asked Annotator to open a file from outside the vault. To read and annotate it, it is copied once into \u201c${this.folder}\u201d and a note is made for it. The file itself is not changed.`
         });
         this.contentEl.createEl('p', { text: this.shown, cls: 'annotator-confirm-subject' });
         // A long path is shown by its two ends; the whole of it is one press away.

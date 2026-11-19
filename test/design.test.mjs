@@ -483,7 +483,17 @@ test('the settings are grouped under headings that say what they are about, in s
         assert.deepEqual(under('Annotation notes'), ['New annotation notes start with', 'Template for new annotation notes', 'Write new annotations under this heading', 'Give each annotation a heading', 'Level of annotation headings', 'Highlight quotes in the note', 'Keep text before the quote', 'Keep text after the quote', 'Keep reading progress in the note', 'Fold annotation data in Live Preview', 'Show titles from this property']);
         assert.deepEqual(under('Copying and exporting'), ['Copied link', 'Export style', 'Link exports back to the passage']);
         assert.deepEqual(under('Opening'), ['Open annotation notes in the reader', 'Default target folders', 'Also read the source from this property', 'Write new notes with this property instead']);
-        assert.deepEqual(under('Sources outside the vault'), ['Copy outside sources into the vault', 'Zotero data folder', 'Calibre library folders']);
+        assert.deepEqual(under('Sources outside the vault'), ['Copy outside sources into the vault', 'Folder for copies', 'Zotero data folder', 'Calibre library folders']);
+        // Folder for copies: the default shown and as the placeholder; what is typed is kept as a folder, and shown as kept once left.
+        const copies = [...tab.containerEl.querySelectorAll('.setting-item')].find(row => row.querySelector('.setting-item-name')?.textContent === 'Folder for copies'), copiesInput = copies.querySelector('input');
+        assert.match(copies.querySelector('.setting-item-description').textContent, /Copies already made stay where they are.*nothing is moved/); assert.match(copies.querySelector('.setting-item-description').textContent, /attachment folder is offered first/);
+        assert.equal(copiesInput.value, 'Annotator sources'); assert.equal(copiesInput.placeholder, 'Annotator sources');
+        copiesInput.value = ' Papers//Copies/ '; copiesInput.dispatchEvent(new h.dom.window.Event('input')); await new Promise(resolve => setTimeout(resolve, 0));
+        assert.equal(h.plugin.display.copyFolder, 'Papers/Copies'); copiesInput.dispatchEvent(new h.dom.window.Event('blur')); assert.equal(copiesInput.value, 'Papers/Copies');
+        copiesInput.value = ''; copiesInput.dispatchEvent(new h.dom.window.Event('input')); copiesInput.dispatchEvent(new h.dom.window.Event('blur')); await new Promise(resolve => setTimeout(resolve, 0));
+        assert.equal(copiesInput.value, 'Annotator sources'); assert.equal(h.plugin.display.copyFolder, 'Annotator sources');
+        // The copy questions name the folder copies go to.
+        assert.match(under('Sources outside the vault') && [...tab.containerEl.querySelectorAll('.setting-item')].find(row => row.querySelector('.setting-item-name')?.textContent === 'Copy outside sources into the vault').querySelector('.setting-item-description').textContent, /into the folder for copies \(below\)/);
         assert.ok(under('Reading').includes('Show highlights in embedded PDFs') && under('Reading').includes('Folder for reference notes'));
         // Obsidian's guidelines for headings: sentence case, and no "settings" in them.
         for (const [heading] of groups) { assert.doesNotMatch(heading, /setting/i, heading); assert.equal(heading.slice(1), heading.slice(1).replace(/\b[A-Z][a-z]/g, word => (['Annotator', 'Obsidian'].some(name => heading.includes(name)) ? word : word.toLowerCase())), heading); }
@@ -1582,7 +1592,7 @@ test('Open from outside Obsidian: Install first, with what is there now and what
         const heading = section()[0].querySelector('.setting-item-description').textContent;
         assert.match(heading, /from the file manager, with Open with/); assert.doesNotMatch(heading, /share sheet/);
         // No key yet: Install comes first and makes one; nothing to copy is shown until there is a key.
-        assert.deepEqual(section().slice(1).map(row => row.querySelector('.setting-item-name').textContent), ['Open with Annotator', 'This computer’s key']);
+        assert.deepEqual(section().slice(1).map(row => row.querySelector('.setting-item-name').textContent), ['Open with Annotator', 'This computer’s key', 'Bookmarklet']);
         const status = () => named('Open with Annotator').querySelector('.annotator-open-with-state');
         assert.equal(status().getAttribute('role'), 'status'); assert.equal(status().textContent, 'Not installed on this computer.');
         assert.match(named('Open with Annotator').querySelector('.setting-item-description').textContent, /Finder’s Open with, for PDFs and books, for this vault\. .*Nothing is downloaded\./);
@@ -1605,6 +1615,16 @@ test('Open from outside Obsidian: Install first, with what is there now and what
         for (const row of manual.querySelectorAll('.setting-item')) { assert.ok(row.classList.contains('annotator-open-with-block')); assert.deepEqual(buttons(row), ['Copy']); }
         const address = manual.querySelector('textarea.is-address'); assert.match(address.value, /^obsidian:\/\/annotator-open\?vault=aaaa000000000001&key=[A-Za-z0-9_-]{24}&source=$/); assert.equal(address.readOnly, true);
         assert.match(manual.querySelector('textarea:not(.is-address)').value, /^APP="\$HOME\/Applications\/Open with Annotator\.app"/);
+        // The bookmarklet: a link to drag, which does nothing pressed here (it would run in Obsidian), and its text to
+        // select; it names the vault by name (a bookmark may be used on another device) and carries no key.
+        const marklet = named('Bookmarklet'), link = marklet.querySelector('a.annotator-bookmarklet-link');
+        assert.equal(link.getAttribute('draggable'), 'true'); assert.equal(link.textContent, 'Annotate in Annotator');
+        const code = marklet.querySelector('textarea').value; assert.equal(link.getAttribute('href'), code); assert.equal(marklet.querySelector('textarea').readOnly, true);
+        assert.match(code, /^javascript:\(\(\)=>\{location\.href='obsidian:\/\/annotator-open\?vault=[^&']*&url='\+encodeURIComponent\(location\.href\)\+'&title='/); assert.doesNotMatch(code, /key=/);
+        assert.equal(code.includes(h.plugin.openDeviceState().key), false);
+        assert.deepEqual(buttons(marklet), [], 'nothing is put on the clipboard from here');
+        const pressedHere = new h.dom.window.MouseEvent('click', { bubbles: true, cancelable: true }); link.dispatchEvent(pressedHere); assert.equal(pressedHere.defaultPrevented, true);
+        assert.match(section()[0].querySelector('.setting-item-description').textContent, /a page from your browser with the bookmarklet/);
         // Files are read where they are here: no list of folders for copies to show.
         h.plugin.opensInPlace = () => true; tab.display(); await settle();
         assert.equal(named('Folders files are copied from without a question'), undefined);
@@ -1626,7 +1646,11 @@ test('Open from outside Obsidian: Install first, with what is there now and what
         Platform.isMobile = true; tab.display(); await settle();
         const phone = section()[0].querySelector('.setting-item-description').textContent;
         assert.match(phone, /cannot be handed over from the file manager or a share sheet where it is, so it is copied into the vault first/); assert.match(phone, /Import into vault/);
-        assert.deepEqual(section().slice(1).map(row => row.querySelector('.setting-item-name').textContent), ['Address for a file in this vault']);
+        assert.deepEqual(section().slice(1).map(row => row.querySelector('.setting-item-name').textContent), ['Address for a file in this vault', 'Bookmarklet']);
         assert.match(section()[1].querySelector('textarea.is-address').value, /&file=$/);
+        // The bookmarklet on a phone: no link to drag (there is nowhere to drag it), the text to make a bookmark of, and the share sheet said.
+        assert.equal(named('Bookmarklet').querySelector('a'), null);
+        assert.match(named('Bookmarklet').querySelector('.setting-item-description').textContent, /awkward.*On Android, Share in the browser, then Obsidian, then Annotate in Annotator/);
+        assert.match(named('Bookmarklet').querySelector('textarea').value, /^javascript:/);
     } finally { Platform.isDesktopApp = false; Platform.isMacOS = false; Platform.isMobile = false; h.dispose(); }
 });

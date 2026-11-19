@@ -3,6 +3,23 @@
 What changed for someone using Annotator. How to use each thing is in
 [README.md](README.md).
 
+## Unreleased
+
+- **Open what your browser shows in Annotator, with a bookmarklet.** Settings
+  → Open from outside Obsidian → **Bookmarklet**: drag **Annotate in
+  Annotator** to the bookmarks bar, and on any page it hands the page over:
+  a PDF opens in the PDF view (read where it is, through its note), an EPUB
+  in the book reader, a YouTube video in the video reader, and any other
+  page in Obsidian's Web viewer (on a phone, as a reading copy).
+  `obsidian://annotator-open?url=` takes these addresses now. Annotator
+  waits for one press in Obsidian before it fetches anything or makes a
+  note; the bookmarklet carries no key. On Android, **Share** a page to
+  Obsidian and pick **Annotate in Annotator**.
+- **Choose the folder for copies.** Settings → Sources outside the vault →
+  **Folder for copies** (default `Annotator sources`, with your vault's
+  folders suggested) is where **Annotate a copy in the vault** and other
+  copies go. Copies already made stay where they are and keep working.
+
 ## 0.3.6 (2026-11-18)
 
 - **Show titles from this property** (settings, under **Annotation notes**)

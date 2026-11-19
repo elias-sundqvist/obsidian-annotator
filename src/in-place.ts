@@ -6,7 +6,8 @@
  */
 import { cachedSourceUrl, localTarget } from './local-source';
 import { digest } from './source';
-import { originalName, sourceEnding, type RemoteKind } from './remote-source';
+import { copyFolder, DEFAULT_COPY_FOLDER, originalName, sourceEnding, type RemoteKind } from './remote-source';
+export { copyFolder, DEFAULT_COPY_FOLDER };
 
 /**
  * The key of a file outside the vault, as Obsidian writes a `TExternalFile`'s path: `file:` and the absolute path,
@@ -244,17 +245,24 @@ export function copyOrigin(raw: string): string {
 }
 /** The endings a copy of a source may have, by the kinds the reader opens. */
 export const COPY_ENDINGS = ['pdf', 'epub', 'mobi', 'azw3', 'prc', 'fb2', 'fbz', 'fb3'];
-/** The copy's place in the vault: `Annotator sources/<SHA-256 of the target as written>.<ending>`. */
-export async function copyName(origin: string, ending: string): Promise<string> {
+/**
+ * Every folder a copy may be in, the one copies now go to first: the folder chosen, those chosen before, and the
+ * default. Copies are never moved when the folder changes, so each is still looked in.
+ */
+export function copyFolders(current: string, before: readonly string[] = []): string[] {
+    return [...new Set([copyFolder(current), ...before.map(copyFolder), DEFAULT_COPY_FOLDER])];
+}
+/** The copy's place in the vault: `<folder for copies>/<SHA-256 of the target as written>.<ending>`. */
+export async function copyName(origin: string, ending: string, folder = DEFAULT_COPY_FOLDER): Promise<string> {
     if (!COPY_ENDINGS.includes(ending)) throw new Error('Not a kind of source the reader keeps.');
-    return `Annotator sources/${await digest(origin)}.${ending}`;
+    return `${copyFolder(folder)}/${await digest(origin)}.${ending}`;
 }
 const named = new Map<string, string>();
 /**
  * The same name, worked out at once (the reader asks for it while matching notes, which cannot wait): SHA-256 of
  * the target's UTF-8 bytes, as `digest` gives it. Remembered for each target.
  */
-export function copyNameNow(origin: string, ending: string): string {
+export function copyNameNow(origin: string, ending: string, folder = DEFAULT_COPY_FOLDER): string {
     if (!COPY_ENDINGS.includes(ending)) throw new Error('Not a kind of source the reader keeps.');
     let hash = named.get(origin);
     if (hash === undefined) {
@@ -262,7 +270,7 @@ export function copyNameNow(origin: string, ending: string): string {
         if (named.size > 5000) named.clear();
         named.set(origin, hash);
     }
-    return `Annotator sources/${hash}.${ending}`;
+    return `${copyFolder(folder)}/${hash}.${ending}`;
 }
 const ROUND = Uint32Array.from([
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98,

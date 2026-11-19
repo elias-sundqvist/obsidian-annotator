@@ -1904,3 +1904,16 @@ body.annotator-box-clear .annotator-text-box { --annotator-box-ground: transpare
 /* In the sidebar a text box's card says so; its words are the note below. */
 .annotator-card-area.is-text-box .annotator-card-area-icon svg { stroke-width: 2.25; }
 @media (prefers-reduced-motion: reduce) { .annotator-native-areas .annotator-native-mark.annotator-area-mark.annotator-text-box { transition: none; } }
+
+/* Settings → Folder for copies: the note under a suggested folder. */
+.annotator-folder-suggest-note {
+    color: var(--text-muted);
+    font-size: var(--font-ui-smaller);
+}
+/* An address handed over from another app, waiting for a press (src/handed-view.ts). */
+.annotator-handed { display: flex; flex-direction: column; align-items: center; gap: 10px; max-width: 40em; margin: 18vh auto 0; padding: 0 var(--size-4-4); color: var(--text-faint); font-size: var(--font-ui-small); text-align: center; }
+.annotator-handed-title { color: var(--text-normal); font-size: var(--font-ui-medium); font-weight: var(--font-semibold); }
+.annotator-handed-address { color: var(--text-muted); font-family: var(--font-monospace); font-size: var(--font-ui-smaller); overflow-wrap: anywhere; user-select: text; }
+.annotator-handed-status { color: var(--text-error); }
+.annotator-bookmarklet-link { align-self: flex-start; padding: var(--size-4-1) var(--size-4-3); border: 1px solid var(--background-modifier-border); border-radius: var(--radius-s); background: var(--interactive-normal); color: var(--text-normal); text-decoration: none; cursor: grab; white-space: nowrap; }
+.annotator-bookmarklet-link:hover { background: var(--interactive-hover); }

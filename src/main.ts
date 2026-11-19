@@ -62,6 +62,7 @@ import {
     openDevice,
     openRequest,
     readerFile,
+    sameKey,
     shownPath,
     OPEN_WITH_DEFAULT,
     OPEN_WITH_GONE,
@@ -70,6 +71,18 @@ import {
     type OpenDevice,
     type OpenRequest
 } from './open-with';
+import {
+    bookmarklet,
+    checkAddress,
+    handedTitle,
+    keyedQuery,
+    routeByType,
+    routeOf,
+    sharedAddress,
+    type AddressRoute
+} from './open-address';
+import { HANDED_VIEW, HandedView } from './handed-view';
+import { resolveVideoTarget } from './video-provider';
 import {
     install,
     installPlace,
@@ -103,7 +116,10 @@ import {
 import * as obsidianApi from 'obsidian';
 import {
     COPY_ENDINGS,
+    DEFAULT_COPY_FOLDER,
     allowedHere,
+    copyFolder,
+    copyFolders,
     cacheFileName,
     cachePath,
     cacheRoot,
@@ -154,6 +170,7 @@ import {
     ConfirmModal,
     OpenSourceModal
 } from './library';
+import { FolderSuggest } from './folder-suggest';
 import { annotationNotes } from './annotation-notes';
 import {
     DEFAULT_TEXT_SIZE,
@@ -454,8 +471,8 @@ export default class AnnotatorPlugin extends Plugin {
                         how === 'place'
                             ? 'This note points to an item on archive.org. To read it, the reader asks archive.org which files the item has and downloads its PDF or EPUB to a cache on this computer, outside your vault. Your annotations go into this note.'
                             : how === 'phone'
-                              ? 'This note points to an item on archive.org. A phone or tablet reads books from the vault: the reader asks archive.org which files the item has, and downloads its PDF or EPUB once into “Annotator sources” in your vault.'
-                              : 'This note points to an item on archive.org. To read and annotate it, the reader asks archive.org which files the item has, and downloads its PDF or EPUB once into “Annotator sources” in your vault.',
+                              ? `This note points to an item on archive.org. A phone or tablet reads books from the vault: the reader asks archive.org which files the item has, and downloads its PDF or EPUB once into “${this.display.copyFolder}” in your vault.`
+                              : `This note points to an item on archive.org. To read and annotate it, the reader asks archive.org which files the item has, and downloads its PDF or EPUB once into “${this.display.copyFolder}” in your vault.`,
                         url,
                         trust
                     ],
@@ -497,10 +514,10 @@ export default class AnnotatorPlugin extends Plugin {
                 how === 'phone' ? `${copy}?` : web ? 'Download this source?' : 'Copy this file into the vault?',
                 [
                     how === 'phone'
-                        ? 'A phone or tablet reads PDFs and books from the vault. To read and annotate this one here, it is downloaded once into “Annotator sources” in your vault.'
+                        ? `A phone or tablet reads PDFs and books from the vault. To read and annotate this one here, it is downloaded once into “${this.display.copyFolder}” in your vault.`
                         : web
-                          ? 'This note points to a file on the internet. To read and annotate it, it is downloaded once into “Annotator sources” in your vault.'
-                          : 'This note points to a file on this computer, outside the vault. To read and annotate it, it is copied once into “Annotator sources” in your vault.',
+                          ? `This note points to a file on the internet. To read and annotate it, it is downloaded once into “${this.display.copyFolder}” in your vault.`
+                          : `This note points to a file on this computer, outside the vault. To read and annotate it, it is copied once into “${this.display.copyFolder}” in your vault.`,
                     shown,
                     trust,
                     ...(Platform.isDesktopApp &&
@@ -661,6 +678,7 @@ export default class AnnotatorPlugin extends Plugin {
                 shownPath(path, 240),
                 shownPath(path, 4000),
                 this.app.vault.getName?.() || '',
+                this.display.copyFolder,
                 resolve
             ).open();
         });
@@ -724,6 +742,8 @@ export default class AnnotatorPlugin extends Plugin {
         /** Whether a tablet's drawer has been docked beside the page for the annotations once; after that the reader's own choice stands. */ tabletDocked: boolean;
         /** The folder notes for cited works are made in; empty for where Obsidian puts new notes. */ referenceFolder: string;
         /** Whether a source outside the vault is copied into it, as 0.3 did, instead of read where it is. */ copySources: boolean;
+        /** The folder copies of outside sources are made in (`copyFolder`): "Annotator sources" unless another is chosen. */ copyFolder: string;
+        /** Every folder a copy has been made in other than "Annotator sources": copies are never moved, so each is still looked in. */ copyFoldersUsed: string[];
         /** The property of an annotation note whose value names it and its source wherever Annotator names them; empty for the file's name. */ titleProperty: string;
     } = {
         compact: false,
@@ -747,6 +767,8 @@ export default class AnnotatorPlugin extends Plugin {
         tabletDocked: false,
         referenceFolder: '',
         copySources: false,
+        copyFolder: DEFAULT_COPY_FOLDER,
+        copyFoldersUsed: [],
         titleProperty: ''
     };
     /** The composer floating beside the passage, when notes are written on the page. */
@@ -987,6 +1009,12 @@ export default class AnnotatorPlugin extends Plugin {
             tabletDocked: shown.tabletDocked === true,
             referenceFolder: typeof shown.referenceFolder === 'string' ? shown.referenceFolder.slice(0, 400) : '',
             copySources: shown.copySources === true,
+            copyFolder: copyFolder(shown.copyFolder),
+            copyFoldersUsed: Array.isArray(shown.copyFoldersUsed)
+                ? [...new Set(shown.copyFoldersUsed.map(copyFolder))]
+                      .filter(folder => folder !== DEFAULT_COPY_FOLDER)
+                      .slice(-50)
+                : [],
             titleProperty: titlePropertyName(shown.titleProperty)
         };
         this.register(() => {
@@ -1075,6 +1103,15 @@ export default class AnnotatorPlugin extends Plugin {
                     on(name: string, heard: (...args: unknown[]) => void): EventRef;
                 }
             ).on('receive-files-menu', (menu, files) => this.offerShared(menu, files))
+        );
+        // The same for text shared to Obsidian (a browser's Share on a phone gives a page's address): the address is
+        // offered to Annotator, and opened only when the reader picks the item.
+        this.registerEvent(
+            (
+                this.app.workspace as unknown as {
+                    on(name: string, heard: (...args: unknown[]) => void): EventRef;
+                }
+            ).on('receive-text-menu', (menu, text) => this.offerSharedText(menu, text))
         );
         if (
             data &&
@@ -1225,6 +1262,17 @@ export default class AnnotatorPlugin extends Plugin {
             }
         });
         this.registerView(VIEW, leaf => new AnnotationView(leaf, this));
+        // An address handed over without this device's key waits in a tab of its own for a press (issue: bookmarklet).
+        this.registerView(
+            HANDED_VIEW,
+            leaf =>
+                new HandedView(leaf, {
+                    open: async (url, route, title, at) => {
+                        await this.openAddress(url, route, title, at);
+                    },
+                    phone: () => !!Platform.isMobile
+                })
+        );
         this.registerView(CITATIONS_VIEW, leaf => new CitationsView(leaf, this));
         this.addCommand({
             id: 'open-citations',
@@ -3820,6 +3868,7 @@ export default class AnnotatorPlugin extends Plugin {
     async setDisplay(value: Partial<AnnotatorPlugin['display']>) {
         const titled = this.display.titleProperty;
         this.display = { ...this.display, ...value };
+        if ('copyFolder' in value) this.display.copyFolder = copyFolder(value.copyFolder);
         this.applyDisplay();
         await this.persist();
         this.refresh();
@@ -8157,6 +8206,11 @@ export default class AnnotatorPlugin extends Plugin {
         await this.openReady;
         if (this.stopped) return;
         try {
+            // A web address handed over by a browser (the bookmarklet), a script or a phone (`annotator-open?url=`).
+            if (typeof params.url === 'string' && params.url) {
+                await this.openAddressRequest(params);
+                return;
+            }
             const answer = openRequest(params, { mobile: Platform.isMobile, key: this.openDeviceState().key });
             if ('refused' in answer) {
                 if (!answer.keyless) new Notice(answer.refused, 10000);
@@ -8357,6 +8411,183 @@ export default class AnnotatorPlugin extends Plugin {
         if (!Platform.isPhone) await this.sidebarForOpened(false);
     }
     /** After a share on a phone, Obsidian's menu gets an entry for each PDF or EPUB it saved (see where this is heard). */
+    private offerSharedText(menu: unknown, text: unknown) {
+        try {
+            if (typeof (menu as { addItem?: unknown } | null)?.addItem !== 'function') return;
+            const url = sharedAddress(text);
+            if (!url) return;
+            // A browser shares the page's title with its address: it names the note, where one is made.
+            const title = handedTitle(String(text).replace(url, ' '));
+            (menu as Menu).addItem(item =>
+                item
+                    .setTitle('Annotate in Annotator')
+                    .setIcon('highlighter')
+                    // Under the shared text, above Obsidian's "Add text to file" (its menu knows only its own sections, and
+                    // puts any other after Cancel).
+                    .setSection('title')
+                    .onClick(() => {
+                        // The share, and the pick, are the reader's: it opens at once.
+                        void this.openAddress(url, routeOf(url), title).catch(error => this.fail(error));
+                    })
+            );
+        } catch (error) {
+            console.error('Annotator could not add to the menu for shared text:', error);
+        }
+    }
+    /**
+     * `obsidian://annotator-open?url=…`: a browser (the bookmarklet), a script or a phone hands an address over. It is
+     * refused unless it is https, without a password, not on this computer or its network, and not too long. Without
+     * this device's key nothing is fetched, and no note is made, until the reader presses for it in a tab that waits
+     * (and is still there after a restart); with the key it is opened where it goes at once.
+     */
+    private async openAddressRequest(params: Record<string, unknown>) {
+        if (typeof params.file === 'string' || typeof params.source === 'string') {
+            new Notice('The address names both a web address and a file. Nothing was opened.', 10000);
+            return;
+        }
+        const checked = checkAddress(params.url);
+        if ('refused' in checked) {
+            new Notice(checked.refused, 10000);
+            return;
+        }
+        const url = checked.url,
+            route = routeOf(url),
+            title = handedTitle(params.title),
+            key = this.openDeviceState().key,
+            keyed = !!key && typeof params.key === 'string' && sameKey(params.key, key);
+        if (!keyed) {
+            const leaf = this.app.workspace.getLeaf('tab');
+            await leaf.setViewState({
+                type: HANDED_VIEW,
+                state: { url, route, ...(title ? { title } : {}) },
+                active: true
+            });
+            await this.app.workspace.revealLeaf(leaf);
+            return;
+        }
+        await this.openAddress(url, route, title);
+    }
+    /** Asks what a server says an address is (HEAD), before anything of it is downloaded. Replaceable (tests). */
+    addressProbe: (url: string) => Promise<{ type: string } | null> = async url => {
+        try {
+            const answer = await requestUrl({ url, method: 'HEAD', throw: false });
+            if (answer.status < 200 || answer.status >= 300) return null;
+            const type = Object.entries(answer.headers || {}).find(([name]) => name.toLowerCase() === 'content-type');
+            return { type: String(type?.[1] || '').toLowerCase() };
+        } catch {
+            return null;
+        }
+    };
+    /**
+     * Opens a web address where it goes, once the reader has said yes to it (pressed for it, a share, or an address that
+     * carried this device's key): a PDF or a book read where it is, a video in the video reader, any other page in the
+     * Web viewer (a phone: as a reading copy). A PDF, a book or a video opens through the note that names it, made when
+     * there is none. With `leaf`, it is opened there (the tab that waited).
+     */
+    async openAddress(url: string, route: AddressRoute, title = '', leaf?: WorkspaceLeaf): Promise<void> {
+        if (this.stopped) return;
+        if (route === 'unknown') {
+            const said = await this.addressProbe(url).catch(() => null);
+            route = said ? routeByType(said.type) : 'web';
+        }
+        if (route === 'video') await this.openVideoAddress(url, title, leaf);
+        else if (route === 'pdf' || route === 'epub') await this.openWebSource(url, route, title, leaf);
+        else if (Platform.isMobile) {
+            // A phone has no Web viewer: the page is saved as a reading copy, which opens in a tab of its own.
+            await this.saveReadingCopy(url);
+            if (leaf?.view instanceof HandedView) leaf.detach();
+        } else await this.openWebsite(url, false, leaf);
+    }
+    /** An address of a PDF or a book: shown through the note that names it, or one made for it, read where it is. */
+    private async openWebSource(url: string, kind: 'pdf' | 'epub', title: string, leaf?: WorkspaceLeaf) {
+        const address = httpUrl(url),
+            typed = remoteKind(address) !== kind,
+            kept = this.remoteSources[address],
+            copy = kept && this.app.vault.getAbstractFileByPath(kept) instanceof TFile ? kept : null,
+            here = this.readsInPlace() ? this.placeDevice().downloads[address] : undefined;
+        let place: string | undefined;
+        try {
+            place = here ? externalKey(here) : undefined;
+        } catch {
+            place = undefined;
+        }
+        const named = this.noteNaming(address, copy, place) || this.noteWithTarget(address);
+        if (!named && keyedQuery(address))
+            throw new Error(
+                'This address carries a personal key, so it is not written into a note. Download the file and open it from the vault instead.'
+            );
+        const note =
+            named ||
+            (await this.makeSourceNote(
+                address,
+                addressTitle(title, address),
+                typed ? `annotation-target-type: ${kind}` : ''
+            ));
+        // The reader's press (or a share, or the key) is the yes to fetch this address.
+        const scope = this.readsInPlace() && !Platform.isMobile ? 'place' : 'copy';
+        if (!yesFor(address, scope).some(item => this.approvedSources.has(item))) {
+            this.approvedSources.add(keptYes(address, scope));
+            await this.persist();
+        }
+        try {
+            await this.openNoteTarget(note, undefined, leaf ? false : 'reuse', leaf);
+        } catch (error) {
+            // Nothing could be read: the note made a moment ago would lead nowhere, and is not left behind.
+            if (!named) await this.trashMade(note);
+            throw error;
+        }
+    }
+    /** A video page: played in the video reader through its note, made when there is none. */
+    private async openVideoAddress(url: string, title: string, leaf?: WorkspaceLeaf) {
+        const video = resolveVideoTarget(url);
+        const existing = this.app.vault.getMarkdownFiles().find(note => {
+            if (this.targetType(note) !== 'video') return false;
+            const written = annotationTarget(this.targetProperty(note, 'annotation-target'));
+            try {
+                return !!written && resolveVideoTarget(written).id === video.id;
+            } catch {
+                return false;
+            }
+        });
+        if (existing) {
+            await this.openNoteTarget(existing, undefined, leaf ? false : 'reuse', leaf);
+            return;
+        }
+        // The video's own address, as YouTube writes it: nothing the page that shared it added.
+        const note = await this.makeSourceNote(
+            video.canonical,
+            addressTitle(title, '') || `YouTube video ${video.id}`,
+            'annotation-target-type: video'
+        );
+        try {
+            await this.openNoteTarget(note, undefined, leaf ? false : 'tab', leaf);
+        } catch (error) {
+            await this.trashMade(note);
+            throw error;
+        }
+    }
+    /** A note whose target is written as this address (a PDF whose address does not end in .pdf, say). */
+    private noteWithTarget(address: string): TFile | null {
+        return (
+            this.app.vault.getMarkdownFiles().find(note => {
+                const written = annotationTarget(this.targetProperty(note, 'annotation-target'));
+                if (!written || this.targetType(note) === 'video') return false;
+                try {
+                    return httpUrl(written) === address;
+                } catch {
+                    return false;
+                }
+            }) || null
+        );
+    }
+    /** A note made a moment ago that leads nowhere, put in the trash (as Obsidian's own delete does). */
+    private async trashMade(note: TFile) {
+        try {
+            await this.trash(note);
+        } catch {
+            // It stays, and says what it was for.
+        }
+    }
     private offerShared(menu: unknown, files: unknown) {
         try {
             if (typeof (menu as { addItem?: unknown } | null)?.addItem !== 'function' || !Array.isArray(files)) return;
@@ -8511,8 +8742,7 @@ export default class AnnotatorPlugin extends Plugin {
         return this.app.vault.getMarkdownFiles().find(names) || null;
     }
     /** A note for a file outside the vault: named after the file, where new notes go, never over another note. */
-    private async makeSourceNote(path: string): Promise<TFile> {
-        const title = noteTitle(path);
+    private async makeSourceNote(path: string, title = noteTitle(path), properties = ''): Promise<TFile> {
         let folder = '';
         try {
             const parent = (
@@ -8534,7 +8764,10 @@ export default class AnnotatorPlugin extends Plugin {
             if (count > 500) throw new Error('Could not find a free name for the note of this file.');
             name = `${title} ${count}`;
         }
-        const note = await this.vaultWrite.create(at(name), await this.newNoteContent(path, title));
+        let text = await this.newNoteContent(path, title);
+        // Properties the reader opens it by go in with the note, so that it opens as what it is at once.
+        if (properties) text = text.replace(/\n---\n/, `\n${properties}\n---\n`);
+        const note = await this.vaultWrite.create(at(name), text);
         // Right after a note is written Obsidian has not read its properties yet. Until it has, the note names nothing.
         for (let waited = 0; waited < 5000 && !this.stopped && !this.targetKey(note); waited += 40)
             await new Promise(resolve => window.setTimeout(resolve, 40));
@@ -8575,6 +8808,17 @@ export default class AnnotatorPlugin extends Plugin {
             const known = this.remoteSources[url] || (origin ? this.targetCopies[origin] : undefined),
                 existing = known && this.app.vault.getAbstractFileByPath(known);
             if (existing instanceof TFile) return existing;
+            // A copy made on another device, in a folder this one has not heard of (its settings did not sync): found
+            // by its name, wherever it is, before anything is downloaded again.
+            const elsewhere = origin ? this.copyAnywhere(origin) : null;
+            if (elsewhere && origin) {
+                this.targetCopies[origin] = elsewhere.path;
+                const folder = elsewhere.parent?.path || '';
+                if (folder && folder !== DEFAULT_COPY_FOLDER && !this.display.copyFoldersUsed.includes(folder))
+                    this.display.copyFoldersUsed = [...this.display.copyFoldersUsed, folder].slice(-50);
+                await this.persist();
+                return elsewhere;
+            }
             // Nothing outside the vault is fetched or read on a note's say-so alone.
             await this.approveSource(url, kind, how);
             if (this.stopped) throw new Error('Plugin unloaded before downloading the source.');
@@ -8590,10 +8834,12 @@ export default class AnnotatorPlugin extends Plugin {
                     () => loadPdfJs(),
                     () => !this.stopped
                 );
-            const path = origin ? await copyName(origin, sourceEnding(url, kind)) : await remoteFilename(url, kind);
+            const folder = this.display.copyFolder,
+                path = origin
+                    ? await copyName(origin, sourceEnding(url, kind), folder)
+                    : await remoteFilename(url, kind, folder);
             if (this.stopped) throw new Error('Plugin unloaded before downloading the source.');
-            if (!(await this.app.vault.adapter.exists('Annotator sources')))
-                await this.vaultWrite.createFolder('Annotator sources');
+            await this.makeFolder(folder);
             const existingAtPath = this.app.vault.getAbstractFileByPath(path);
             if (
                 existingAtPath &&
@@ -8610,6 +8856,9 @@ export default class AnnotatorPlugin extends Plugin {
                 priorCopy = origin ? this.targetCopies[origin] : undefined;
             this.remoteSources[url] = path;
             if (origin) this.targetCopies[origin] = path;
+            // The folder is remembered: if another is chosen later, this copy is still found where it is.
+            if (folder !== DEFAULT_COPY_FOLDER && !this.display.copyFoldersUsed.includes(folder))
+                this.display.copyFoldersUsed = [...this.display.copyFoldersUsed, folder].slice(-50);
             try {
                 await this.persist();
             } catch (error) {
@@ -8635,6 +8884,15 @@ export default class AnnotatorPlugin extends Plugin {
             return await job;
         } finally {
             this.downloads.delete(url);
+        }
+    }
+    /** A folder of the vault, and each folder above it, where there is none yet. */
+    private async makeFolder(folder: string) {
+        const parts = folder.split('/');
+        for (let at = 1; at <= parts.length; at++) {
+            const path = parts.slice(0, at).join('/');
+            if (this.app.vault.getAbstractFileByPath(path) || (await this.app.vault.adapter.exists(path))) continue;
+            await this.vaultWrite.createFolder(path);
         }
     }
     /** Outside sources the reader asked to have copied into the vault (by their address), from a question asked earlier. */
@@ -8805,16 +9063,31 @@ export default class AnnotatorPlugin extends Plugin {
     }
     /**
      * A copy in the vault named by a note's target (`copyName`), made on any device, even one whose settings never
-     * synced here: its path, or undefined. Only targets outside the vault are looked for, and no disk is touched.
+     * synced here: its path, or undefined. It is looked for in the folder for copies, in each folder chosen for them
+     * before (copies are never moved) and in "Annotator sources". Only targets outside the vault are looked for, and
+     * no disk is touched.
      */
     private copyByName(raw: string, origin: string): string | undefined {
         if (!/^(?:https?:|file:|[a-z]:[\\/]|\/|\.\.?[\\/]|zotero:|calibre:|x-devonthink-item:)/i.test(raw.trim()))
             return undefined;
-        for (const ending of COPY_ENDINGS) {
-            const path = copyNameNow(origin, ending);
-            if (this.app.vault.getAbstractFileByPath(path) instanceof TFile) return path;
-        }
+        for (const folder of copyFolders(this.display.copyFolder, this.display.copyFoldersUsed))
+            for (const ending of COPY_ENDINGS) {
+                const path = copyNameNow(origin, ending, folder);
+                if (this.app.vault.getAbstractFileByPath(path) instanceof TFile) return path;
+            }
         return undefined;
+    }
+    /** A copy named by a note's target anywhere in the vault (each file is looked at once): its file, or null. */
+    private copyAnywhere(origin: string): TFile | null {
+        const name = copyNameNow(origin, 'pdf')
+            .split('/')
+            .pop()!
+            .replace(/\.pdf$/, '');
+        return (
+            (this.app.vault.getFiles?.() || []).find(
+                file => file.basename === name && COPY_ENDINGS.includes(file.extension.toLowerCase())
+            ) || null
+        );
     }
     /** A copy in the vault of a source read where it is, made from the very file being read. */
     private async copyEntry(entry: InPlaceSource, key: string): Promise<TFile> {
@@ -9254,7 +9527,7 @@ export default class AnnotatorPlugin extends Plugin {
         return response.arrayBuffer;
     }
     /**
-     * What to call a source kept in "Annotator sources", whose file is named by a digest of its address (so that one
+     * What to call a source kept in the folder for copies, whose file is named by a digest of its address (so that one
      * address is one file): the name of the file it was made from, downloaded or copied in from Zotero, Calibre,
      * DEVONthink or elsewhere on this computer. Empty for any other source, which is called by its own file name.
      * (Obsidian's own PDF tab names the file it shows, and a plugin cannot name it otherwise.)
@@ -9415,7 +9688,7 @@ export default class AnnotatorPlugin extends Plugin {
             kind,
             previous: recorded || { path, sha256: previousHash, kind, capturedAt: new Date().toISOString() },
             next: supplied || {
-                path: await revisionFilename(url, kind, sha256),
+                path: await revisionFilename(url, kind, sha256, this.display.copyFolder),
                 sha256,
                 kind,
                 capturedAt: new Date().toISOString(),
@@ -10047,13 +10320,26 @@ class NativeSettings extends PluginSettingTab {
         new Setting(root)
             .setName('Copy outside sources into the vault')
             .setDesc(
-                "Off: a note's source outside the vault (a web address, a file on this computer, a Zotero, Calibre or DEVONthink link) is read where it is, and nothing is put into the vault; Annotate a copy in the vault makes a copy when you want one. On: every such source is copied into “Annotator sources” the first time, as Annotator 0.3 did. Copies already made are read either way. Phones and tablets always read a copy, and so does Obsidian before 1.14.4."
+                "Off: a note's source outside the vault (a web address, a file on this computer, a Zotero, Calibre or DEVONthink link) is read where it is, and nothing is put into the vault; Annotate a copy in the vault makes a copy when you want one. On: every such source is copied into the folder for copies (below) the first time, as Annotator 0.3 did. Copies already made are read either way. Phones and tablets always read a copy, and so does Obsidian before 1.14.4."
             )
             .addToggle(control =>
                 control
                     .setValue(plugin.display.copySources)
                     .onChange(value => save(plugin.setDisplay({ copySources: value })))
             );
+        new Setting(root)
+            .setName('Folder for copies')
+            .setDesc(
+                'Where Annotate a copy in the vault, and every other copy of a source from outside the vault, is made. Copies already made stay where they are and are still found there: nothing is moved. Obsidian’s attachment folder is offered first where it is one folder.'
+            )
+            .addText(control => {
+                control.setPlaceholder(DEFAULT_COPY_FOLDER).setValue(plugin.display.copyFolder);
+                const keep = (value: string) => save(plugin.setDisplay({ copyFolder: value }));
+                control.onChange(keep);
+                new FolderSuggest(this.app, control.inputEl, keep);
+                // What was typed is shown as it is kept once the field is left: an empty field is the default.
+                control.inputEl.addEventListener('blur', () => control.setValue(plugin.display.copyFolder));
+            });
         new Setting(root)
             .setName('Zotero data folder')
             .setDesc(
@@ -10294,10 +10580,11 @@ class NativeSettings extends PluginSettingTab {
                 fileAddress({ vault, key: '' }),
                 true
             );
+            this.bookmarkletSetting(root);
             return;
         }
         heading.setDesc(
-            'A PDF or a book can be handed to Annotator from the file manager, with Open with. The README says how for each system, under “Open a file from outside Obsidian”.'
+            'A PDF or a book can be handed to Annotator from the file manager, with Open with, and a page from your browser with the bookmarklet. The README says how for each system, under “Open a file from outside Obsidian”.'
         );
         const place = plugin.openWithPlace(),
             system = place?.system ?? (Platform.isMacOS ? 'mac' : Platform.isWin ? 'windows' : 'linux'),
@@ -10370,7 +10657,12 @@ class NativeSettings extends PluginSettingTab {
             );
         }
         // Where files are read where they are, no folder is asked about; the list matters only where they are copied in.
-        if (!device.key || (plugin.opensInPlace() && !device.folders.length)) return;
+        if (device.key && !(plugin.opensInPlace() && !device.folders.length)) this.openFolders(root, device);
+        this.bookmarkletSetting(root);
+    }
+    /** The folders files are copied from without a question, on this computer. */
+    private openFolders(root: HTMLElement, device: OpenDevice) {
+        const plugin = this.plugin;
         const folders = new Setting(root)
             .setName('Folders files are copied from without a question')
             .setDesc(
@@ -10385,6 +10677,46 @@ class NativeSettings extends PluginSettingTab {
                     this.display();
                 })
             );
+    }
+    /**
+     * Bookmarklet: a link to drag to a browser's bookmarks bar, which hands the page shown to Annotator. It carries
+     * no key, so Annotator waits for a press before it fetches anything (docs/SECURITY.md says why). Nothing is put
+     * on the clipboard: the text is there to select, for a browser that does not take the link by dragging.
+     */
+    private bookmarkletSetting(root: HTMLElement) {
+        const code = bookmarklet(this.app.vault.getName?.() || ''),
+            name = 'Annotate in Annotator';
+        const setting = new Setting(root)
+            .setName('Bookmarklet')
+            .setDesc(
+                Platform.isMobile
+                    ? 'Hands the page your browser shows to Annotator: a PDF, a book, a video or a web page. Phone browsers make bookmarklets awkward: make a bookmark of any page, then change its address to the text below; Annotator then asks for a press in Obsidian before it fetches anything. On Android, Share in the browser, then Obsidian, then Annotate in Annotator, is easier, and needs no press.'
+                    : 'Drag the link to your browser’s bookmarks bar. On any page, it hands the page to Annotator: a PDF, a book, a video or a web page. Annotator asks for a press in Obsidian before it fetches anything. If your browser does not take the link, make a bookmark and give it the text below as its address.'
+            );
+        setting.settingEl.addClass('annotator-open-with-block', 'annotator-bookmarklet');
+        if (!Platform.isMobile) {
+            const link = setting.controlEl.createEl('a', {
+                cls: 'annotator-bookmarklet-link',
+                text: name,
+                attr: { href: code, draggable: 'true', 'aria-label': `${name}: drag to your bookmarks bar` }
+            });
+            // Pressed here it would run in Obsidian itself: only dragging it away does anything.
+            link.addEventListener('click', event => {
+                event.preventDefault();
+                new Notice('Drag this link to your browser’s bookmarks bar.');
+            });
+            link.addEventListener('dragstart', event => {
+                event.dataTransfer?.setData('text/uri-list', code);
+                event.dataTransfer?.setData('text/plain', code);
+                event.dataTransfer?.setData('text/x-moz-url', `${code}\n${name}`);
+            });
+        }
+        const box = setting.controlEl.createEl('textarea', { cls: 'annotator-open-with-recipe is-address' });
+        box.value = code;
+        box.readOnly = true;
+        box.rows = 3;
+        box.spellcheck = false;
+        box.setAttribute('aria-label', 'The bookmarklet’s address');
     }
     /** The row with Install and Uninstall, and what is there now. */
     private openWithApp(root: HTMLElement, system: 'mac' | 'windows' | 'linux', manual: HTMLDetailsElement) {
@@ -10653,5 +10985,18 @@ class DraftComparisonModal extends Modal {
     }
     onClose() {
         this.contentEl.empty();
+    }
+}
+
+/** What a note made for a web address is called: the title handed over with it, else the file's name, else its host. */
+function addressTitle(title: string, address: string): string {
+    if (title) return noteTitle(`${title.replace(/[\\/]/g, ' ')}.md`);
+    if (!address) return '';
+    const named = originalName(address);
+    if (named) return noteTitle(`${named.replace(/[\\/]/g, ' ')}.md`);
+    try {
+        return noteTitle(`${new URL(address).hostname}.md`);
+    } catch {
+        return 'Source';
     }
 }

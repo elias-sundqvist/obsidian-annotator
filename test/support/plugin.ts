@@ -33,3 +33,6 @@ export {PageRangeModal} from '../../src/page-range-dialog';
 export {titleFromProperty, titlePropertyName, installLeafTitles, retitleHeader} from '../../src/note-title';
 export {LibrarySwitcher, AnnotationSearch, scanAnnotations} from '../../src/library';
 export {EpubView} from '../../src/epub';
+export * as OpenAddress from '../../src/open-address';
+export {attachmentFolder, folderChoices} from '../../src/folder-suggest';
+export {HandedView} from '../../src/handed-view';

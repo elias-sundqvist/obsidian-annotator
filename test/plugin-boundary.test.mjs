@@ -2497,3 +2497,145 @@ test('the list of annotated sources, the search of all annotations, a video\'s t
   h.plugin.notes.set('paper.pdf',{note:plain,records:[]});citations.retitle();assert.equal(content.querySelector('.annotator-citation-source').textContent,'book');
  }finally{h.dispose();}
 });
+
+// Issue: an address handed over from a browser (the bookmarklet) opens where it goes. And: the folder for copies.
+const {OpenAddress,attachmentFolder,folderChoices,HandedView}=await import('./.generated/plugin-boundary.mjs');
+const {copyFolder,copyFolders,copyName,copyNameNow,DEFAULT_COPY_FOLDER}=await import('./.generated/readers/in-place.js');
+test('a handed-over address is routed by what it is, from the address alone where it can be, else by what its server says',()=>{
+ const {routeOf,routeByType}=OpenAddress;
+ const cases={
+  'https://example.org/papers/attention.pdf':'pdf','https://example.org/papers/attention.PDF/':'pdf','https://arxiv.org/pdf/1706.03762':'unknown',
+  'https://example.org/books/moby-dick.epub':'epub',
+  'https://www.youtube.com/watch?v=dQw4w9WgXcQ':'video','https://youtu.be/dQw4w9WgXcQ?t=42':'video','https://www.youtube.com/shorts/dQw4w9WgXcQ':'video',
+  'https://example.org/blog/a-post':'unknown','https://www.youtube.com/@channel':'unknown','https://example.org/feed':'unknown'
+ };
+ for(const [url,route] of Object.entries(cases))assert.equal(routeOf(url),route,url);
+ for(const [type,route] of Object.entries({'application/pdf':'pdf','application/pdf; charset=binary':'pdf','application/epub+zip':'epub','text/html; charset=utf-8':'web','':'web','application/octet-stream':'web','video/mp4':'web'}))assert.equal(routeByType(type),route,type);
+});
+test('the rules for a handed-over address: https only, no password, nothing on the local network, a length limit, no key written into a note',()=>{
+ const {checkAddress,sharedAddress,handedTitle,bookmarklet,waitingWords,keyedQuery}=OpenAddress;
+ assert.deepEqual(checkAddress('https://example.org/a.pdf#page=3'),{url:'https://example.org/a.pdf'});
+ for(const bad of ['http://example.org/a.pdf','https://reader:secret@example.org/a.pdf','https://reader@example.org/a.pdf','https://localhost/a.pdf','https://127.0.0.1/a.pdf','https://192.168.1.20/a.pdf','https://10.0.0.2/a','https://[::1]/a','https://[::ffff:7f00:1]/a','https://router.local/a','https://printer/a','file:///etc/passwd','javascript:alert(1)','obsidian://open?vault=x','',' ',42,null,undefined,'https://example.org/'+'a'.repeat(4000)])
+  assert.ok('refused' in checkAddress(bad),String(bad).slice(0,60));
+ assert.match(checkAddress('https://192.168.1.20/a').refused,/network/);
+ for(const keyed of ['https://files.example/a.pdf?token=abcdef12','https://x.example/a.pdf?X-Amz-Signature=abcdef12','https://x.example/a.pdf?auth=abcd'])assert.equal(keyedQuery(keyed),true,keyed);
+ assert.equal(keyedQuery('https://arxiv.org/pdf/1706.03762?v=7'),false);
+ assert.equal(sharedAddress('A good read\nhttps://example.org/post?id=7.'),'https://example.org/post?id=7');
+ assert.equal(sharedAddress('https://youtu.be/dQw4w9WgXcQ'),'https://youtu.be/dQw4w9WgXcQ');
+ for(const none of ['no address here','http://example.org/x','see https://localhost/x',null,'x'.repeat(30000)])assert.equal(sharedAddress(none),null,String(none).slice(0,30));
+ assert.equal(handedTitle('Attention\u0000 Is\nAll   You Need'),'Attention Is All You Need');assert.equal(handedTitle('x'.repeat(5000)).length,200);assert.equal(handedTitle(7),'');
+ const code=bookmarklet("Ann's vault & notes");
+ assert.equal(code,"javascript:(()=>{location.href='obsidian://annotator-open?vault=Ann%27s%20vault%20%26%20notes&url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title.slice(0,200))})()");
+ assert.doesNotMatch(code,/key/);
+ for(const route of ['pdf','epub','video','web','unknown'])for(const phone of [false,true]){const words=waitingWords(route,'example.org',phone);assert.match(words.text,/Nothing has been fetched/);assert.match(words.button,/example\.org/);if(route!=='web')assert.match(words.text,/makes a note|gets a note/,route);}
+ assert.match(waitingWords('web','example.org',true).text,/reading copy/);assert.match(waitingWords('web','example.org',false).text,/Web viewer/);
+});
+function addressHost(){
+ const h=openHost(),states=[],detached=[],requests=[],probes=[],asked=[],websites=[],copies=[];
+ h.app.vault.create=async(path,text)=>{if(h.files.has(path))throw new Error('File already exists.');h.made.push(path);const file=h.add(path,text,{}),front={};
+  for(const line of (/^---\n([\s\S]*?)\n---/.exec(text)?.[1]||'').split('\n')){const at=line.indexOf(': ');if(at>0){const raw=line.slice(at+2);try{front[line.slice(0,at)]=JSON.parse(raw);}catch{front[line.slice(0,at)]=raw;}}}
+  h.metadata.delete(path);setTimeout(()=>h.metadata.set(path,{frontmatter:front}),30);return file;};
+ const leaf=()=>{const made={view:null,setViewState:async state=>{states.push(state);made.view=state.type==='annotator-handed'?Object.create(HandedView.prototype):{};},openFile:async file=>h.opened.push({file,leaf:made}),detach:()=>detached.push(made)};return made;};
+ h.app.workspace.getLeaf=()=>leaf();h.app.workspace.revealLeaf=async()=>{};
+ globalThis.__annotatorTestRequest=async options=>{requests.push(options);return {status:200,headers:{'content-type':'application/pdf'},arrayBuffer:new TextEncoder().encode('%PDF-1.7 handed over').buffer};};
+ h.plugin.addressProbe=async url=>{probes.push(url);return h.said===undefined?{type:'text/html'}:h.said;};
+ h.plugin.sourceApproval=async(url,kind,how)=>{asked.push({url,kind,how});return 'yes';};
+ h.plugin.openWebsite=async(url,newLeaf,at)=>{websites.push({url,at});};
+ h.plugin.saveReadingCopy=async url=>{copies.push(url);};
+ return Object.assign(h,{states,detached,requests,probes,asked,websites,copies,leaf,ready:async()=>{await h.plugin.onload();}});
+}
+test('without this device’s key, a handed-over address only waits in a tab for a press: nothing fetched, asked or made, whatever it is, and the wait survives a restart',async()=>{
+ const h=addressHost();try{await h.ready();const key=h.plugin.newOpenKey();
+  for(const [url,route] of [['https://example.org/paper.pdf','pdf'],['https://www.youtube.com/watch?v=dQw4w9WgXcQ','video'],['https://example.org/post','unknown'],['https://example.org/book.epub','epub']]){
+   await h.fire({url,title:'The page\u0007 title'});await h.fire({url,key:key+'x',title:'The page title'});
+   for(const state of h.states.slice(-2)){assert.equal(state.type,'annotator-handed');assert.deepEqual(state.state,{url,route,title:'The page title'});}
+  }
+  assert.equal(h.requests.length,0,'nothing was fetched');assert.equal(h.probes.length,0,'no server was asked what anything is');assert.deepEqual(h.made,[],'no note was made');assert.deepEqual(h.asked,[]);assert.deepEqual(h.websites,[]);assert.deepEqual(h.copies,[]);
+  // The tab keeps the address, the route and the title in its state: a restart, or a tab first shown later, waits again.
+  dressed(h);const mount=()=>{const v=new HandedView({app:h.app},{open:async(...args)=>{v.pressed.push(args);},phone:()=>false});v.pressed=[];v.contentEl=h.dom.window.document.createElement('div');v.leaf={};return v;};
+  const view=mount();await view.setState({url:'https://example.org/paper.pdf',route:'pdf',title:'Paper'},{});assert.deepEqual(view.getState(),{url:'https://example.org/paper.pdf',route:'pdf',title:'Paper'});
+  const restored=mount();await restored.setState(view.getState(),{});const text=restored.contentEl.textContent;
+  assert.match(text,/Another app asked to open a PDF/);assert.match(text,/Nothing has been fetched/);assert.match(text,/https:\/\/example\.org\/paper\.pdf/);
+  assert.deepEqual(restored.pressed,[],'nothing before the press');restored.contentEl.querySelector('button.mod-cta').click();await new Promise(resolve=>setTimeout(resolve,0));
+  assert.deepEqual(restored.pressed,[['https://example.org/paper.pdf','pdf','Paper',restored.leaf]]);
+  const odd=mount();await odd.setState({url:'http://example.org/x',route:'pdf'},{});assert.equal(odd.contentEl.textContent,'','an http address is not shown, nor pressed for');
+  const other=mount();await other.setState({url:'https://example.org/x',route:'anything'},{});assert.equal(other.getState().route,'unknown');
+  // Refused addresses are said, and nothing is opened.
+  const states=h.states.length,since=Notice.messages.length;
+  for(const url of ['http://example.org/paper.pdf','https://me:pw@example.org/paper.pdf','https://192.168.0.4/paper.pdf','https://'+'a'.repeat(4100)+'.org/x'])await h.fire({url,key});
+  assert.equal(h.states.length,states);assert.equal(Notice.messages.length-since,4);assert.equal(h.requests.length,0);
+  await h.fire({url:'https://example.org/a.pdf',source:'/x.pdf',key});assert.equal(h.states.length,states);
+ }finally{delete globalThis.__annotatorTestRequest;h.dispose();}
+});
+test('pressed for (or keyed), a PDF is read through a note made for it, in the waiting tab, with no second question; the next time its note is found',async()=>{
+ const h=addressHost();try{await h.ready();const key=h.plugin.newOpenKey();
+  const url='https://example.org/papers/attention.pdf',tab=h.leaf();
+  await h.plugin.openAddress(url,'pdf','Attention Is All You Need: a/b',tab);
+  assert.deepEqual(h.made,['Attention Is All You Need a b.md']);const note=h.files.get(h.made[0]);
+  assert.equal(h.metadata.get(note.path).frontmatter['annotation-target'],url);assert.equal(h.metadata.get(note.path).frontmatter['annotation-target-type'],undefined);
+  assert.equal(h.asked.length,0,'the press was the yes: no second question');assert.ok(h.plugin.approvedSources.has(`copy:${url}`));
+  const shown=h.opened.at(-1);assert.equal(shown.leaf,tab,'shown in the tab that waited');assert.match(shown.file.path,/^Annotator sources\/[0-9a-f]{64}\.pdf$/);
+  await h.fire({url,key});assert.equal(h.made.length,1);assert.equal(h.opened.at(-1).file,shown.file);
+  h.said={type:'application/pdf'};await h.fire({url:'https://arxiv.org/pdf/1706.03762',key,title:'Attention'});
+  assert.deepEqual(h.probes,['https://arxiv.org/pdf/1706.03762']);const typed=h.files.get(h.made.at(-1));assert.equal(h.metadata.get(typed.path).frontmatter['annotation-target-type'],'pdf');
+  const before=h.made.length;await assert.rejects(h.plugin.openAddress('https://files.example/paper.pdf?token=abcdef123456','pdf'),/personal key/);assert.equal(h.made.length,before);
+  globalThis.__annotatorTestRequest=async()=>({status:404,headers:{},arrayBuffer:new ArrayBuffer(0)});
+  await assert.rejects(h.plugin.openAddress('https://example.org/gone.pdf','pdf','Gone'));assert.ok(h.trashed.includes('Gone.md'));
+ }finally{delete globalThis.__annotatorTestRequest;h.dispose();}
+});
+test('pressed for, a video gets a note by its own address and plays; any other page opens in the Web viewer, and on a phone as a reading copy',async()=>{
+ const h=addressHost();try{await h.ready();
+  const tab=h.leaf();await h.plugin.openAddress('https://youtu.be/dQw4w9WgXcQ?si=shared123&t=42','video','',tab);
+  const note=h.files.get(h.made[0]);assert.equal(note.path,'YouTube video dQw4w9WgXcQ.md');
+  const front=h.metadata.get(note.path).frontmatter;assert.equal(front['annotation-target'],'https://www.youtube.com/watch?v=dQw4w9WgXcQ');assert.equal(front['annotation-target-type'],'video');
+  assert.equal(h.states.at(-1).type,'annotator-native-video');assert.equal(h.states.at(-1).state.file,note.path);
+  await h.plugin.openAddress('https://www.youtube.com/watch?v=dQw4w9WgXcQ','video','Another title');assert.equal(h.made.length,1);assert.equal(h.states.at(-1).state.file,note.path);
+  // Unknown: its server says what it is; a page opens in the Web viewer, in the tab that waited; no answer to HEAD is a page too.
+  h.said={type:'text/html; charset=utf-8'};const waited=h.leaf();await h.plugin.openAddress('https://example.org/post','unknown','',waited);assert.deepEqual(h.websites,[{url:'https://example.org/post',at:waited}]);
+  h.said=null;await h.plugin.openAddress('https://example.org/other','unknown');assert.equal(h.websites.at(-1).url,'https://example.org/other');
+  assert.equal(h.made.length,1,'no note is made for a web page before its first highlight');
+  // A phone has no Web viewer: a reading copy, and the tab that waited closes.
+  Platform.isMobile=true;const phone=h.leaf();phone.view=Object.create(HandedView.prototype);await h.plugin.openAddress('https://example.org/post','web','',phone);
+  assert.deepEqual(h.copies,['https://example.org/post']);assert.deepEqual(h.detached,[phone]);
+ }finally{Platform.isMobile=false;delete globalThis.__annotatorTestRequest;h.dispose();}
+});
+test('text shared to Obsidian on a phone offers Annotate in Annotator, under the shared text, and opens the address at once; a share without an address adds nothing',async()=>{
+ const h=addressHost();try{await h.ready();
+  const menu=()=>{const items=[];return {items,addItem(build){const item={setTitle(t){item.title=t;return item;},setIcon(){return item;},setSection(s){item.section=s;return item;},onClick(run){item.run=run;return item;}};build(item);items.push(item);return this;}};};
+  const shared=menu();h.events.get('receive-text-menu')(shared,'Attention Is All You Need\nhttps://youtu.be/dQw4w9WgXcQ');assert.deepEqual(shared.items.map(item=>[item.title,item.section]),[['Annotate in Annotator','title']]);
+  shared.items[0].run();for(let i=0;i<40&&!h.made.length;i++)await new Promise(resolve=>setTimeout(resolve,10));await new Promise(resolve=>setTimeout(resolve,50));assert.equal(h.made[0],'Attention Is All You Need.md','the shared title names the note');
+  for(const text of ['just words','http://example.org/a','https://10.1.1.1/a']){const none=menu();h.events.get('receive-text-menu')(none,text);assert.deepEqual(none.items,[],text);}
+ }finally{delete globalThis.__annotatorTestRequest;h.dispose();}
+});
+test('the folder for copies: chosen, made where missing, remembered once used; copies already made are found where they are, in the old default and every folder used before',async()=>{
+ // What the setting holds: a folder of the vault, or the default.
+ for(const [given,kept] of [['  Library//Copies/ ','Library/Copies'],['Library\\Copies','Library/Copies'],['/Sources/','Sources'],['',DEFAULT_COPY_FOLDER],['../outside',DEFAULT_COPY_FOLDER],['.obsidian/x',DEFAULT_COPY_FOLDER],['a/./b',DEFAULT_COPY_FOLDER],['C:/x',DEFAULT_COPY_FOLDER],['a #b',DEFAULT_COPY_FOLDER],[7,DEFAULT_COPY_FOLDER],['x'.repeat(300),DEFAULT_COPY_FOLDER]])assert.equal(copyFolder(given),kept,String(given));
+ assert.deepEqual(copyFolders('B',['A','B','Annotator sources']),['B','A','Annotator sources']);assert.equal(DEFAULT_COPY_FOLDER,'Annotator sources');
+ assert.match(await copyName('https://example.org/a.pdf','pdf','Library/Copies'),/^Library\/Copies\/[0-9a-f]{64}\.pdf$/);assert.equal(copyNameNow('https://example.org/a.pdf','pdf','Library/Copies'),await copyName('https://example.org/a.pdf','pdf','Library/Copies'));
+ assert.match(copyNameNow('x','pdf'),/^Annotator sources\//);
+ // Obsidian's attachment folder is suggested first where it is one folder; hidden folders never.
+ for(const [setting,folder] of [['Attachments','Attachments'],['/Files/','Files'],['/',null],['./',null],['./assets',null],['',null],[undefined,null]])assert.equal(attachmentFolder(setting),folder,String(setting));
+ assert.deepEqual(folderChoices(['Papers/Copies','Attachments','Papers','.obsidian','.trash/x','/'],'',"Attachments"),['Attachments','Papers','Papers/Copies']);
+ assert.deepEqual(folderChoices(['Papers/Copies','Attachments','Papers'],'cop','Attachments'),['Papers/Copies']);
+ const h=host();try{const url='https://example.org/document.pdf',note=h.add('Remote.md','',{'annotation-target':url}),made=[];
+  const createFolder=h.app.vault.createFolder;h.app.vault.createFolder=async path=>{made.push(path);return createFolder(path);};
+  globalThis.__annotatorTestRequest=async()=>({status:200,arrayBuffer:new TextEncoder().encode('%PDF-1.7\n').buffer});
+  // An old copy, in the old default folder: made before the folder could be chosen.
+  const old='https://example.org/old.pdf',oldCopy=h.add(copyNameNow(old,'pdf')),oldNote=h.add('Old.md','',{'annotation-target':old});
+  await h.plugin.onload();await h.plugin.setDisplay({copyFolder:' Library/Copies/ '});assert.equal(h.plugin.display.copyFolder,'Library/Copies');
+  assert.equal(h.plugin.targetKey(oldNote),oldCopy.path,'a copy in the old default is still read');
+  await h.plugin.openNoteTarget(note);const copy=h.opened.at(-1).file;assert.match(copy.path,/^Library\/Copies\/[0-9a-f]{64}\.pdf$/);assert.deepEqual(made,['Library','Library/Copies']);
+  assert.deepEqual(h.plugin.data.nativeDisplay.copyFoldersUsed,['Library/Copies']);assert.equal(h.plugin.data.nativeDisplay.copyFolder,'Library/Copies');
+  // Another folder is chosen: nothing is moved, and the copy is found where it is, even on a device that kept no record of it.
+  await h.plugin.setDisplay({copyFolder:'Elsewhere'});assert.ok(h.files.has(copy.path));
+  delete h.plugin.targetCopies[url];delete h.plugin.remoteSources[url];assert.equal(h.plugin.targetKey(note),copy.path);
+  assert.equal(h.plugin.targetKey(oldNote),oldCopy.path);
+  // Typed nonsense is the default; the folders used are still looked in.
+  await h.plugin.setDisplay({copyFolder:'../x'});assert.equal(h.plugin.display.copyFolder,'Annotator sources');assert.equal(h.plugin.targetKey(note),copy.path);
+  // A device whose settings never synced knows neither the copy nor its folder: before downloading again, the copy is found by its name wherever it is, and its folder remembered.
+  let requests=0;globalThis.__annotatorTestRequest=async()=>{requests++;return {status:200,arrayBuffer:new TextEncoder().encode('%PDF-1.7\n').buffer};};
+  h.app.vault.getFiles=()=>[...h.files.values()].filter(file=>file instanceof TFile);const parent=copy.parent;copy.parent={path:'Library/Copies'};
+  h.plugin.display.copyFoldersUsed=[];delete h.plugin.targetCopies[url];delete h.plugin.remoteSources[url];assert.equal(h.plugin.targetKey(note),'remote:'+url);
+  await h.plugin.openNoteTarget(note);assert.equal(requests,0,'nothing downloaded again');assert.equal(h.opened.at(-1).file,copy);assert.deepEqual(h.plugin.display.copyFoldersUsed,['Library/Copies']);assert.equal(h.plugin.targetKey(note),copy.path);copy.parent=parent;
+ }finally{delete globalThis.__annotatorTestRequest;h.dispose();}
+});

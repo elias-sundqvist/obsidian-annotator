@@ -37,8 +37,10 @@ export let TExternalFile: typeof ExternalFileStandIn | undefined = undefined;
 export function externalFiles(on:boolean){TExternalFile=on?ExternalFileStandIn:undefined;}
 export class Menu { items:any[]=[]; shown=0; native=true; setUseNativeMenu(on:boolean){this.native=on;return this;} addItem(build:(item:any)=>void){const item:any={title:'',checked:false,warning:false,run:()=>{}};for(const key of ['setIcon','setDisabled','setSection'])item[key]=()=>item;item.setTitle=(title:string)=>{item.title=title;return item;};item.setChecked=(on:boolean)=>{item.checked=!!on;return item;};item.setWarning=(on:boolean)=>{item.warning=!!on;return item;};item.onClick=(run:()=>void)=>{item.run=run;return item;};build(item);this.items.push(item);return this;} addSeparator(){return this;} showAtMouseEvent(_event:unknown){this.shown++;return this;} showAtPosition(_position:unknown){this.shown++;return this;} }
 export class Notice { static messages:any[]=[];static shown:Notice[]=[];hidden=false;constructor(public message:any,public duration?:number){Notice.messages.push(message);Notice.shown.push(this);} hide(){this.hidden=true;} }
+export class TFolder { children:any[]=[]; name:string; constructor(public path:string){this.name=path.split('/').at(-1)||'';} }
 export class Modal {contentEl!:HTMLElement;modalEl!:HTMLElement;constructor(public app:any){}open(){}close(){} }
 export class FuzzySuggestModal<T> extends Modal { emptyStateText='';limit=0;setPlaceholder(_text:string){} setInstructions(_items:unknown[]){} getItems():T[]{return [];} }
+export class AbstractInputSuggest<T> { constructor(public app:any, public inputEl:HTMLInputElement){} getSuggestions(_typed:string):T[]{return [];} close(){} }
 export class PluginSettingTab {containerEl!:HTMLElement;constructor(public app:any,_plugin:any){this.containerEl=(globalThis as any).document?.createElement('div');} }
 // A setting row as the host builds it, as far as the dialogs under test use one: a name, a description and controls that are real elements.
 export class Setting {

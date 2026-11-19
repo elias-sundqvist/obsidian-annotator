@@ -371,6 +371,101 @@ the plugin runs a program (the first is DEVONthink, above).
   does nothing else; it is registered as a second choice for PDFs and books,
   never as the default by itself. It carries the key (above).
 
+## Addresses handed over from a browser (the bookmarklet)
+
+`obsidian://annotator-open?url=…` takes a web address, so that a bookmarklet
+(or a phone's share sheet, or a script) can hand over the page a browser
+shows. Where it goes is decided in `src/open-address.ts`.
+
+**What is taken** (`checkAddress`): `https` only; no user name or password;
+nothing on this computer or its network (`localNetwork`: loopback, private,
+link-local and carrier ranges, `.local` and bare names, IPv4 inside IPv6);
+at most 4,000 characters; an address that names a file too (`source`,
+`file`) is refused. The fragment is dropped. The requests wait in the same
+queue as the rest of `annotator-open`, which cuts off a flood.
+
+**Without this device's key, nothing is fetched and no note is made.** The
+address opens a tab of its own (`src/handed-view.ts`) that says what it
+seems to be (from the address alone), which host would be asked, and that
+nothing has been fetched. It waits for a press, and keeps waiting through a
+restart: the tab's state holds only the address, the route and the page's
+title. The words say what the press does: for a PDF, a book or a video, that
+a note is made (or the one that names it opened). A note is made only after
+that press, never from the link. The request that tells an address's kind
+when the address does not (a HEAD) is made only after the press too.
+Pressed, the address counts as the reader's yes to read that one source
+(kept as `place:` or `copy:` for the address, as the first question's yes
+is), so no second question follows.
+
+**With the key** (a script of the reader's own), it opens where it goes at
+once, as a file handed over with the key does.
+
+| Route | Decided by | What happens after the press (or with the key) |
+| --- | --- | --- |
+| PDF, EPUB | The path's ending, else the server's `Content-Type` (HEAD) | The note that names the address, or a new one (`annotation-target-type` is written when the address does not end in `.pdf` or `.epub`); then read as any web source is: downloaded to this computer's cache (a phone: into the folder for copies) |
+| Video | A YouTube address (`resolveVideoTarget`) | A note whose target is YouTube's own address for the video (`watch?v=…`), never the page's query (`si=` and the like); the video reader |
+| Web page | Anything else, and a server that does not answer HEAD | Obsidian's Web viewer, as **Open website in core Web viewer** does; on a phone, an offline reading copy, as **Save website as an offline Markdown reading copy** does. No annotation note before the first highlight |
+
+- **Keys in addresses.** An address whose query carries a key (`keyedQuery`:
+  `token`, `sig`, `auth`, `key` and the like) is not written into a note: a
+  PDF or a book at such an address is refused, and the reader is told to
+  download it. A YouTube note holds YouTube's own address only.
+- **The title** handed over (the page's own, `title=`) only names a new note,
+  cleaned of control characters, of what a file name cannot hold, and cut at
+  200 characters. The waiting tab does not show it: a page could title itself
+  as anything; the tab shows the host and the address.
+- **Text shared to Obsidian on a phone** (Obsidian's `receive-text-menu`,
+  which then offers **Annotate in Annotator** when the text holds an `https`
+  address) takes the same route at once: the reader shared the page and
+  picked the item. The same rules apply.
+
+### Why the bookmarklet carries no key
+
+The device key is the one **Open with Annotator** uses. It is what lets an
+address read a **file on this computer** outside the vault without a
+question. A bookmarklet that carried it would put that key where a page and
+the rest of the browser can reach it:
+
+- a bookmark is not private to Obsidian: browsers sync bookmarks to their
+  vendor's servers and to other devices, export them to HTML files, show
+  them to extensions with the bookmarks permission, and people share
+  bookmark folders;
+- a bookmarklet runs as a script inside the page it is pressed on. Its text,
+  with the key in it, is evaluated in that page's world, where the page's
+  own scripts can have replaced the functions it calls (`encodeURIComponent`,
+  `String.prototype` methods) before it runs;
+- with the key, any page that got it could have Annotator copy or read any
+  file the computer can see (`source=`), and make notes and fetch addresses
+  without a press.
+
+A key of its own for web addresses alone would still let anyone holding it
+make notes and fetch addresses in the reader's name without asking. The cost
+of no key is one press in Obsidian for each page handed over, on a tab that
+says what it will do. That is the choice: the bookmarklet sends only
+`location.href`, `document.title` and the vault's name, and Annotator waits
+for the press. The settings show the bookmarklet as a link to drag and as
+text to select; nothing is put on the clipboard.
+
+On Android the share sheet is the better way: a share is the reader's own
+act in the system, and Obsidian then shows its menu, where the reader picks
+**Annotate in Annotator**. A page cannot start a share by itself
+(`navigator.share` needs a tap, and the reader still chooses Obsidian and
+then the item).
+
+## The folder for copies
+
+**Annotate a copy in the vault** and every other copy of an outside source
+go into the folder chosen under **Folder for copies** (default `Annotator
+sources`). The setting is kept as a folder of the vault (`copyFolder`):
+written with `/`, no `.` or `..` parts, no hidden folder (so never
+`.obsidian` or `.trash`), no character a disk refuses; anything else is the
+default. Copies already made are never moved or rewritten. Copies are still
+found by their digest name in the folder chosen, in every folder copies were
+made in before (kept in the settings), and in `Annotator sources`; before a
+copy would be downloaded again, the whole vault is searched once for it by
+name, so a copy made on a device whose settings did not sync is found. The
+writes go through the one check every vault write passes (`vaultWritable`).
+
 ## What is kept on the device outside the vault
 
 - **The text of PDFs you have opened**, so that their highlights can be placed

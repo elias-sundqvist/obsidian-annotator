@@ -40,9 +40,39 @@ export function sourceEnding(url: string, kind: RemoteKind): string {
     if (kind === 'mobi') return KINDLE_ENDING.exec(path)?.[1] || 'mobi';
     return path.endsWith('.fb2') ? 'fb2' : 'fbz';
 }
-export async function remoteFilename(url: string, kind: RemoteKind) {
+/** Where copies went before the folder could be chosen, and where they go unless another is chosen. */
+export const DEFAULT_COPY_FOLDER = 'Annotator sources';
+/**
+ * The folder for copies, as the settings may hold it: a folder of the vault, written with `/`, without slashes at
+ * either end. Anything that is not one (empty, a part that is `.` or `..` or hidden, a character a disk refuses, the
+ * vault's own root) is the default.
+ */
+export function copyFolder(value: unknown): string {
+    if (typeof value !== 'string') return DEFAULT_COPY_FOLDER;
+    const folder = value
+        .trim()
+        .replace(/\\/g, '/')
+        .replace(/\/{2,}/g, '/')
+        .replace(/^\/+|\/+$/g, '');
+    if (!folder || folder.length > 200) return DEFAULT_COPY_FOLDER;
+    const parts = folder.split('/');
+    if (
+        parts.some(
+            part =>
+                !part.trim() ||
+                part !== part.trim() ||
+                part.startsWith('.') ||
+                // eslint-disable-next-line no-control-regex
+                /[\u0000-\u001f\u007f:*?"<>|#^[\]]/.test(part)
+        )
+    )
+        return DEFAULT_COPY_FOLDER;
+    return parts.join('/');
+}
+/** Where a source copied in without a note's target is kept: `<folder for copies>/<digest of its address>.<ending>`. */
+export async function remoteFilename(url: string, kind: RemoteKind, folder = DEFAULT_COPY_FOLDER) {
     const address = cachedSourceUrl(url);
-    return `Annotator sources/${await digest(address)}.${sourceEnding(address, kind)}`;
+    return `${copyFolder(folder)}/${await digest(address)}.${sourceEnding(address, kind)}`;
 }
 /**
  * The name of the file a copy was made from, by the address it came from: the last part of its path, read as it is
@@ -137,8 +167,8 @@ export function remoteRevisions(value: unknown): Record<string, RemoteRevision[]
     }
     return result;
 }
-export async function revisionFilename(url: string, kind: RemoteKind, sha256: string) {
-    return (await remoteFilename(url, kind)).replace(
+export async function revisionFilename(url: string, kind: RemoteKind, sha256: string, folder = DEFAULT_COPY_FOLDER) {
+    return (await remoteFilename(url, kind, folder)).replace(
         /\.(pdf|epub|mobi|prc|azw3|fb2|fbz|fb3)$/,
         (_whole, ending) => `-${sha256}.${ending}`
     );
