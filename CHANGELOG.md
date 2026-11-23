@@ -3,7 +3,7 @@
 What changed for someone using Annotator. How to use each thing is in
 [README.md](README.md).
 
-## Unreleased
+## 0.3.8 (2026-11-23)
 
 - **Your own server opens from the bookmarklet.** 0.3.7 refused any address
   on this computer or your own network, so a home server
