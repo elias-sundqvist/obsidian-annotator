@@ -378,13 +378,20 @@ the plugin runs a program (the first is DEVONthink, above).
 shows. Where it goes is decided in `src/open-address.ts`.
 
 **What is taken** (`checkAddress`): `https` only; no user name or password;
-nothing on this computer or its network (`localNetwork`: loopback, private,
-link-local, carrier, multicast and broadcast ranges, `localhost`, `.local`,
-`.lan`, `.internal`, `.home.arpa` and bare names, each also written with a
-final dot, and IPv4 inside IPv6); at most 4,000 characters; an address that
-names a file too (`source`, `file`) is refused. The fragment is dropped. The
+at most 4,000 characters; an address that names a file too (`source`,
+`file`) is refused. Any port is taken. The fragment is dropped. The
 address is checked again at the press (`openAddress`), since a waiting tab's
 state may come from a synced workspace.
+
+**An address on this computer or the reader's own network** (a home server
+such as `https://nas.home.arpa:8443/`, `https://192.168.1.20/`) is taken
+like any other. 0.3.7 refused such addresses, so that a web page could not
+use a link to make Annotator ask the reader's network for something. 0.3.8
+dropped that rule, because the protection it added was small and it broke
+the reader's own servers: nothing from a link is fetched before the reader
+presses for it in a tab that names the host, and what is fetched only
+opens in the reader's own Obsidian: nothing of it goes back to the page that
+made the link.
 
 **Where it leads** (`src/address-hops.ts`). Obsidian's request function
 follows a redirect without saying where to. So before anything is read,
@@ -392,13 +399,9 @@ every step is asked here instead:
 
 - **On a computer**, each step is a HEAD request made with Node's own
   client, which follows no redirect. Every `Location` must pass the same
-  rules as the address handed over (so no `http`, nothing local), and after
-  five steps it is given up. The name is looked up first, and refused if it
-  leads to this computer or its network (`localtest.me`,
-  `127.0.0.1.nip.io`). The request also looks its name up through the same
-  check as it connects, so a name that changes its answer in between is
-  not connected to. The address it ends at is the one written into the
-  note and read.
+  rules as the address handed over (so no `http`, no password), and after
+  five steps it is given up. The address it ends at is the one written
+  into the note and read.
 - **What is not guaranteed.** The file itself is then downloaded with
   Obsidian's request function, which looks the name up again and would
   follow a redirect it is given: a server that answers HEAD with the file

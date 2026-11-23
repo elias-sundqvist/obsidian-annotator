@@ -3,6 +3,14 @@
 What changed for someone using Annotator. How to use each thing is in
 [README.md](README.md).
 
+## Unreleased
+
+- **Your own server opens from the bookmarklet.** 0.3.7 refused any address
+  on this computer or your own network, so a home server
+  (`https://nas.home.arpa:8443/report.pdf`, `https://192.168.1.20/…`) did
+  not open, which looked like custom ports not working. Such an address is
+  now taken like any other: it waits in its tab for your press.
+
 ## 0.3.7 (2026-11-19)
 
 - **Open what your browser shows in Annotator, with a bookmarklet.** Settings

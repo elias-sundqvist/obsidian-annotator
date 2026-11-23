@@ -2512,17 +2512,18 @@ test('a handed-over address is routed by what it is, from the address alone wher
  for(const [url,route] of Object.entries(cases))assert.equal(routeOf(url),route,url);
  for(const [type,route] of Object.entries({'application/pdf':'pdf','application/pdf; charset=binary':'pdf','application/epub+zip':'epub','text/html; charset=utf-8':'web','':'web','application/octet-stream':'web','video/mp4':'web'}))assert.equal(routeByType(type),route,type);
 });
-test('the rules for a handed-over address: https only, no password, nothing on the local network, a length limit, no key written into a note',()=>{
+test('the rules for a handed-over address: https only, no password, a length limit, no key written into a note; an address on the reader\'s own network is like any other',()=>{
  const {checkAddress,sharedAddress,handedTitle,bookmarklet,waitingWords,keyedQuery}=OpenAddress;
  assert.deepEqual(checkAddress('https://example.org/a.pdf#page=3'),{url:'https://example.org/a.pdf'});
- for(const bad of ['http://example.org/a.pdf','https://reader:secret@example.org/a.pdf','https://reader@example.org/a.pdf','https://localhost/a.pdf','https://127.0.0.1/a.pdf','https://192.168.1.20/a.pdf','https://10.0.0.2/a','https://[::1]/a','https://[::ffff:7f00:1]/a','https://router.local/a','https://printer/a','file:///etc/passwd','javascript:alert(1)','obsidian://open?vault=x','',' ',42,null,undefined,'https://example.org/'+'a'.repeat(4000)])
+ for(const bad of ['http://example.org/a.pdf','https://reader:secret@example.org/a.pdf','https://reader@example.org/a.pdf','http://192.168.1.20:8080/a.pdf','file:///etc/passwd','javascript:alert(1)','obsidian://open?vault=x','',' ',42,null,undefined,'https://example.org/'+'a'.repeat(4000)])
   assert.ok('refused' in checkAddress(bad),String(bad).slice(0,60));
- assert.match(checkAddress('https://192.168.1.20/a').refused,/network/);
+ // A home server, by its address or its name, on a port of its own: taken as it is.
+ for(const own of ['https://192.168.1.20:8443/a.pdf','https://localhost:8443/a.pdf','https://nas.home.arpa:8443/report.pdf','https://upload.example.org:8443/file.pdf','https://printer/a','https://[::1]:8443/a'])assert.deepEqual(checkAddress(own),{url:own},own);
  for(const keyed of ['https://files.example/a.pdf?token=abcdef12','https://x.example/a.pdf?X-Amz-Signature=abcdef12','https://x.example/a.pdf?auth=abcd'])assert.equal(keyedQuery(keyed),true,keyed);
  assert.equal(keyedQuery('https://arxiv.org/pdf/1706.03762?v=7'),false);
  assert.equal(sharedAddress('A good read\nhttps://example.org/post?id=7.'),'https://example.org/post?id=7');
  assert.equal(sharedAddress('https://youtu.be/dQw4w9WgXcQ'),'https://youtu.be/dQw4w9WgXcQ');
- for(const none of ['no address here','http://example.org/x','see https://localhost/x',null,'x'.repeat(30000)])assert.equal(sharedAddress(none),null,String(none).slice(0,30));
+ for(const none of ['no address here','http://example.org/x','see http://localhost/x',null,'x'.repeat(30000)])assert.equal(sharedAddress(none),null,String(none).slice(0,30));
  assert.equal(handedTitle('Attention\u0000 Is\nAll   You Need'),'Attention Is All You Need');assert.equal(handedTitle('x'.repeat(5000)).length,200);assert.equal(handedTitle(7),'');
  const code=bookmarklet("Ann's vault & notes");
  assert.equal(code,"javascript:(()=>{location.href='obsidian://annotator-open?vault=Ann%27s%20vault%20%26%20notes&url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title.slice(0,200))})()");
@@ -2540,9 +2541,9 @@ function addressHost(){
  const sidebar=h.app.workspace.getLeavesOfType;h.app.workspace.getLeavesOfType=type=>type==='annotator-handed'?leaves.filter(each=>!each.gone&&each.view instanceof HandedView):sidebar(type);
  h.app.workspace.getLeaf=()=>leaf();h.app.workspace.revealLeaf=async at=>{revealed.push(at);};
  globalThis.__annotatorTestRequest=async options=>{requests.push(options);return {status:200,headers:{'content-type':'application/pdf'},arrayBuffer:new TextEncoder().encode('%PDF-1.7 handed over').buffer};};
- // Where an address leads: each step asked (HEAD) by the test's own table, and names looked up there too.
- h.hops={};h.names={};
- h.plugin.addressTools=()=>({head:async url=>{probes.push(url);if(h.hops[url])return h.hops[url];if(h.said===null)return null;return {status:200,location:null,type:h.said===undefined?'text/html':h.said.type};},resolve:async host=>h.names[host]||['93.184.216.34']});
+ // Where an address leads: each step asked (HEAD) by the test's own table.
+ h.hops={};
+ h.plugin.addressTools=()=>({head:async url=>{probes.push(url);if(h.hops[url])return h.hops[url];if(h.said===null)return null;return {status:200,location:null,type:h.said===undefined?'text/html':h.said.type};}});
  h.plugin.sourceApproval=async(url,kind,how)=>{asked.push({url,kind,how});return 'yes';};
  h.plugin.openWebsite=async(url,newLeaf,at)=>{websites.push({url,at});};
  h.plugin.saveReadingCopy=async url=>{copies.push(url);};
@@ -2567,7 +2568,7 @@ test('without this device’s key, a handed-over address only waits in a tab for
   const other=mount();await other.setState({url:'https://example.org/x',route:'anything'},{});assert.equal(other.getState().route,'unknown');
   // Refused addresses are said, and nothing is opened.
   const states=h.states.length,since=Notice.messages.length;
-  for(const url of ['http://example.org/paper.pdf','https://me:pw@example.org/paper.pdf','https://192.168.0.4/paper.pdf','https://'+'a'.repeat(4100)+'.org/x'])await h.fire({url,key});
+  for(const url of ['http://example.org/paper.pdf','https://me:pw@example.org/paper.pdf','http://192.168.0.4/paper.pdf','https://'+'a'.repeat(4100)+'.org/x'])await h.fire({url,key});
   assert.equal(h.states.length,states);assert.equal(Notice.messages.length-since,4,'with the key, each is said');assert.equal(h.requests.length,0);
   await h.fire({url:'https://example.org/a.pdf',source:'/x.pdf',key});assert.equal(h.states.length,states);
  }finally{delete globalThis.__annotatorTestRequest;h.dispose();}
@@ -2609,7 +2610,8 @@ test('text shared to Obsidian on a phone offers Annotate in Annotator, under the
   const menu=()=>{const items=[];return {items,addItem(build){const item={setTitle(t){item.title=t;return item;},setIcon(){return item;},setSection(s){item.section=s;return item;},onClick(run){item.run=run;return item;}};build(item);items.push(item);return this;}};};
   const shared=menu();h.events.get('receive-text-menu')(shared,'Attention Is All You Need\nhttps://youtu.be/dQw4w9WgXcQ');assert.deepEqual(shared.items.map(item=>[item.title,item.section]),[['Annotate in Annotator: youtu.be','title']],'the host is said before anything is asked');
   shared.items[0].run();for(let i=0;i<40&&!h.made.length;i++)await new Promise(resolve=>setTimeout(resolve,10));await new Promise(resolve=>setTimeout(resolve,50));assert.equal(h.made[0],'Attention Is All You Need.md','the shared title names the note');
-  for(const text of ['just words','http://example.org/a','https://10.1.1.1/a']){const none=menu();h.events.get('receive-text-menu')(none,text);assert.deepEqual(none.items,[],text);}
+  for(const text of ['just words','http://example.org/a','https://u:p@example.org/a']){const none=menu();h.events.get('receive-text-menu')(none,text);assert.deepEqual(none.items,[],text);}
+  {const own=menu();h.events.get('receive-text-menu')(own,'https://10.1.1.1:8443/a');assert.equal(own.items[0].title,'Annotate in Annotator: 10.1.1.1','a home server shared from a phone is offered too');}
  }finally{delete globalThis.__annotatorTestRequest;h.dispose();}
 });
 test('the folder for copies: chosen, made where missing, remembered once used; copies already made are found where they are, in the old default and every folder used before',async()=>{
@@ -2645,44 +2647,43 @@ test('the folder for copies: chosen, made where missing, remembered once used; c
  }finally{delete globalThis.__annotatorTestRequest;h.dispose();}
 });
 // The security review of the bookmarklet (before 0.3.7): one test for each finding.
-const {settleAddress,nodeHops,localAddress,HOP_LIMIT}=await import('./.generated/plugin-boundary.mjs');
+const {settleAddress,nodeHops,HOP_LIMIT}=await import('./.generated/plugin-boundary.mjs');
 const {markdownWords,newNoteText}=await import('./.generated/readers/note-template.js');
-test('review 1: where an address leads is followed step by step, each step checked: no http, nothing local, not by name, five steps at most',async()=>{
- const table=(hops,names={})=>({head:async url=>hops[url]??{status:200,location:null,type:'application/pdf'},resolve:async host=>names[host]||['93.184.216.34']});
+test('review 1: where an address leads is followed step by step, each step checked: no http, no password, five steps at most',async()=>{
+ const table=hops=>({head:async url=>hops[url]??{status:200,location:null,type:'application/pdf'}});
  const to=location=>({status:302,location,type:''});
  assert.deepEqual(await settleAddress('https://a.example/doc',table({'https://a.example/doc':to('/files/doc.pdf')})),{url:'https://a.example/files/doc.pdf',type:'application/pdf',steps:1});
- for(const [where,why] of [['http://192.168.1.1/admin',/one it does not open/],['http://b.example/doc.pdf',/one it does not open/],['https://192.168.1.1/x',/one it does not open/],['https://me:pw@b.example/x',/one it does not open/],['https://localhost./x',/one it does not open/]])
+ for(const [where,why] of [['http://192.168.1.1/admin',/one it does not open/],['http://b.example/doc.pdf',/one it does not open/],['https://me:pw@b.example/x',/one it does not open/]])
   await assert.rejects(settleAddress('https://evil.example/doc',table({'https://evil.example/doc':to(where)})),why,where);
- // A public name that leads to this computer: refused before it is asked anything.
- let asked=0;await assert.rejects(settleAddress('https://localtest.me/doc',{head:async()=>{asked++;return null;},resolve:async()=>['127.0.0.1']}),/leads to an address on this computer/);assert.equal(asked,0);
- await assert.rejects(settleAddress('https://evil.example/doc',table({'https://evil.example/doc':to('https://nip.example/x')},{'nip.example':['::1']})),/leads to an address/);
+ // A step on the reader's own network is followed like any other.
+ assert.deepEqual(await settleAddress('https://a.example/doc',table({'https://a.example/doc':to('https://nas.home.arpa:8443/doc.pdf')})),{url:'https://nas.home.arpa:8443/doc.pdf',type:'application/pdf',steps:1});
  // Round and round, or on and on: given up.
  const loop={};for(let i=0;i<10;i++)loop[`https://a.example/${i}`]=to(`https://a.example/${i+1}`);
  await assert.rejects(settleAddress('https://a.example/0',table(loop)),/too many times/);assert.equal(HOP_LIMIT,5);
  // No answer to HEAD: the address as it is, with no type.
  assert.deepEqual(await settleAddress('https://a.example/x',{head:async()=>null}),{url:'https://a.example/x',type:'',steps:0});
- for(const ip of ['127.0.0.1','10.1.2.3','::1','fe80::1','::ffff:7f00:1','224.0.0.251'])assert.equal(localAddress(ip),true,ip);assert.equal(localAddress('93.184.216.34'),false);
 });
-test('review 1: on a computer each step is asked with Node, following nothing, and the connection looks its name up through the same check',async()=>{
- const asked=[],dnsTable={'a.example':[{address:'93.184.216.34',family:4}],'rebind.example':[{address:'10.0.0.5',family:4}]};
- const node={dns:{lookup:(host,options,done)=>dnsTable[host]?done(null,dnsTable[host]):done(new Error('ENOTFOUND'),[])},https:{request:(options,answered)=>{asked.push(options);const events={};const request={on:(name,heard)=>{events[name]=heard;},end:()=>{options.lookup(options.hostname,{},(error,address)=>{if(error)return events.error?.(error);answered({statusCode:301,headers:{location:'/next','content-type':'text/html'},resume(){}});});},destroy(){}};return request;}}};
+test('review 1: on a computer each step is asked with Node, following nothing, on the port the address names',async()=>{
+ const asked=[];
+ const node={https:{request:(options,answered)=>{asked.push(options);const events={};const request={on:(name,heard)=>{events[name]=heard;},end:()=>{if(options.hostname==='down.example')return events.error?.(new Error('ECONNREFUSED'));answered({statusCode:301,headers:{location:'/next','content-type':'text/html'},resume(){}});},destroy(){}};return request;}}};
  const tools=nodeHops(node);
  assert.deepEqual(await tools.head('https://a.example/doc?x=1'),{status:301,location:'/next',type:'text/html'});
  assert.equal(asked[0].method,'HEAD');assert.equal(asked[0].path,'/doc?x=1');assert.equal(asked[0].protocol,'https:');
- assert.equal(await tools.head('https://rebind.example/doc'),null,'a name that leads to the local network is not connected to');
- assert.deepEqual(await tools.resolve('a.example'),['93.184.216.34']);
+ assert.equal(asked[0].port,undefined);await tools.head('https://nas.home.arpa:8443/r.pdf');assert.equal(asked[1].port,8443);assert.equal(asked[1].hostname,'nas.home.arpa');
+ assert.equal(await tools.head('https://down.example/doc'),null,'no answer: null');
 });
-test('review 1 and 2: pressed for, a redirect to the local network or to http opens nothing; an address with a key opens nothing on any route, a phone’s reading copy included',async()=>{
+test('review 1 and 2: pressed for, a redirect to http opens nothing, one to the reader\'s own server is followed; an address with a key opens nothing on any route, a phone’s reading copy included',async()=>{
  const h=addressHost();try{await h.ready();
   h.hops['https://evil.example/doc.pdf']={status:302,location:'http://192.168.1.1/router.pdf',type:''};
   await assert.rejects(h.plugin.openAddress('https://evil.example/doc.pdf','pdf'),/one it does not open/);
-  h.hops['https://evil.example/page']={status:302,location:'https://10.0.0.1/',type:''};
+  h.hops['https://evil.example/page']={status:302,location:'https://me:pw@b.example/',type:''};
   await assert.rejects(h.plugin.openAddress('https://evil.example/page','unknown'),/one it does not open/);
-  h.names['localtest.me']=['127.0.0.1'];await assert.rejects(h.plugin.openAddress('https://localtest.me/a.pdf','pdf'),/leads to an address on this computer/);
   assert.deepEqual(h.made,[]);assert.equal(h.requests.length,0,'nothing was downloaded');assert.deepEqual(h.websites,[]);
   // A redirect that stays on the internet: the address it ends at is the one read and written.
   h.hops['https://short.example/p']={status:301,location:'https://files.example/paper.pdf',type:''};
   await h.plugin.openAddress('https://short.example/p','unknown');const note=h.files.get(h.made[0]);assert.equal(h.metadata.get(note.path).frontmatter['annotation-target'],'https://files.example/paper.pdf');
+  // The reader's own server, on a port of its own, by name or by address: read like any other.
+  for(const own of ['https://nas.home.arpa:8443/report.pdf','https://192.168.1.20:8443/scan.pdf']){const before=h.made.length;await h.plugin.openAddress(own,'pdf');assert.equal(h.made.length,before+1,own);assert.equal(h.metadata.get(h.files.get(h.made.at(-1)).path).frontmatter['annotation-target'],own);}
   // A key in the address, or in where it leads: refused before anything is read, on every route.
   h.hops['https://short.example/k']={status:302,location:'https://cdn.example/page?token=abcdef123456',type:''};
   for(const [url,route] of [['https://x.example/a.pdf?token=abcdef12','pdf'],['https://x.example/page?auth=abcd1234','web'],['https://x.example/page?sig=abcd1234','unknown'],['https://short.example/k','web']])
@@ -2703,18 +2704,17 @@ test('review 3: links without the key cannot flood: one tab per address, three w
   const waiting=h.plugin.app.workspace.getLeavesOfType('annotator-handed').map(leaf=>leaf.view.getState().url);
   assert.deepEqual(waiting,['https://a.example/3.pdf','https://a.example/4.pdf','https://a.example/5.pdf']);
   assert.equal(h.states.slice(1).every(state=>state.active===false),true,'no tab after the first took the focus');
-  const since=Notice.messages.length;for(const url of ['http://a.example/x','https://10.0.0.1/x','https://a:b@c.example/','javascript:alert(1)'])await h.fire({url});
+  const since=Notice.messages.length;for(const url of ['http://a.example/x','http://10.0.0.1/x','https://a:b@c.example/','javascript:alert(1)'])await h.fire({url});
   assert.ok(Notice.messages.length-since<=1,'said once a minute at most');
   // After a restart, no more wait than may.
   for(const n of [6,7])await (h.leaf()).setViewState({type:'annotator-handed',state:{url:`https://a.example/${n}.pdf`,route:'pdf'}});
   assert.equal(h.plugin.app.workspace.getLeavesOfType('annotator-handed').length,5);h.plugin.trimWaiting();assert.equal(h.plugin.app.workspace.getLeavesOfType('annotator-handed').length,3);
  }finally{delete globalThis.__annotatorTestRequest;h.dispose();}
 });
-test('review 4: names written with a final dot, .internal names, multicast and broadcast are the local network',()=>{
- const {checkAddress,localNetwork}=OpenAddress;
- for(const url of ['https://localhost./','https://router./x','https://nas.local./','https://router.lan./','https://foo.home.arpa./','https://metadata.google.internal./','https://metadata.google.internal/','https://127.0.0.1./','https://224.0.0.1/','https://255.255.255.255/','https://printer../'])
-  {assert.equal(localNetwork(url),true,url);assert.ok('refused' in checkAddress(url),url);}
- for(const url of ['https://example.org./','https://arxiv.org/pdf/1706.03762'])assert.equal(localNetwork(url),false,url);
+test('review 4 (reversed in 0.3.8): an address on this computer or the reader\'s own network is not treated apart: it waits for a press like any other',()=>{
+ const {checkAddress}=OpenAddress;
+ for(const url of ['https://localhost./','https://router./x','https://nas.local./','https://router.lan./','https://foo.home.arpa:8443/','https://127.0.0.1./','https://example.org./'])
+  assert.ok('url' in checkAddress(url),url);
 });
 test('review 5: a title or an address is plain words in a new note: no code, link, embed, tag, comment or Dataview and Templater markup; one line in the properties',()=>{
  const evil='Paper `$= dv.el("b", app.vault.adapter.basePath)` [[Secret]] ![[x]] <% tp.file %> #tag %%c%% =x= | a\n# Heading';
@@ -2731,9 +2731,9 @@ test('review 5: a title or an address is plain words in a new note: no code, lin
 });
 test('review 6: the address is checked again at the press, whatever the waiting tab’s state says (it may come from a synced workspace)',async()=>{
  const h=addressHost();try{await h.ready();
-  for(const url of ['https://192.168.1.10/a.pdf','http://example.org/a.pdf','https://u:p@example.org/a.pdf','https://localhost./a.pdf'])
-   await assert.rejects(h.plugin.openAddress(url,'pdf'),/https only|on this computer or its network/,url);
-  await assert.rejects(h.plugin.openAddress('https://10.0.0.1/watch','video'),/on this computer or its network/);
+  for(const url of ['http://192.168.1.10/a.pdf','http://example.org/a.pdf','https://u:p@example.org/a.pdf'])
+   await assert.rejects(h.plugin.openAddress(url,'pdf'),/https only/,url);
+  await assert.rejects(h.plugin.openAddress('http://10.0.0.1/watch','video'),/https only/);
   assert.deepEqual(h.made,[]);assert.deepEqual(h.probes,[],'nothing was asked');
  }finally{delete globalThis.__annotatorTestRequest;h.dispose();}
 });

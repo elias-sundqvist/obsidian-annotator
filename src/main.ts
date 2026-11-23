@@ -8459,7 +8459,7 @@ export default class AnnotatorPlugin extends Plugin {
     }
     /**
      * `obsidian://annotator-open?url=…`: a browser (the bookmarklet), a script or a phone hands an address over. It is
-     * refused unless it is https, without a password, not on this computer or its network, and not too long. Without
+     * refused unless it is https, without a password, and not too long (one on the reader's own network is no different). Without
      * this device's key nothing is fetched, and no note is made, until the reader presses for it in a tab that waits
      * (and is still there after a restart); with the key it is opened where it goes at once. Without the key: the
      * page's title is not taken (a link can say anything), one address waits in one tab, at most three wait, a tab
@@ -8504,9 +8504,8 @@ export default class AnnotatorPlugin extends Plugin {
     addressTools: () => HopTools = () => {
         const load = (window as unknown as { require?: (name: string) => unknown }).require;
         if (Platform.isDesktopApp && !Platform.isMobile && load) {
-            const https = load('https') as NodeHops['https'] | undefined,
-                dns = load('dns') as NodeHops['dns'] | undefined;
-            if (https && dns) return nodeHops({ https, dns });
+            const https = load('https') as NodeHops['https'] | undefined;
+            if (https) return nodeHops({ https });
         }
         return {
             head: async url => {

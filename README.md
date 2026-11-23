@@ -1066,11 +1066,13 @@ click on a bookmark: a PDF, a book, a YouTube video, or any other web page.
   cache, or on a phone into the folder for copies. An address that carries
   a key of its own (`?token=…`) is not written into a note, and the reader
   says so. Where an address sends Annotator on to another, each step is
-  checked on a computer, and one that leads to `http` or to your own
-  network is refused ([docs/SECURITY.md](docs/SECURITY.md)).
+  checked on a computer, and one that leads to `http` is refused
+  ([docs/SECURITY.md](docs/SECURITY.md)).
+- **Your own server works too**: an address on this computer or your own
+  network, on any port (`https://nas.home.arpa:8443/report.pdf`), waits for
+  your press like any other.
 - **What is refused**: anything but `https`, an address with a user name or
-  password in it, one on this computer or its network, and one longer than
-  4,000 characters.
+  password in it, and one longer than 4,000 characters.
 - **Some pages ignore a bookmarklet**: a browser's own PDF viewer may not
   run it (Firefox's does not), and a few sites block bookmarklets. Copy
   the address instead and make it a note's `annotation-target`.

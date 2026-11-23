@@ -37,86 +37,6 @@ export function keyedQuery(address: string): boolean {
             return true;
     return false;
 }
-/**
- * Whether an address is on this computer or the local network: a name the local network gives out (`localhost`,
- * `.local`, a bare name), or an address kept for loopback, private, link-local or carrier use. A link from a page
- * may not have the reader's device ask its own network.
- */
-export function localNetwork(address: string): boolean {
-    let name: string;
-    try {
-        // A name written with its final dot (`localhost.`, `router.lan.`) is the same name.
-        name = new URL(address).hostname
-            .toLowerCase()
-            .replace(/^\[|\]$/g, '')
-            .replace(/\.+$/, '');
-    } catch {
-        return false;
-    }
-    if (name.includes(':')) {
-        // An IPv4 address inside IPv6 (`::ffff:127.0.0.1`, which the parser writes `::ffff:7f00:1`).
-        const mapped = /^::ffff:(?:(\d+\.\d+\.\d+\.\d+)|([0-9a-f]{1,4}):([0-9a-f]{1,4}))$/.exec(name);
-        if (mapped) {
-            const four = mapped[1]
-                ? mapped[1]
-                : [
-                      parseInt(mapped[2], 16) >> 8,
-                      parseInt(mapped[2], 16) & 255,
-                      parseInt(mapped[3], 16) >> 8,
-                      parseInt(mapped[3], 16) & 255
-                  ].join('.');
-            return localNetwork(`http://${four}/`);
-        }
-        // An IPv4 address carried in IPv6 is judged by it: NAT64 (`64:ff9b::a.b.c.d`) and 6to4 (`2002:aabb:ccdd::`).
-        const four = (high: string, low: string) =>
-            [parseInt(high, 16) >> 8, parseInt(high, 16) & 255, parseInt(low, 16) >> 8, parseInt(low, 16) & 255].join(
-                '.'
-            );
-        const nat64 = /^64:ff9b::([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(name),
-            sixToFour = /^2002:([0-9a-f]{1,4}):([0-9a-f]{1,4})(?::|$)/.exec(name);
-        if (nat64) return localNetwork(`http://${four(nat64[1], nat64[2])}/`);
-        if (sixToFour) return localNetwork(`http://${four(sixToFour[1], sixToFour[2])}/`);
-        return (
-            name === '::1' ||
-            name === '::' ||
-            /^f[cd][0-9a-f]{2}:/.test(name) ||
-            /^fe[89ab][0-9a-f]:/.test(name) ||
-            // Teredo and local NAT64: where they lead cannot be told.
-            /^2001:0?:/.test(name) ||
-            /^64:ff9b:1:/.test(name)
-        );
-    }
-    const four = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(name);
-    if (four) {
-        const [a, b] = four.slice(1).map(Number);
-        return (
-            a === 0 ||
-            a === 127 ||
-            // Multicast, reserved and broadcast: never a page on the internet.
-            a >= 224 ||
-            a === 10 ||
-            (a === 192 && b === 168) ||
-            (a === 172 && b >= 16 && b <= 31) ||
-            (a === 169 && b === 254) ||
-            (a === 100 && b >= 64 && b <= 127) ||
-            // The phone's own IPv4 behind IPv6 (Android's CLAT), and benchmarking networks.
-            (a === 192 && b === 0 && Number(four[3]) === 0) ||
-            (a === 198 && (b === 18 || b === 19))
-        );
-    }
-    // A host written as one number (`http://2130706433/`) is an address too: the URL parser has already turned it
-    // into four, so what is left here is a name.
-    return (
-        name === 'localhost' ||
-        name.endsWith('.localhost') ||
-        name.endsWith('.local') ||
-        name.endsWith('.lan') ||
-        name.endsWith('.internal') ||
-        name.endsWith('.home.arpa') ||
-        (!!name && !name.includes('.'))
-    );
-}
-
 /** The address, made plain (no fragment), or why it is not opened. Nothing is asked of any server here. */
 export function checkAddress(raw: unknown): { url: string } | { refused: string } {
     const said = 'The address names nothing Annotator opens from a link (https only, with no password in it).';
@@ -127,11 +47,9 @@ export function checkAddress(raw: unknown): { url: string } | { refused: string 
     } catch {
         return { refused: said };
     }
+    // An address on this computer or the reader's own network (a home server) is taken like any other: it too waits
+    // for a press before anything is fetched.
     if (url.protocol !== 'https:' || url.username || url.password || !url.hostname) return { refused: said };
-    if (localNetwork(url.href))
-        return {
-            refused: 'An address on this computer or its network is not opened from a link. Nothing was fetched.'
-        };
     url.hash = '';
     return { url: url.href };
 }
